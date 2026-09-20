@@ -78,7 +78,7 @@ export async function sendEmail(
   deps: EmailServiceDeps,
   message: EmailMessage,
 ): Promise<EmailServiceResult> {
-  const adapter = deps.adapter ?? selectEmailAdapter(deps.env);
+  const adapter = deps.adapter ?? (await selectEmailAdapter(deps.env));
   const result = await adapter.send(message);
   return classifyAndDispatch(deps, message, result, 1);
 }
@@ -93,7 +93,7 @@ export async function retryEmail(
   deps: EmailServiceDeps,
   payload: EmailRetryPayload,
 ): Promise<EmailServiceResult> {
-  const adapter = deps.adapter ?? selectEmailAdapter(deps.env);
+  const adapter = deps.adapter ?? (await selectEmailAdapter(deps.env));
   const result = await adapter.send(payload.message);
   return classifyAndDispatch(deps, payload.message, result, payload.attempt);
 }

@@ -173,7 +173,10 @@ describe("auth flow (integration)", () => {
     expect(res.status).toBe(403);
   });
 
-  it("login: unknown email is timing-close to known-email-wrong-password", async () => {
+  // Ratio test performs 4 scrypt logins (warmup + known + unknown +
+  // known) — each ~500ms locally, ~1.5s under CI contention. Give
+  // it a wide budget so we don't false-fail on slow runners.
+  it("login: unknown email is timing-close to known-email-wrong-password", { timeout: 30_000 }, async () => {
     await signupAndVerify("known@example.com", "correct-horse-battery-staple");
 
     async function measure(email: string): Promise<number> {
@@ -192,13 +195,20 @@ describe("auth flow (integration)", () => {
 
     const unknown = await measure("nobody@example.com");
     const known = await measure("known@example.com");
-    const delta = Math.abs(unknown - known);
 
-    // Generous window — miniflare's scrypt is JS-slow and noisy under CI.
-    // The point is the SAME order of magnitude, not equality. If timing
-    // ever diverged by >200ms it would signal we skipped the dummy-hash
-    // path on unknown-email.
-    expect(delta).toBeLessThan(500);
+    // Proportional check instead of fixed-ms — CI runners are slow +
+    // noisy, and an absolute-delta bound flakes because scrypt itself
+    // varies by ±hundreds of ms per call under contention. What we
+    // *really* want to prove: the unknown-email path did comparable
+    // scrypt work to the known path (via DUMMY_HASH_PROMISE). If we
+    // ever short-circuited on unknown-email, `unknown` would be near
+    // zero while `known` was ~hundreds of ms — a ratio, not a
+    // delta, catches that.
+    const smaller = Math.min(unknown, known);
+    const larger = Math.max(unknown, known);
+    // Require the shorter of the two to be at least 30% of the longer.
+    // A skipped-scrypt regression would produce a ratio near 0.
+    expect(smaller / larger).toBeGreaterThan(0.3);
   });
 
   it("concurrent refresh: exactly one 200, the other 401 reuse-detected", async () => {

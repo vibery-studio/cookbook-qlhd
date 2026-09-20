@@ -18,11 +18,16 @@ import { selectEmailAdapter } from "./email-select";
  * we return the original transient error so the caller can decide.
  */
 export function createEmailPortWithRetry(env: Bindings): EmailPort {
-  const raw = selectEmailAdapter(env);
   const now = (): number => Math.floor(Date.now() / 1000);
 
   return {
     async send(message: EmailMessage): Promise<EmailSendResult> {
+      // Resolve the raw adapter per-call so a settings change (e.g.
+      // rotating `email.from_address`) takes effect on the next send
+      // without a redeploy. `selectEmailAdapter` is cheap for the
+      // noop path (just returns the module-scoped singleton); for
+      // Resend it reads two KV keys (cached, 5-min TTL).
+      const raw = await selectEmailAdapter(env);
       const result = await raw.send(message);
       if (result.ok) return result;
 

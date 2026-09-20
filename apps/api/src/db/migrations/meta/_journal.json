@@ -22,6 +22,13 @@
       "when": 1789920000000,
       "tag": "0002_add_verify_email_resend_count",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789930000000,
+      "tag": "0003_seed_settings",
+      "breakpoints": false
     }
   ]
 }
