@@ -131,7 +131,7 @@ runway/
 - [x] `pnpm test` green with only `/healthz` test
 - [x] CI passes on empty PR (no changes) in <3 min — verified on run 35498599216 (45s)
 - [ ] Preview worker responds on `https://runway-preview-pr-N.<account>.workers.dev/healthz` (pending first PR + CF_API_TOKEN)
-- [ ] `main` push deploys to prod worker; `/healthz` returns 200 (pending CF_API_TOKEN; `/readyz` verification deferred to Phase 10)
+- [ ] Prod Worker deployed via MCP `PUT /workers/scripts/runway-api-prod` at phase ship time; `/healthz` returns 200 (`/readyz` verification deferred to Phase 10)
 - [ ] gitleaks catches a planted fake secret in a test PR (pending first PR)
 - [x] Wrangler env-parity check fails a synthetic PR that removes a binding from one env — script logic proven locally
 - [x] Bundle-size check fails a synthetic PR that imports a bloated dep — script logic proven locally (current build 20.36 KB gzipped, 2.3% of budget)

@@ -1,12 +1,28 @@
 name: Preview
 
+# INTENTIONALLY MANUAL: preview deploys run through the operator's Cloudflare
+# MCP session on demand (create per-PR D1, upload script, run migrations),
+# NOT automatically on every PR. This keeps CLOUDFLARE_API_TOKEN out of
+# long-lived repo secrets. See plan.md → CI/CD Locked Decision.
+#
+# This workflow stays in the repo as a workflow_dispatch fallback so a
+# manual preview can still be triggered from the Actions UI if the policy
+# changes. To re-enable auto-preview: replace `workflow_dispatch` with
+# `pull_request` (types: [opened, synchronize, reopened, closed]) and set
+# the CLOUDFLARE_API_TOKEN repo secret.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to preview'
+        required: true
+      action:
+        description: '"deploy" or "cleanup"'
+        required: true
+        default: 'deploy'
 
 concurrency:
-  group: preview-pr-${{ github.event.number }}
+  group: preview-pr-${{ inputs.pr_number }}
   cancel-in-progress: false
 
 permissions:

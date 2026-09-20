@@ -42,12 +42,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
-      - name: Reconcile orphaned preview D1 databases
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # `gh` CLI reads GH_TOKEN. The auto-provided GITHUB_TOKEN (scoped
-          # via `permissions: pull-requests: read` above) is sufficient for
-          # `gh pr list` — no custom PAT needed.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm reconcile:preview-dbs
+      # Preview D1 orphan reconcile runs through the operator's Cloudflare
+      # MCP session (or `pnpm reconcile:preview-dbs` invoked locally with a
+      # CF token in the operator's env), NOT here. Kept out of CI so no
+      # long-lived CLOUDFLARE_API_TOKEN sits in repo secrets. See plan.md.
