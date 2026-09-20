@@ -84,11 +84,12 @@ jobs:
           echo "db_id=$DB_ID" >> "$GITHUB_OUTPUT"
           echo "db_name=$DB_NAME" >> "$GITHUB_OUTPUT"
 
-      # Phase 3 introduces the Drizzle schema and `pnpm db:migrate:preview`.
-      # Until then there is nothing to migrate; this step is a documented
-      # placeholder so preview.yml's step order doesn't change later.
       - name: Run preview migrations
-        run: echo "migrations not yet implemented — Phase 3"
+        working-directory: apps/api
+        run: |
+          # Apply drizzle migrations to the freshly-provisioned preview D1.
+          # `--env preview` picks up the (sed-substituted) database_id block.
+          npx wrangler d1 migrations apply runway_preview --remote --env preview
 
       # wrangler.toml commits literal placeholders "PLACEHOLDER_PER_PR" (D1 id)
       # and "PLACEHOLDER_PR" (worker name suffix). CI substitutes both here so

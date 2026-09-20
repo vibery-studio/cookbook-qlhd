@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Database, Drizzle Schema & Migrations"
-status: todo
+status: in-progress
 ---
 
 # Phase 3: Database, Drizzle Schema & Migrations

@@ -13,6 +13,7 @@ account_id = "5cbaf7492795d0e9eafa26240b14389c"
 binding = "DB"
 database_name = "runway_dev"
 database_id = "1969f138-257f-4a0b-8601-2c1c98965f06"
+migrations_dir = "src/db/migrations"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
@@ -75,6 +76,7 @@ name = "runway-api-preview-pr-PLACEHOLDER_PR"
 binding = "DB"
 database_name = "runway_preview"
 database_id = "PLACEHOLDER_PER_PR" # CI substitutes this per-PR before deploy
+migrations_dir = "src/db/migrations"
 
 [[env.preview.kv_namespaces]]
 binding = "SESSIONS"
@@ -132,6 +134,7 @@ name = "runway-api-prod"
 binding = "DB"
 database_name = "runway_prod"
 database_id = "8e6382c3-dcbe-4d24-b34e-9e720fe858b7"
+migrations_dir = "src/db/migrations"
 
 [[env.production.kv_namespaces]]
 binding = "SESSIONS"

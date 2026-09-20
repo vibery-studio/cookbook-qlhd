@@ -18,10 +18,17 @@
     "check:wrangler": "tsx scripts/validate-wrangler.ts",
     "check:bundle-size": "tsx scripts/check-bundle-size.ts",
     "check:migrations": "tsx scripts/lint-migrations.ts",
-    "reconcile:preview-dbs": "tsx scripts/reconcile-preview-dbs.ts"
+    "reconcile:preview-dbs": "tsx scripts/reconcile-preview-dbs.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --local",
+    "db:migrate:dev": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --remote",
+    "db:migrate:preview": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_preview --remote --env preview",
+    "db:migrate:prod": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_prod --remote --env production",
+    "db:schema-head": "tsx scripts/get-schema-head.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
+    "drizzle-kit": "0.30.1",
     "smol-toml": "1.8.0",
     "tsx": "4.19.2",
     "turbo": "2.3.3",
