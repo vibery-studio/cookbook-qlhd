@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: OpenAPI Contract & Hono Route Skeleton"
-status: todo
+status: in-progress
 ---
 
 # Phase 4: OpenAPI Contract & Hono Route Skeleton

@@ -19,6 +19,8 @@
     "check:bundle-size": "tsx scripts/check-bundle-size.ts",
     "check:migrations": "tsx scripts/lint-migrations.ts",
     "reconcile:preview-dbs": "tsx scripts/reconcile-preview-dbs.ts",
+    "openapi:export": "tsx scripts/export-openapi.ts",
+    "openapi:diff": "tsx scripts/openapi-diff.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --local",
     "db:migrate:dev": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --remote",

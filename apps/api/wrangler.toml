@@ -9,6 +9,19 @@ account_id = "5cbaf7492795d0e9eafa26240b14389c"
 # Default (dev) environment bindings
 # ---------------------------------------------------------------------------
 
+# Non-secret runtime config. Secrets (JWT_SECRET, TOKEN_PEPPER, READYZ_TOKEN,
+# RESEND_API_KEY, SENTRY_DSN) go via `wrangler secret put` and .dev.vars for
+# local; they are NEVER in this file. env-parity check requires the same var
+# names across [env.*] blocks — mirror any addition here into preview + prod.
+[vars]
+APP_ENV = "development"
+APP_ORIGIN = "http://localhost:8787"
+BUILD_SHA = "dev"
+EMAIL_PROVIDER = "noop"
+PASSWORD_MIN_LENGTH = "12"
+RATE_LIMIT_AUTH_LOGIN = "5"
+RATE_LIMIT_AUTH_SIGNUP = "3"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "runway_dev"
@@ -72,6 +85,15 @@ simple = { limit = 60, period = 60 }
 # before `wrangler deploy --env preview`, giving each PR an isolated worker.
 name = "runway-api-preview-pr-PLACEHOLDER_PR"
 
+[env.preview.vars]
+APP_ENV = "preview"
+APP_ORIGIN = "https://runway-api-preview-pr-PLACEHOLDER_PR.workers.dev"
+BUILD_SHA = "preview"
+EMAIL_PROVIDER = "noop"
+PASSWORD_MIN_LENGTH = "12"
+RATE_LIMIT_AUTH_LOGIN = "5"
+RATE_LIMIT_AUTH_SIGNUP = "3"
+
 [[env.preview.d1_databases]]
 binding = "DB"
 database_name = "runway_preview"
@@ -129,6 +151,15 @@ simple = { limit = 60, period = 60 }
 
 [env.production]
 name = "runway-api-prod"
+
+[env.production.vars]
+APP_ENV = "production"
+APP_ORIGIN = "https://runway-api-prod.workers.dev"
+BUILD_SHA = "prod"
+EMAIL_PROVIDER = "noop"
+PASSWORD_MIN_LENGTH = "12"
+RATE_LIMIT_AUTH_LOGIN = "5"
+RATE_LIMIT_AUTH_SIGNUP = "3"
 
 [[env.production.d1_databases]]
 binding = "DB"
