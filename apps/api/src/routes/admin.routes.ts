@@ -6,13 +6,19 @@ import { EmailSchema, UlidSchema } from "../dto/common";
 import { CursorQuery, paginatedResponse } from "../dto/pagination";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
+import { getDb } from "../db/client";
+import { requireAuth } from "../middleware/auth";
+import { requirePerm } from "../middleware/require-permission";
+import { listUsers } from "../services/admin-service";
 
 /**
- * Admin route stubs (Phase 4). `GET /admin/users` requires `users:read`;
- * `PUT /admin/settings/:key` requires `settings:write`. RBAC enforcement
- * lands in Phase 6; System Settings registry (per-key Zod validation) lands
- * in Phase 8 — the `value: unknown` body here is a placeholder shape that
- * Phase 8 replaces with a per-key discriminated schema.
+ * Admin routes. `GET /admin/users` requires `users:read`; `PUT
+ * /admin/settings/:key` requires `settings:write`. RBAC is enforced by
+ * `requirePerm` after `requireAuth` populates the principal on context.
+ * System Settings registry (per-key Zod validation) lands in Phase 8 —
+ * the `value: unknown` body here is a placeholder shape that Phase 8
+ * replaces with a per-key discriminated schema, so the settings PUT
+ * still 501s until then.
  */
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -111,6 +117,25 @@ const updateSettingRoute = createRoute({
 });
 
 export function adminRoutes(app: OpenAPIHono<Env>): void {
-  app.openapi(listUsersRoute, notImplemented);
+  // requireAuth populates c.get('principal'); requirePerm then checks
+  // it against the permission catalog. Order MUST be requireAuth first,
+  // else requirePerm sees `undefined` and 403s every request even for
+  // an admin — which is technically safe but hides the real cause.
+  app.use("/admin/users", requireAuth(), requirePerm("users:read"));
+  app.use("/admin/settings/*", requireAuth(), requirePerm("settings:write"));
+
+  app.openapi(listUsersRoute, async (c) => {
+    const query = c.req.valid("query");
+    const db = getDb(c.env);
+    const page = await listUsers(
+      { db, kv: c.env.SESSIONS, env: c.env },
+      { cursor: query.cursor, limit: query.limit },
+    );
+    return c.json(page, 200);
+  });
+
+  // Settings write stays 501 — Phase 8 registers per-key Zod schemas and
+  // wires the real persist path. Auth+RBAC still enforced above so the
+  // 501 body only reaches admins.
   app.openapi(updateSettingRoute, notImplemented);
 }

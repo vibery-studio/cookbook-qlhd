@@ -15,18 +15,21 @@ const OPENAPI_INFO_VERSION = "0.1.0";
 installZodErrorMap();
 
 /**
- * Placeholder for the authenticated principal shape. Phase 5 (session
- * management) and Phase 6 (RBAC) fill in the real fields.
+ * The authenticated principal, populated by the auth middleware.
  *
  * `permissions` is a JSON-serializable `readonly string[]`, NOT a `Set<string>`
  * — a Set silently serializes to `{}` through `c.json()`, and MeResponse in
- * `me.routes.ts` already declares the wire shape as `z.array(z.string())`.
- * If RBAC middleware needs O(1) `.has()` checks, it can memoize a Set at
- * middleware-entry time from this array; the Principal on context stays
- * serializable so ad-hoc `c.json(principal)` (e.g. for debug endpoints) works.
+ * `me.routes.ts` declares the wire shape as `z.array(z.string())`. The
+ * `rbac.can()` gate wraps this into a `Set<Permission>` at the middleware
+ * boundary (see `requirePermission` glue in `middleware/require-permission.ts`),
+ * so the on-context shape stays serializable while the check itself is O(1).
+ *
+ * `roles` is the list of ROLE NAMES the user carries (e.g., ["admin"]).
+ * rbac policy uses it for admin-bypass ownership checks.
  */
 export type Principal = {
   id: string;
+  roles: readonly string[];
   permissions: readonly string[];
 };
 

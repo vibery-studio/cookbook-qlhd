@@ -18,6 +18,8 @@ import { verifyAccessToken } from "@runway/auth";
 import type { Bindings } from "../env";
 import type { Principal, Variables } from "../openapi";
 import { isJtiRevoked } from "../dao/jwt-revocation-dao";
+import { listPermissionKeysForUser } from "../dao/permission-dao";
+import { listRoleNamesForUser } from "../dao/role-dao";
 import { getCachedPrincipal, setCachedPrincipal } from "../dao/session-cache";
 import { findUserById } from "../dao/user-dao";
 import { getDb } from "../db/client";
@@ -89,6 +91,7 @@ async function loadPrincipal(
   if (cached !== null) {
     return {
       id: cached.id,
+      roles: cached.roles,
       permissions: cached.permissions,
     };
   }
@@ -98,15 +101,22 @@ async function loadPrincipal(
   if (user === null) return null;
   if (user.status === "disabled") return null;
 
-  // Phase 6 (RBAC) fills real roles + permissions. For Phase 5, principals
-  // exist but have no permissions — /admin/* endpoints will 403 anyone
-  // until RBAC lands and seeds roles.
-  const principal: Principal = { id: user.id, permissions: [] };
+  // Two parallel joins: user_roles → roles (names) and user_roles →
+  // role_permissions → permissions (keys). Both are keyed off the same
+  // user_roles rows, so a single D1 batch is possible but the DAO
+  // interfaces are cleaner kept apart; the extra ~5ms latency is fine
+  // for a session-cache miss path (hot path is KV read).
+  const [roles, permissions] = await Promise.all([
+    listRoleNamesForUser(db, user.id),
+    listPermissionKeysForUser(db, user.id),
+  ]);
+
+  const principal: Principal = { id: user.id, roles, permissions };
 
   await setCachedPrincipal(kv, {
     id: principal.id,
-    roles: [],
-    permissions: [...principal.permissions],
+    roles: [...roles],
+    permissions: [...permissions],
   });
 
   return principal;

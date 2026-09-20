@@ -26,7 +26,8 @@
     "db:migrate:dev": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --remote",
     "db:migrate:preview": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_preview --remote --env preview",
     "db:migrate:prod": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_prod --remote --env production",
-    "db:schema-head": "tsx scripts/get-schema-head.ts"
+    "db:schema-head": "tsx scripts/get-schema-head.ts",
+    "db:seed:admin": "tsx scripts/seed-admin.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.5",

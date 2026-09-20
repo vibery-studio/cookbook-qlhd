@@ -7,7 +7,7 @@
  * enforced here via `db.batch([...])` — dependent rows are deleted before
  * the parent, all in one atomic batch.
  */
-import { eq } from "drizzle-orm";
+import { asc, eq, gt } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { jwtRevocations, refreshTokens, users, userRoles, verificationTokens } from "../db/schema";
 
@@ -106,6 +106,31 @@ export async function updateUserStatus(
     .returning();
 
   return row ? toDto(row) : null;
+}
+
+/**
+ * Cursor-paginate users by ULID (lexicographic → creation-time-ordered).
+ * `cursor` is the last id from the previous page (exclusive). `limit` is
+ * the page size. Fetches `limit + 1` under the hood to compute
+ * `next_cursor` without an extra round trip: if we got the extra row,
+ * pop it and return its predecessor as `next_cursor`; else `null`.
+ */
+export async function listUsersPaginated(
+  db: Db,
+  input: { cursor?: string; limit: number },
+): Promise<{ items: UserDto[]; next_cursor: string | null }> {
+  const rows = await db
+    .select()
+    .from(users)
+    .where(input.cursor !== undefined ? gt(users.id, input.cursor) : undefined)
+    .orderBy(asc(users.id))
+    .limit(input.limit + 1);
+
+  const hasMore = rows.length > input.limit;
+  const page = hasMore ? rows.slice(0, input.limit) : rows;
+  const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
+
+  return { items: page.map(toDto), next_cursor: nextCursor };
 }
 
 /**

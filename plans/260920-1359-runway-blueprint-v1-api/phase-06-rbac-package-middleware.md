@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: RBAC Package & Middleware"
-status: todo
+status: completed
 ---
 
 # Phase 6: RBAC Package & Middleware

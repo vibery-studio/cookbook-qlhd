@@ -72,10 +72,7 @@ export function meRoutes(app: OpenAPIHono<Env>): void {
       {
         id: user.id,
         email: user.email,
-        // Phase 6 (RBAC) populates these from user_roles + role_permissions
-        // joins. For Phase 5 the shape is stable but always empty — routes
-        // that require permissions will always 403 until RBAC lands.
-        roles: [] as string[],
+        roles: [...principal.roles],
         permissions: [...principal.permissions],
       },
       200,

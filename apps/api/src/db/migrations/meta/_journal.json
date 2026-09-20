@@ -8,6 +8,13 @@
       "when": 1789892269663,
       "tag": "0000_busy_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789907400000,
+      "tag": "0001_seed_rbac",
+      "breakpoints": false
     }
   ]
 }

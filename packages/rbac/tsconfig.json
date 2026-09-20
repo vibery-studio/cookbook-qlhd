@@ -1,4 +1,8 @@
 {
   "extends": "@runway/config/tsconfig",
-  "include": ["src"]
+  "compilerOptions": {
+    "types": [],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
 }
