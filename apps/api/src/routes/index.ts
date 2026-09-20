@@ -6,6 +6,7 @@ import { meRoutes } from "./me.routes";
 import { adminRoutes } from "./admin.routes";
 import { adminSettingsRoutes } from "./admin-settings.routes";
 import { demoRoutes } from "./demo.routes";
+import { healthRoutes } from "./health.routes";
 
 type Env = { Bindings: Bindings; Variables: Variables };
 
@@ -20,4 +21,5 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   adminRoutes(app);
   adminSettingsRoutes(app);
   demoRoutes(app);
+  healthRoutes(app);
 }

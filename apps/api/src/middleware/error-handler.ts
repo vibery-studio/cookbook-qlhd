@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { problem, PROBLEM_TYPE_BASE, ProblemType } from "../dto/error";
+import { selectErrorReporter } from "../adapters/error-reporter-select";
 
 type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -48,6 +49,19 @@ export function errorHandler(env: Bindings) {
     }
 
     const isProd = env.APP_ENV === "production";
+
+    // Capture unhandled errors via the reporter port. Noop when
+    // SENTRY_DSN is unset; structured console.error otherwise (real
+    // Sentry HOC wiring lands in a follow-up per docs/observability.md).
+    // Reporter contract: never throws.
+    const reporter = selectErrorReporter(env);
+    reporter.capture(err, {
+      requestId,
+      principalId: c.get("principal")?.id ?? null,
+      url: c.req.url,
+      method: c.req.method,
+    });
+
     const body = problem(500, "Internal server error", ProblemType.Internal, {
       detail: isProd ? undefined : err.message,
       instance,

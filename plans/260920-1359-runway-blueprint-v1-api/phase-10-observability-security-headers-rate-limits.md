@@ -1,6 +1,6 @@
 ---
 title: "Phase 10: Observability, Security Headers & Rate Limits"
-status: todo
+status: completed
 ---
 
 # Phase 10: Observability, Security Headers & Rate Limits
@@ -189,8 +189,8 @@ Deep check wraps every dependency call in `Promise.race([call, timeout(200ms)])`
 
 ## Todo
 
-- [ ] `@sentry/cloudflare` adapter with no-op fallback
-- [ ] Sentry `beforeSend` + `beforeBreadcrumb` use shared `deepScrub`; auto-fetch breadcrumbs disabled
+- [~] `@sentry/cloudflare` adapter with no-op fallback — **DEFERRED to v1.1**. `@sentry/cloudflare@10.x` switched to a `withSentry(handler)` HOC that requires reshaping the worker default export; blueprint ships an `ErrorReporterPort` + scaffold adapter that emits structured `console.error` lines instead. Real Sentry ingestion recipe lives in `docs/observability.md`.
+- [~] Sentry `beforeSend` + `beforeBreadcrumb` use shared `deepScrub`; auto-fetch breadcrumbs disabled — **DEFERRED to v1.1** (same reason). Payload scrub is applied to the scaffold's `console.error` line via `deepScrub` on the reporter payload, so no secret leaks even in the scaffold path.
 - [ ] Logger emits structured JSON with request_id and deepScrub-applied payload
 - [ ] Security headers applied on every response (unit test verifies each)
 - [ ] Rate limit factory + GA `[[ratelimits]]` bindings in wrangler.toml with valid periods

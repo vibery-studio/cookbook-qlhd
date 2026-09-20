@@ -6,6 +6,7 @@ import { logger } from "./middleware/logger";
 import { errorHandler } from "./middleware/error-handler";
 import { requireOrigin } from "./middleware/origin";
 import { requireFetchHeader } from "./middleware/require-fetch-header";
+import { securityHeaders } from "./middleware/security-headers";
 import { mountRoutes } from "./routes";
 import { problem, ProblemType } from "./dto/error";
 
@@ -25,6 +26,10 @@ function buildApp(env: Bindings) {
   // anything thrown by logger's `next()` chain or route handlers).
   app.use("*", requestId());
   app.use("*", logger());
+  // Security headers apply on every response, including error paths.
+  // Installed AFTER logger so the log line captures the final status
+  // BEFORE headers are stamped — headers don't affect status.
+  app.use("*", securityHeaders());
   // CSRF defense (Phase 5). Both middlewares no-op on GET/HEAD/OPTIONS,
   // so applying globally is safe for read-only endpoints (/healthz,
   // /openapi.json, /docs) — those never trigger the header/origin check.
@@ -43,7 +48,9 @@ function buildApp(env: Bindings) {
     return c.json(body, 404, { "content-type": "application/problem+json" });
   });
 
-  app.get("/healthz", (c) => c.json({ ok: true }));
+  // `/healthz` + `/readyz` live in `routes/health.routes.ts` (mounted
+  // by `mountRoutes` below) — split into shallow (public) and deep
+  // (token-gated + rate-limited) per Phase 10.
 
   // `/openapi.json` is only registered by `createApp` outside production
   // (see openapi.ts) — in prod it's simply never routed, so it falls
@@ -60,6 +67,7 @@ function buildApp(env: Bindings) {
 
 import { emailRetryConsumer } from "./queues/email-retry-consumer";
 import { verifyEmailSweeper } from "./crons/verify-email-sweeper";
+import { pruneExpiredRows } from "./crons/expired-rows-pruner";
 import type { EmailRetryPayload } from "./services/email-service";
 
 export default {
@@ -71,11 +79,30 @@ export default {
     // via wrangler.toml, dispatch here on `batch.queue`.
     await emailRetryConsumer(batch, env);
   },
-  scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    // `waitUntil` keeps the sweeper alive past this handler's return —
-    // scheduled invocations have a soft time budget, but we want the
-    // full re-enqueue pass to finish. See docs/email.md for the
-    // sweeper's cadence + resend cap.
-    ctx.waitUntil(verifyEmailSweeper(env));
+  scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    // Dispatch by cron string. `event.cron` matches the exact
+    // pattern from wrangler.toml — dispatch table stays in sync with
+    // that config.
+    //   `*/5 * * * *` → verify-email sweeper (see docs/email.md)
+    //   `0 3 * * *`   → nightly pruner of expired jwt_revocations +
+    //                    idempotency_keys (see docs/observability.md)
+    if (event.cron === "0 3 * * *") {
+      ctx.waitUntil(pruneExpiredRows(env));
+    } else if (event.cron === "*/5 * * * *") {
+      ctx.waitUntil(verifyEmailSweeper(env));
+    } else {
+      // Explicit no-op for unknown schedules. Silently running the
+      // sweeper on a new cron would produce log noise and race with
+      // the real `*/5` sweeper. Force new-cron correctness at review
+      // time via this warn log rather than at runtime.
+      console.warn(
+        JSON.stringify({
+          ts: Date.now(),
+          kind: "cron.unknown_schedule",
+          schedule: event.cron,
+          note: "add a handler to scheduled() dispatch table in apps/api/src/index.ts",
+        }),
+      );
+    }
   },
 };

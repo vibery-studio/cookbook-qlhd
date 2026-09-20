@@ -62,7 +62,7 @@ max_retries = 3
 # signed up >15min ago but haven't verified. See
 # src/crons/verify-email-sweeper.ts + docs/email.md.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 3 * * *"]
 
 [[ratelimits]]
 name = "RL_AUTH_LOGIN"
@@ -141,7 +141,7 @@ max_batch_size = 10
 max_retries = 3
 
 [env.preview.triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 3 * * *"]
 
 [[env.preview.ratelimits]]
 name = "RL_AUTH_LOGIN"
@@ -215,7 +215,7 @@ max_batch_size = 10
 max_retries = 3
 
 [env.production.triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 3 * * *"]
 
 [[env.production.ratelimits]]
 name = "RL_AUTH_LOGIN"

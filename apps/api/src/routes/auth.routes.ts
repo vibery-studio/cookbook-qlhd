@@ -8,6 +8,8 @@ import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
 import { createEmailPortWithRetry } from "../adapters/email-with-retry";
+import { clientIp, normalizeEmailForRateLimit, rateLimit } from "../middleware/rate-limit";
+import { createAuditLogger } from "../observability/logger";
 import {
   ACCESS_COOKIE_NAME,
   REFRESH_COOKIE_NAME,
@@ -201,6 +203,77 @@ const refreshRoute = createRoute({
 
 const authRoutesModule = {
   register(app: OpenAPIHono<Env>): void {
+    // Rate limits — one per verb/path. Keys chosen per phase-10 spec.
+    app.on(
+      "post",
+      "/auth/signup",
+      rateLimit({
+        binding: "RL_AUTH_SIGNUP",
+        keyFn: (c) => `signup:${clientIp(c)}`,
+      }),
+    );
+
+    app.on(
+      "post",
+      "/auth/verify",
+      rateLimit({
+        binding: "RL_AUTH_VERIFY",
+        keyFn: (c) => `verify:${clientIp(c)}`,
+      }),
+    );
+
+    app.on(
+      "post",
+      "/auth/login",
+      rateLimit({
+        binding: "RL_AUTH_LOGIN",
+        keyFn: async (c) => {
+          // Peek the body to include normalized email in the key so
+          // per-account throttling works. Clone the request so the
+          // downstream handler still reads its own copy.
+          const clone = c.req.raw.clone();
+          let email = "unknown";
+          try {
+            const parsed: { email?: unknown } = await clone.json();
+            if (typeof parsed.email === "string") {
+              email = normalizeEmailForRateLimit(parsed.email);
+            }
+          } catch {
+            // Body missing/malformed — fall back to ip-only bucket.
+          }
+          return `login:${email}:${clientIp(c)}`;
+        },
+        onBreach: (c) => {
+          // SYNC audit — security-critical, must land in Logpush
+          // before the 429 flushes. Include request_id so incident
+          // triage can correlate the breach with the surrounding
+          // request logs.
+          createAuditLogger({ ctx: undefined })(
+            {
+              actor: null,
+              action: "auth.login.rate_limited",
+              target: `ip:${clientIp(c)}`,
+              metadata: {
+                request_id: c.get("requestId"),
+              },
+            },
+            { sync: true },
+          );
+        },
+      }),
+    );
+
+    app.on(
+      "post",
+      "/auth/refresh",
+      rateLimit({
+        binding: "RL_AUTH_REFRESH",
+        // No principal available before refresh — fall back to IP
+        // bucket which still throttles per-attacker.
+        keyFn: (c) => `refresh:${clientIp(c)}`,
+      }),
+    );
+
     app.openapi(signupRoute, async (c) => {
       const body = c.req.valid("json");
       const db = getDb(c.env);
