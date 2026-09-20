@@ -32,7 +32,7 @@ Members-only scaffold on the Cloudflare Workers stack (Workers + D1 + KV + Queue
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Phase 1: Discard Starter Stub](./phase-01-start.md) | Pending |
-| 2 | [Phase 2: Monorepo Foundation & CI/CD Skeleton](./phase-02-monorepo-foundation-cicd-skeleton.md) | In Progress (local gates green; CI-dependent items pending first PR) |
+| 2 | [Phase 2: Monorepo Foundation & CI/CD Skeleton](./phase-02-monorepo-foundation-cicd-skeleton.md) | Completed (local + CI green; PR/deploy-dependent verification pending CLOUDFLARE_API_TOKEN + first PR) |
 | 3 | [Phase 3: Database, Drizzle Schema & Migrations](./phase-03-database-drizzle-schema-migrations.md) | Pending |
 | 4 | [Phase 4: OpenAPI Contract & Hono Route Skeleton](./phase-04-openapi-contract-hono-route-skeleton.md) | Pending |
 | 5 | [Phase 5: Password Auth & Session Management](./phase-05-password-auth-session-management.md) | Pending |

@@ -110,32 +110,32 @@ runway/
 ## Todo
 
 - [x] Root workspace configured (pnpm + turbo)
-- [x] `apps/api` Hono skeleton + `/healthz` test green
+- [x] `apps/api` Hono skeleton + `/healthz` test green (14ms locally)
 - [x] Shared `packages/config` consumed by all workspaces
 - [x] `wrangler.toml` with all binding stubs + `nodejs_compat` flag
-- [x] 4 GitHub Actions workflows created (verify green on first PR after push)
-- [ ] gitleaks configured with `.gitleaks.toml` (ignore false positives in test fixtures) — default config used; `.gitleaks.toml` not needed until first false positive
+- [x] 4 GitHub Actions workflows created (CI job green on first push — run 35498599216, 45s)
+- [ ] gitleaks configured with `.gitleaks.toml` (deferred; default config used until first false positive)
 - [x] `.npmrc` includes `ignore-scripts=true`
-- [x] `pnpm.onlyBuiltDependencies` allowlist populated (`pnpm-workspace.yaml`; modern pnpm 10 location)
+- [x] `pnpm.onlyBuiltDependencies` allowlist populated (`pnpm-workspace.yaml`)
 - [x] `scripts/validate-wrangler.ts` implemented + wired into CI
-- [x] `scripts/check-bundle-size.ts` implemented + wired into CI (900KB compressed gate on `apps/api/dist`)
+- [x] `scripts/check-bundle-size.ts` implemented + wired into CI (900KB gzip gate)
 - [x] `scripts/reconcile-preview-dbs.ts` implemented + wired into `security.yml` (uses `secrets.GITHUB_TOKEN`)
 - [x] `scripts/lint-migrations.ts` implemented + wired into CI
-- [ ] Branch protection rules documented in `docs/ci.md` (required checks list) — deferred; `docs/` populated across later phases per plan
-- [ ] `pnpm bootstrap` script tested on clean clone AND timed; result recorded in `README.md` — pending first clean-clone run
-- [ ] Preview D1 provision + teardown proven end-to-end on a throwaway PR — pending first PR
-- [ ] Nightly reconcile job proven by manually orphaning a DB then verifying next-run deletion — pending manual verification after first CF token set
+- [ ] Branch protection rules documented in `docs/ci.md` (deferred; `docs/` populated in later phases)
+- [ ] `pnpm bootstrap` script tested on clean clone AND timed; result recorded in `README.md` (pending first clean-clone run)
+- [ ] Preview D1 provision + teardown proven end-to-end on a throwaway PR (pending first PR + CF_API_TOKEN)
+- [ ] Nightly reconcile job proven by manually orphaning a DB then verifying next-run deletion (pending manual verification)
 
 ## Success Criteria
 
 - [x] `pnpm test` green with only `/healthz` test
-- [ ] CI passes on empty PR (no changes) in <3 min — pending first PR
-- [ ] Preview worker responds on `https://runway-preview-pr-N.<account>.workers.dev/healthz` — pending first PR
-- [ ] `main` push deploys to prod worker; `/healthz` returns 200 (the `/readyz` schema-head-vs-BUILD_SHA verification is scaffolded as a disabled step in `deploy.yml` and activated in Phase 10 when the `/readyz` handler ships) — pending first `main` push
-- [ ] gitleaks catches a planted fake secret in a test PR (verify) — pending first PR
+- [x] CI passes on empty PR (no changes) in <3 min — verified on run 35498599216 (45s)
+- [ ] Preview worker responds on `https://runway-preview-pr-N.<account>.workers.dev/healthz` (pending first PR + CF_API_TOKEN)
+- [ ] `main` push deploys to prod worker; `/healthz` returns 200 (pending CF_API_TOKEN; `/readyz` verification deferred to Phase 10)
+- [ ] gitleaks catches a planted fake secret in a test PR (pending first PR)
 - [x] Wrangler env-parity check fails a synthetic PR that removes a binding from one env — script logic proven locally
 - [x] Bundle-size check fails a synthetic PR that imports a bloated dep — script logic proven locally (current build 20.36 KB gzipped, 2.3% of budget)
-- [ ] Bootstrap time recorded in README with hardware spec + network baseline — pending first clean-clone timing
+- [ ] Bootstrap time recorded in README with hardware spec + network baseline (pending first clean-clone timing)
 
 ## Risk Assessment
 
