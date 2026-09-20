@@ -1,4 +1,12 @@
 {
   "extends": "@runway/config/tsconfig",
-  "include": ["src"]
+  "compilerOptions": {
+    "types": [],
+    "lib": ["ES2023", "DOM"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src", "test", "vitest.config.ts"]
 }

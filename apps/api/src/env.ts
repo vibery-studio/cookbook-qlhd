@@ -40,6 +40,7 @@ export interface Bindings extends Env {
   SESSIONS: KVNamespace;
   SETTINGS: KVNamespace;
   EMAIL_RETRY_QUEUE: Queue;
+  EMAIL_DLQ_QUEUE: Queue;
   RL_AUTH_LOGIN: RateLimit;
   RL_AUTH_SIGNUP: RateLimit;
   RL_AUTH_VERIFY: RateLimit;

@@ -58,10 +58,24 @@ function buildApp(env: Bindings) {
   return app;
 }
 
+import { emailRetryConsumer } from "./queues/email-retry-consumer";
+import { verifyEmailSweeper } from "./crons/verify-email-sweeper";
+import type { EmailRetryPayload } from "./services/email-service";
+
 export default {
   fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
     return buildApp(env).fetch(request, env, ctx);
   },
-  // TODO(Phase 7/10): add `queue()` (email retry consumer) and
-  // `scheduled()` (verify-email sweeper cron) handlers here.
+  async queue(batch: MessageBatch<EmailRetryPayload>, env: Bindings) {
+    // Single consumer for now (`email-retry`). If we add a DLQ consumer
+    // via wrangler.toml, dispatch here on `batch.queue`.
+    await emailRetryConsumer(batch, env);
+  },
+  scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    // `waitUntil` keeps the sweeper alive past this handler's return —
+    // scheduled invocations have a soft time budget, but we want the
+    // full re-enqueue pass to finish. See docs/email.md for the
+    // sweeper's cadence + resend cap.
+    ctx.waitUntil(verifyEmailSweeper(env));
+  },
 };

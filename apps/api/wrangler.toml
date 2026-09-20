@@ -42,11 +42,27 @@ preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
 binding = "EMAIL_RETRY_QUEUE"
 queue = "email-retry"
 
+# App-level DLQ producer: retry-consumer explicitly pushes exhausted
+# messages here. CF's `dead_letter_queue` on the retry consumer only
+# fires on `msg.retry()` after CF's platform max_retries — which is a
+# different (and more limited) trigger than "app-level MAX_RETRY_ATTEMPTS
+# exceeded". Both paths land on the same queue name, so DLQ inspection
+# still works via `wrangler queues consumer email-dlq peek`.
+[[queues.producers]]
+binding = "EMAIL_DLQ_QUEUE"
+queue = "email-dlq"
+
 [[queues.consumers]]
 queue = "email-retry"
 dead_letter_queue = "email-dlq"
 max_batch_size = 10
 max_retries = 3
+
+# Cron: verify-email sweeper. Every 5 minutes. Re-notifies users who
+# signed up >15min ago but haven't verified. See
+# src/crons/verify-email-sweeper.ts + docs/email.md.
+[triggers]
+crons = ["*/5 * * * *"]
 
 [[ratelimits]]
 name = "RL_AUTH_LOGIN"
@@ -114,11 +130,18 @@ preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
 binding = "EMAIL_RETRY_QUEUE"
 queue = "email-retry"
 
+[[env.preview.queues.producers]]
+binding = "EMAIL_DLQ_QUEUE"
+queue = "email-dlq"
+
 [[env.preview.queues.consumers]]
 queue = "email-retry"
 dead_letter_queue = "email-dlq"
 max_batch_size = 10
 max_retries = 3
+
+[env.preview.triggers]
+crons = ["*/5 * * * *"]
 
 [[env.preview.ratelimits]]
 name = "RL_AUTH_LOGIN"
@@ -181,11 +204,18 @@ preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
 binding = "EMAIL_RETRY_QUEUE"
 queue = "email-retry"
 
+[[env.production.queues.producers]]
+binding = "EMAIL_DLQ_QUEUE"
+queue = "email-dlq"
+
 [[env.production.queues.consumers]]
 queue = "email-retry"
 dead_letter_queue = "email-dlq"
 max_batch_size = 10
 max_retries = 3
+
+[env.production.triggers]
+crons = ["*/5 * * * *"]
 
 [[env.production.ratelimits]]
 name = "RL_AUTH_LOGIN"

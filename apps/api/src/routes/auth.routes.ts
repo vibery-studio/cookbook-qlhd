@@ -7,7 +7,7 @@ import { problem, ProblemDto, ProblemType } from "../dto/error";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
-import { noopEmailAdapter } from "../adapters/email-noop";
+import { createEmailPortWithRetry } from "../adapters/email-with-retry";
 import {
   ACCESS_COOKIE_NAME,
   REFRESH_COOKIE_NAME,
@@ -209,7 +209,7 @@ const authRoutesModule = {
         {
           db,
           kv: c.env.SESSIONS,
-          email: noopEmailAdapter,
+          email: createEmailPortWithRetry(c.env),
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },
@@ -243,7 +243,7 @@ const authRoutesModule = {
         {
           db,
           kv: c.env.SESSIONS,
-          email: noopEmailAdapter,
+          email: createEmailPortWithRetry(c.env),
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },
@@ -268,7 +268,7 @@ const authRoutesModule = {
         {
           db,
           kv: c.env.SESSIONS,
-          email: noopEmailAdapter,
+          email: createEmailPortWithRetry(c.env),
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },
@@ -324,7 +324,7 @@ const authRoutesModule = {
         {
           db,
           kv: c.env.SESSIONS,
-          email: noopEmailAdapter,
+          email: createEmailPortWithRetry(c.env),
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },
@@ -355,7 +355,7 @@ const authRoutesModule = {
         {
           db,
           kv: c.env.SESSIONS,
-          email: noopEmailAdapter,
+          email: createEmailPortWithRetry(c.env),
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },

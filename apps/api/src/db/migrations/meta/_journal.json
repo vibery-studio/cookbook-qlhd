@@ -15,6 +15,13 @@
       "when": 1789907400000,
       "tag": "0001_seed_rbac",
       "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789920000000,
+      "tag": "0002_add_verify_email_resend_count",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,7 @@ export const users = sqliteTable(
     verifiedAt: integer("verified_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
+    verifyEmailResendCount: integer("verify_email_resend_count").notNull().default(0),
   },
   (table) => [index("idx_users_email").on(table.email)],
 );

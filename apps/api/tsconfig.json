@@ -2,7 +2,9 @@
   "extends": "@runway/config/tsconfig",
   "compilerOptions": {
     "outDir": "dist",
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
   },
   "include": ["src", "test", "vitest.config.ts"]
 }

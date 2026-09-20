@@ -1,6 +1,6 @@
 ---
 title: "Phase 7: Email Port, Adapters & Templates"
-status: todo
+status: completed
 ---
 
 # Phase 7: Email Port, Adapters & Templates

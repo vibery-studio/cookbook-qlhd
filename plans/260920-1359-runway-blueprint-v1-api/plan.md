@@ -37,7 +37,7 @@ Members-only scaffold on the Cloudflare Workers stack (Workers + D1 + KV + Queue
 | 4 | [Phase 4: OpenAPI Contract & Hono Route Skeleton](./phase-04-openapi-contract-hono-route-skeleton.md) | In Progress (locally green; prod-404 verification deferred to Phase 11 Bruno E2E) |
 | 5 | [Phase 5: Password Auth & Session Management](./phase-05-password-auth-session-management.md) | Completed |
 | 6 | [Phase 6: RBAC Package & Middleware](./phase-06-rbac-package-middleware.md) | Completed |
-| 7 | [Phase 7: Email Port, Adapters & Templates](./phase-07-email-port-adapters-templates.md) | Pending |
+| 7 | [Phase 7: Email Port, Adapters & Templates](./phase-07-email-port-adapters-templates.md) | Completed |
 | 8 | [Phase 8: System Settings Module](./phase-08-system-settings-module.md) | Pending |
 | 9 | [Phase 9: Idempotency, Structured Audit Logging](./phase-09-idempotency-audit-log-money-package.md) | Pending |
 | 10 | [Phase 10: Observability, Security Headers & Rate Limits](./phase-10-observability-security-headers-rate-limits.md) | Pending |
