@@ -1,4 +1,7 @@
 {
   "extends": "@runway/config/tsconfig",
-  "include": ["src"]
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src", "test", "vitest.config.ts"]
 }

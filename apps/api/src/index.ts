@@ -4,6 +4,8 @@ import { createApp } from "./openapi";
 import { requestId } from "./middleware/request-id";
 import { logger } from "./middleware/logger";
 import { errorHandler } from "./middleware/error-handler";
+import { requireOrigin } from "./middleware/origin";
+import { requireFetchHeader } from "./middleware/require-fetch-header";
 import { mountRoutes } from "./routes";
 import { problem, ProblemType } from "./dto/error";
 
@@ -23,6 +25,11 @@ function buildApp(env: Bindings) {
   // anything thrown by logger's `next()` chain or route handlers).
   app.use("*", requestId());
   app.use("*", logger());
+  // CSRF defense (Phase 5). Both middlewares no-op on GET/HEAD/OPTIONS,
+  // so applying globally is safe for read-only endpoints (/healthz,
+  // /openapi.json, /docs) — those never trigger the header/origin check.
+  app.use("*", requireOrigin());
+  app.use("*", requireFetchHeader());
   app.onError(errorHandler(env));
 
   // Unmatched routes (incl. `/openapi.json` and `/docs` in production,

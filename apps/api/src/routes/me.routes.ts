@@ -1,14 +1,18 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import type { Context } from "hono";
-import { problem, ProblemDto, ProblemType } from "../dto/error";
 import { EmailSchema, UlidSchema } from "../dto/common";
+import { problem, ProblemDto, ProblemType } from "../dto/error";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
+import { getDb } from "../db/client";
+import { findUserById } from "../dao/user-dao";
+import { requireAuth } from "../middleware/auth";
 
 /**
- * `GET /me` stub (Phase 4). Real handler lands in Phase 5/6 once auth
- * middleware + RBAC are wired; this only declares the contract.
+ * `GET /me` (Phase 5). Reads the authenticated principal from context
+ * (populated by `requireAuth` middleware) and joins `email` from the D1
+ * users table. Roles + permissions are stubbed as empty arrays until
+ * Phase 6 (RBAC) fills the real values.
  */
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -21,16 +25,6 @@ const MeResponse = z
     permissions: z.array(z.string()),
   })
   .openapi("MeResponse");
-
-function notImplemented(c: Context<Env>) {
-  return c.json(
-    problem(501, "Not Implemented", ProblemType.NotImplemented, {
-      instance: c.req.path,
-      request_id: c.get("requestId"),
-    }),
-    501,
-  );
-}
 
 const meRoute = createRoute({
   method: "get",
@@ -45,15 +39,46 @@ const meRoute = createRoute({
     },
     401: {
       description: "Not authenticated",
-      content: { "application/json": { schema: ProblemDto } },
-    },
-    501: {
-      description: "Not implemented",
-      content: { "application/json": { schema: ProblemDto } },
+      content: { "application/problem+json": { schema: ProblemDto } },
     },
   },
 });
 
 export function meRoutes(app: OpenAPIHono<Env>): void {
-  app.openapi(meRoute, notImplemented);
+  app.use("/me", requireAuth());
+  app.openapi(meRoute, async (c) => {
+    const principal = c.get("principal");
+    if (principal === undefined) {
+      return c.json(
+        problem(401, "Not authenticated", ProblemType.Unauthorized, {
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        401,
+      );
+    }
+    const db = getDb(c.env);
+    const user = await findUserById(db, principal.id);
+    if (user === null) {
+      return c.json(
+        problem(401, "Principal user not found", ProblemType.Unauthorized, {
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        401,
+      );
+    }
+    return c.json(
+      {
+        id: user.id,
+        email: user.email,
+        // Phase 6 (RBAC) populates these from user_roles + role_permissions
+        // joins. For Phase 5 the shape is stable but always empty — routes
+        // that require permissions will always 403 until RBAC lands.
+        roles: [] as string[],
+        permissions: [...principal.permissions],
+      },
+      200,
+    );
+  });
 }

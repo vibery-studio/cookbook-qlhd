@@ -23,6 +23,12 @@ export default defineWorkersConfig({
           // Expose the parsed migrations to the setup file via a binding.
           bindings: {
             TEST_MIGRATIONS: migrations,
+            // Auth secrets required by env.ts schema. Fixed test values so
+            // signAccessToken/hashToken produce deterministic output across
+            // isolates. Never used outside the test miniflare instance.
+            JWT_SECRET: "test-jwt-secret-min-32-chars-abcdef0123",
+            TOKEN_PEPPER: "test-token-pepper-min-32-chars-abcdef01",
+            READYZ_TOKEN: "test-readyz-token-min-16",
           },
         },
       },

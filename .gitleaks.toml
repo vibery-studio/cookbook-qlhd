@@ -1,0 +1,30 @@
+# gitleaks configuration — inherits the OSS default ruleset and adds
+# allowlists for known-safe test fixtures and documentation examples.
+# Every entry here MUST be a fixed test string or docs snippet — never
+# use this file to suppress a real credential leak.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore known test fixtures and documented example values"
+
+# Global scope: hard-coded test secrets used inside test config + unit
+# tests. These are literal, non-sensitive placeholders that only ever
+# live in miniflare's local isolate. Fingerprints stay stable across
+# rebasing because they hash content, not commit-SHA.
+paths = [
+  '''apps/api/vitest\.config\.ts''',
+  '''packages/auth/test/jwt\.test\.ts''',
+]
+
+# Documentation snippets showing example curl commands with placeholder
+# tokens. Not a real credential.
+regexTarget = "match"
+regexes = [
+  '''test-jwt-secret-min-32-chars-abcdef0123''',
+  '''test-token-pepper-min-32-chars-abcdef01''',
+  '''test-readyz-token-min-16''',
+  '''test-jwt-secret-at-least-32-bytes-long''',
+  '''X-Readyz-Token:\s*dev-token''',
+]

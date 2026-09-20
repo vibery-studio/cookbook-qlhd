@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Password Auth & Session Management"
-status: todo
+status: completed
 ---
 
 # Phase 5: Password Auth & Session Management

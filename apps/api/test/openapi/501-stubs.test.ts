@@ -3,37 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ProblemDto } from "../../src/dto/error";
 
 /**
- * Route stubs (auth/me/admin/demo) are owned by a parallel agent working in
- * `src/routes/**`. All four groups already exist as of this test's
- * authoring, each `notImplemented` handler returning 501 Problem+JSON with
- * `type` ending in `/not-implemented`. Request bodies must satisfy each
- * route's Zod schema — otherwise OpenAPIHono's request validator throws a
- * 422 before the handler ever runs, which would make these tests assert the
- * wrong thing.
+ * Route stubs remaining after Phase 5: /admin/* and /demo/* still return
+ * 501 until their owning phases (RBAC = Phase 6, demo module = Phase 8)
+ * land. /auth/* and /me are now real handlers — their coverage lives in
+ * the auth integration suite.
  */
 describe("route stubs return 501 not-implemented", () => {
-  it("POST /auth/signup -> 501 problem+json", async () => {
-    const response = await SELF.fetch("https://example.com/auth/signup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "new@example.com", password: "correct-horse-battery" }),
-    });
-
-    expect(response.status).toBe(501);
-    const body = ProblemDto.parse(await response.json());
-    expect(body.type).toMatch(/\/not-implemented$/);
-    expect(body.status).toBe(501);
-  });
-
-  it("GET /me -> 501 problem+json", async () => {
-    const response = await SELF.fetch("https://example.com/me");
-
-    expect(response.status).toBe(501);
-    const body = ProblemDto.parse(await response.json());
-    expect(body.type).toMatch(/\/not-implemented$/);
-    expect(body.status).toBe(501);
-  });
-
   it("GET /admin/users -> 501 problem+json", async () => {
     const response = await SELF.fetch("https://example.com/admin/users");
 
@@ -46,7 +21,11 @@ describe("route stubs return 501 not-implemented", () => {
   it("POST /demo/notes -> 501 problem+json", async () => {
     const response = await SELF.fetch("https://example.com/demo/notes", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:8787",
+        "x-requested-with": "fetch",
+      },
       body: JSON.stringify({ title: "hello", body: "world" }),
     });
 

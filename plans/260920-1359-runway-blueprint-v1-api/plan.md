@@ -35,7 +35,7 @@ Members-only scaffold on the Cloudflare Workers stack (Workers + D1 + KV + Queue
 | 2 | [Phase 2: Monorepo Foundation & CI/CD Skeleton](./phase-02-monorepo-foundation-cicd-skeleton.md) | Completed (local + CI green; PR/deploy-dependent verification pending CLOUDFLARE_API_TOKEN + first PR) |
 | 3 | [Phase 3: Database, Drizzle Schema & Migrations](./phase-03-database-drizzle-schema-migrations.md) | In Progress (local + remote D1 migrated; SCHEMA_HEAD auto-write deferred to Phase 10) |
 | 4 | [Phase 4: OpenAPI Contract & Hono Route Skeleton](./phase-04-openapi-contract-hono-route-skeleton.md) | In Progress (locally green; prod-404 verification deferred to Phase 11 Bruno E2E) |
-| 5 | [Phase 5: Password Auth & Session Management](./phase-05-password-auth-session-management.md) | Pending |
+| 5 | [Phase 5: Password Auth & Session Management](./phase-05-password-auth-session-management.md) | Completed |
 | 6 | [Phase 6: RBAC Package & Middleware](./phase-06-rbac-package-middleware.md) | Pending |
 | 7 | [Phase 7: Email Port, Adapters & Templates](./phase-07-email-port-adapters-templates.md) | Pending |
 | 8 | [Phase 8: System Settings Module](./phase-08-system-settings-module.md) | Pending |

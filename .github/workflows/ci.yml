@@ -12,6 +12,10 @@ concurrency:
 
 permissions:
   contents: read
+  # gitleaks-action calls GET /repos/{owner}/{repo}/pulls/{n}/commits on
+  # pull_request events; without pull-requests: read it 403s and the step
+  # fails even when there is no actual secret leak.
+  pull-requests: read
 
 env:
   # gitleaks-action reads this if set; safe to be absent for the OSS ruleset.
