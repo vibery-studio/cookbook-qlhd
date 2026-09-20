@@ -182,6 +182,23 @@ export const idempotencyKeys = sqliteTable(
 );
 
 /**
+ * Demo `notes` resource (Phase 9). Showcases idempotency + ownership
+ * end-to-end. Delete this + its migration when adapting the blueprint
+ * to a real product. Owner enforcement is application-level (no FK).
+ */
+export const notes = sqliteTable(
+  "notes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("idx_notes_user").on(table.userId, table.createdAt)],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -197,4 +214,5 @@ export const schema = {
   jwtRevocations,
   settings,
   idempotencyKeys,
+  notes,
 };

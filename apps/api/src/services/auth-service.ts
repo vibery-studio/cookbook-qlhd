@@ -45,6 +45,7 @@ import {
 import { revokeJti } from "../dao/jwt-revocation-dao";
 import { invalidatePrincipalCache } from "../dao/session-cache";
 import type { Db } from "../db/client";
+import { createAuditLogger } from "../observability/logger";
 
 // -------------------------- TTL constants ---------------------------------
 const VERIFY_TTL_SECONDS = 24 * 60 * 60; // 24h
@@ -265,17 +266,17 @@ export async function refresh(
     // access-token-authorized request that races this can't succeed via
     // stale cached principal on next auth-middleware pass.
     //
-    // Structured audit log so Logpush + external SIEM can alert on reuse.
-    // Phase 9 replaces this with a real audit sink (D1 audit_log table +
-    // async flush). Logging is SYNC and happens BEFORE the response so a
-    // Worker isolate crash cannot silently drop the event.
-    console.log(
-      JSON.stringify({
-        ts: Date.now(),
-        kind: "auth.refresh.reuse_detected",
-        user_id: outcome.userId,
-        chain_root: outcome.chainRoot,
-      }),
+    // Security-critical audit event — SYNC so the record survives an
+    // isolate death and lands in Logpush before the response returns.
+    const audit = createAuditLogger({ ctx: undefined });
+    audit(
+      {
+        actor: outcome.userId,
+        action: "auth.refresh.reuse_detected",
+        target: `user:${outcome.userId}`,
+        metadata: { chain_root: outcome.chainRoot },
+      },
+      { sync: true },
     );
     await revokeUserRefreshChain(deps.db, outcome.userId, now);
     await invalidatePrincipalCache(deps.kv, outcome.userId);

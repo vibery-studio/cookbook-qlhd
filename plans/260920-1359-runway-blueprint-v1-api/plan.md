@@ -39,7 +39,7 @@ Members-only scaffold on the Cloudflare Workers stack (Workers + D1 + KV + Queue
 | 6 | [Phase 6: RBAC Package & Middleware](./phase-06-rbac-package-middleware.md) | Completed |
 | 7 | [Phase 7: Email Port, Adapters & Templates](./phase-07-email-port-adapters-templates.md) | Completed |
 | 8 | [Phase 8: System Settings Module](./phase-08-system-settings-module.md) | Completed |
-| 9 | [Phase 9: Idempotency, Structured Audit Logging](./phase-09-idempotency-audit-log-money-package.md) | Pending |
+| 9 | [Phase 9: Idempotency, Structured Audit Logging](./phase-09-idempotency-audit-log-money-package.md) | Completed |
 | 10 | [Phase 10: Observability, Security Headers & Rate Limits](./phase-10-observability-security-headers-rate-limits.md) | Pending |
 | 11 | [Phase 11: Golden Path E2E, Contract Test & Docs Recipe](./phase-11-golden-path-e2e-contract-test-docs-recipe.md) | Pending |
 

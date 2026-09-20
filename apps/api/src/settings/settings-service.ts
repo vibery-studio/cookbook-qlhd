@@ -5,6 +5,7 @@ import {
   listAllSettings,
   upsertSetting,
 } from "../dao/settings-dao";
+import { createAuditLogger } from "../observability/logger";
 import {
   SETTINGS_REGISTRY,
   SETTING_KEYS,
@@ -108,18 +109,18 @@ export class SettingsService implements SettingsPort {
     // ~1s or move to `env` (redeploy-only). See `docs/settings.md`.
     await this.deps.kv.delete(kvKey(key));
 
-    console.log(
-      JSON.stringify({
-        ts: Date.now(),
-        kind: "audit.settings.update",
+    // Security-critical audit — SYNC so the record lands in
+    // Logpush before the response returns. logger.audit's deepScrub
+    // is defense-in-depth for future PII-carrying keys.
+    const audit = createAuditLogger({ ctx: undefined });
+    audit(
+      {
         actor,
+        action: "settings.update",
         target: `settings:${key}`,
-        // Non-secret keys only — v1 registry contains only email
-        // from-address/from-name, both of which are legitimately
-        // logged. When a future setting carries PII, register it
-        // with a `redact: true` flag and skip the value here.
-        new_value: parsed,
-      }),
+        metadata: { new_value: parsed },
+      },
+      { sync: true },
     );
   }
 

@@ -6,6 +6,18 @@ import { TimestampSchema, UlidSchema } from "../dto/common";
 import { CursorQuery, paginatedResponse } from "../dto/pagination";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
+import { bodyLimit } from "hono/body-limit";
+import { getDb } from "../db/client";
+import { createNote } from "../dao/notes-dao";
+import { requireAuth } from "../middleware/auth";
+import { requirePerm } from "../middleware/require-permission";
+import { withIdempotency } from "../middleware/idempotency";
+import { generateUlid } from "../utils/id";
+
+/** 2MB body cap for POST /demo/notes — protects the isolate memory
+ * against attackers spamming multi-megabyte bodies through the
+ * idempotency middleware (which buffers the whole body for hashing). */
+const NOTES_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 /**
  * Demo `notes` resource (Phase 4 stub; Phase 9 wires idempotency). Exists to
@@ -43,6 +55,8 @@ const NoteItem = z
   })
   .openapi("Note");
 
+// The list route is still a stub — Phase 11 wires it as part of the
+// golden-path e2e recipe. Keeping the shape so OpenAPI stays stable.
 function notImplemented(c: Context<Env>) {
   return c.json(
     problem(501, "Not Implemented", ProblemType.NotImplemented, {
@@ -127,6 +141,52 @@ const listNotesRoute = createRoute({
 });
 
 export function demoRoutes(app: OpenAPIHono<Env>): void {
-  app.openapi(createNoteRoute, notImplemented);
+  // Order matters: requireAuth populates principal → requirePerm checks
+  // it → withIdempotency guards against duplicate side effects.
+  // Method-scoped via `app.on('post', ...)` so GET /demo/notes (still
+  // a 501 stub) doesn't demand auth or idempotency.
+  app.on(
+    "post",
+    "/demo/notes",
+    bodyLimit({ maxSize: NOTES_MAX_BODY_BYTES }),
+    requireAuth(),
+    requirePerm("notes:write"),
+    withIdempotency(),
+  );
+
+  app.openapi(createNoteRoute, async (c) => {
+    const body = c.req.valid("json");
+    const principal = c.get("principal");
+    if (principal === undefined) {
+      // requireAuth would have thrown; belt+braces.
+      return c.json(
+        problem(401, "Not authenticated", ProblemType.Unauthorized, {
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        401,
+      );
+    }
+    const db = getDb(c.env);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const note = await createNote(db, {
+      id: generateUlid(),
+      userId: principal.id,
+      title: body.title,
+      body: body.body,
+      createdAt: nowSeconds,
+    });
+    return c.json(
+      {
+        id: note.id,
+        title: note.title,
+        body: note.body,
+        createdAt: note.createdAt,
+      },
+      201,
+    );
+  });
+
+  // GET list still stubbed (Phase 11).
   app.openapi(listNotesRoute, notImplemented);
 }
