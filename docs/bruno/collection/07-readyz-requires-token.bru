@@ -1,0 +1,19 @@
+meta {
+  name: 07 /readyz without token → 401
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/readyz
+}
+
+assert {
+  res.status: eq 401
+}
+
+docs {
+  /readyz is deep-check (D1 + KV) and requires X-Readyz-Token gate
+  so the endpoint can't be probed by anonymous callers. Missing
+  header → 401 Problem+JSON.
+}

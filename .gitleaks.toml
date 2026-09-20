@@ -16,6 +16,7 @@ description = "Ignore known test fixtures and documented example values"
 paths = [
   '''apps/api/vitest\.config\.ts''',
   '''packages/auth/test/jwt\.test\.ts''',
+  '''docs/bruno/collection/.*\.bru''',
 ]
 
 # Documentation snippets showing example curl commands with placeholder

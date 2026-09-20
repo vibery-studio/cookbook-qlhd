@@ -1,0 +1,36 @@
+meta {
+  name: 03 signup succeeds with CSRF headers
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/signup
+  body: json
+}
+
+headers {
+  content-type: application/json
+  x-requested-with: fetch
+  origin: {{origin}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "password": "{{password}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.user_id: isDefined
+}
+
+docs {
+  Signup returns 201 with a ULID user_id. A verification email lands
+  in the noop buffer; the verification token is embedded in the URL
+  and exercised by the next request in the collection when running
+  against a local worker (the noop buffer is accessible via
+  test-only helpers).
+}

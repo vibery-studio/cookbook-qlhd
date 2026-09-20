@@ -1,0 +1,33 @@
+meta {
+  name: 02 signup requires Origin (CSRF)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/signup
+  body: json
+}
+
+headers {
+  content-type: application/json
+  x-requested-with: fetch
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "password": "{{password}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  ## Purpose
+  Proves the CSRF middleware refuses a mutating request without the
+  `Origin` header. Without this, an attacker could get the browser to
+  fire a POST via a `<form>` from a different origin.
+}

@@ -1,0 +1,33 @@
+meta {
+  name: 04 login requires X-Requested-With
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+}
+
+headers {
+  content-type: application/json
+  origin: {{origin}}
+}
+
+body:json {
+  {
+    "email": "{{memberEmail}}",
+    "password": "{{password}}"
+  }
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  Login without `X-Requested-With: fetch` header is refused. This
+  header is the SPA-only CSRF signal — browsers block cross-origin
+  custom headers via CORS preflight, so only same-origin JS can set
+  it. Missing header → 403 before login logic runs.
+}

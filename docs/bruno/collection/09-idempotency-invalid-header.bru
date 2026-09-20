@@ -1,0 +1,33 @@
+meta {
+  name: 09 POST /demo/notes with invalid Idempotency-Key → 422 or 401
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/demo/notes
+  body: json
+}
+
+headers {
+  content-type: application/json
+  origin: {{origin}}
+  x-requested-with: fetch
+  idempotency-key: not-a-ulid-or-uuid
+}
+
+body:json {
+  {
+    "title": "test",
+    "body": "test"
+  }
+}
+
+assert {
+  res.status: in [401, 422]
+}
+
+docs {
+  Header format is ULID or UUID only. Auth check may fire first
+  (401) if no cookie is set; otherwise 422 with Zod schema error.
+}

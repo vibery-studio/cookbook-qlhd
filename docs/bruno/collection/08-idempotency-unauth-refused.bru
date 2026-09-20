@@ -1,0 +1,34 @@
+meta {
+  name: 08 POST /demo/notes with Idempotency-Key but no auth → 401
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/demo/notes
+  body: json
+}
+
+headers {
+  content-type: application/json
+  origin: {{origin}}
+  x-requested-with: fetch
+  idempotency-key: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+}
+
+body:json {
+  {
+    "title": "test",
+    "body": "test"
+  }
+}
+
+assert {
+  res.status: eq 401
+}
+
+docs {
+  requireAuth() runs before withIdempotency, so unauth requests get
+  401 before any idempotency state is written. This prevents
+  cross-user cache poisoning.
+}

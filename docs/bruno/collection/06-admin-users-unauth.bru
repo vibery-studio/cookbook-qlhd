@@ -1,0 +1,13 @@
+meta {
+  name: 06 /admin/users unauthenticated → 401
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/admin/users
+}
+
+assert {
+  res.status: eq 401
+}

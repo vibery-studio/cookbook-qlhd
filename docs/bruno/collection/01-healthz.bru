@@ -1,0 +1,14 @@
+meta {
+  name: 01 healthz shallow
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/healthz
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
