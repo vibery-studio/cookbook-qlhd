@@ -1,18 +1,29 @@
 name: Deploy
 
-on:
-  push:
-    branches: [main]
+# INTENTIONALLY MANUAL: production deploys go through the operator's
+# Cloudflare MCP session (out-of-band `PUT /workers/scripts/{name}` + D1
+# `POST /query` migrations), not through `wrangler deploy` in CI. This keeps
+# CLOUDFLARE_API_TOKEN out of long-lived repo secrets. Each phase's shipping
+# step documents the MCP calls the operator runs.
+#
+# If this policy changes (e.g., you want push-to-main to auto-deploy), swap
+# workflow_dispatch → push and restore the wrangler-deploy step from git
+# history (commit 1e95928 has the original).
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "deploy-prod" to confirm this is intentional. Requires CLOUDFLARE_API_TOKEN secret set.'
+        required: true
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
   deploy-production:
+    if: inputs.confirmation == 'deploy-prod'
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -38,9 +49,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Phase 3 implements the Drizzle migration runner and `db:migrate:prod`
-      # script. Placeholder kept so this step's position in the pipeline is
-      # stable once that script exists.
       - name: Migrate production D1
         run: |
           if pnpm run --if-present db:migrate:prod; then
@@ -58,9 +66,6 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://runway-api-prod.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN || 'workers.dev' }}"
-          # Falls back to the standard workers.dev URL shape; override via the
-          # CLOUDFLARE_WORKERS_SUBDOMAIN repo variable if a custom domain is
-          # configured for production.
           for i in 1 2 3 4 5; do
             STATUS=$(curl -s -o /tmp/healthz.out -w '%{http_code}' "$URL/healthz" || echo "000")
             if [ "$STATUS" = "200" ]; then
@@ -74,11 +79,7 @@ jobs:
           cat /tmp/healthz.out || true
           exit 1
 
-      # Phase 10 wires the real /readyz handler, which verifies the deployed
-      # code's schema_versions head against BUILD_SHA and requires the
-      # X-Readyz-Token header (READYZ_TOKEN secret). Disabled until that
-      # handler exists; this documents the intended replacement for the
-      # /healthz smoke test above.
+      # Phase 10 wires the real /readyz handler. Disabled until then.
       - name: Post-deploy readyz gate (Phase 10)
         if: false
         env:
