@@ -1,0 +1,45 @@
+{
+  "name": "runway",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Members-only Cloudflare Workers monorepo blueprint",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": "^22"
+  },
+  "scripts": {
+    "bootstrap": "bash scripts/bootstrap.sh",
+    "dev": "pnpm --filter @runway/api dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "check:wrangler": "tsx scripts/validate-wrangler.ts",
+    "check:bundle-size": "tsx scripts/check-bundle-size.ts",
+    "check:migrations": "tsx scripts/lint-migrations.ts",
+    "reconcile:preview-dbs": "tsx scripts/reconcile-preview-dbs.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "smol-toml": "1.8.0",
+    "tsx": "4.19.2",
+    "turbo": "2.3.3",
+    "typescript": "5.6.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "^0.35.4",
+      "undici": "^7.16.0",
+      "ws": "^8.18.3",
+      "wrangler": "^4.135.0"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@vitest/runner": "4.1.0",
+        "@vitest/snapshot": "4.1.0",
+        "@cloudflare/workers-types": "5.20260918.1"
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@runway/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "exports": {
+    "./tsconfig": "./tsconfig.base.json",
+    "./eslint": "./eslint.config.js",
+    "./vitest": "./vitest.base.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260918.1",
+    "@typescript-eslint/parser": "8.19.1",
+    "@vitest/coverage-v8": "3.2.6",
+    "eslint": "9.37.0",
+    "typescript": "5.6.3",
+    "typescript-eslint": "8.19.1",
+    "vitest": "3.2.6"
+  }
+}

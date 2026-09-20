@@ -1,0 +1,8 @@
+{
+  "extends": "@runway/config/tsconfig",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

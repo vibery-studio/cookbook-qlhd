@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # gitleaks-action reads this if set; safe to be absent for the OSS ruleset.
+  GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 — full history is required by openapi-diff in Phase 4.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Audit dependencies (high/critical)
+        run: pnpm audit --audit-level=high
+
+      - name: Verify lockfile is deduped
+        run: pnpm dedupe --check
+
+      - name: Wrangler env-parity check
+        run: pnpm check:wrangler
+
+      - name: Migration lint (expand/contract)
+        run: pnpm check:migrations
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Bundle size gate
+        run: pnpm check:bundle-size
+
+      - name: Secret scan (gitleaks)
+        uses: zricethezav/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

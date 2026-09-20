@@ -1,0 +1,179 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "runway-api-dev"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+account_id = "5cbaf7492795d0e9eafa26240b14389c"
+
+# ---------------------------------------------------------------------------
+# Default (dev) environment bindings
+# ---------------------------------------------------------------------------
+
+[[d1_databases]]
+binding = "DB"
+database_name = "runway_dev"
+database_id = "1969f138-257f-4a0b-8601-2c1c98965f06"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "c3ee8d4475c74a28abf245a50a1421bf"
+preview_id = "fa8bf1ef1d9f47368df32e92a6a93ec7"
+
+[[kv_namespaces]]
+binding = "SETTINGS"
+id = "68e574ac39a44f9bb044baa9db6ab37d"
+preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
+
+[[queues.producers]]
+binding = "EMAIL_RETRY_QUEUE"
+queue = "email-retry"
+
+[[queues.consumers]]
+queue = "email-retry"
+dead_letter_queue = "email-dlq"
+max_batch_size = 10
+max_retries = 3
+
+[[ratelimits]]
+name = "RL_AUTH_LOGIN"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH_SIGNUP"
+namespace_id = "1002"
+simple = { limit = 3, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH_VERIFY"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH_REFRESH"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "RL_READYZ"
+namespace_id = "1005"
+simple = { limit = 60, period = 60 }
+
+# ---------------------------------------------------------------------------
+# Preview environment (per-PR). D1 database_id is a placeholder substituted
+# by CI (preview.yml) after `wrangler d1 create runway-preview-pr-${PR}`.
+# Binding names MUST stay identical to the other environments; only the
+# targeted resource (D1 database_id) differs per PR.
+# ---------------------------------------------------------------------------
+
+[env.preview]
+# CI (preview.yml) substitutes PLACEHOLDER_PR with the PR number via sed
+# before `wrangler deploy --env preview`, giving each PR an isolated worker.
+name = "runway-api-preview-pr-PLACEHOLDER_PR"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "runway_preview"
+database_id = "PLACEHOLDER_PER_PR" # CI substitutes this per-PR before deploy
+
+[[env.preview.kv_namespaces]]
+binding = "SESSIONS"
+id = "c3ee8d4475c74a28abf245a50a1421bf"
+preview_id = "fa8bf1ef1d9f47368df32e92a6a93ec7"
+
+[[env.preview.kv_namespaces]]
+binding = "SETTINGS"
+id = "68e574ac39a44f9bb044baa9db6ab37d"
+preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
+
+[[env.preview.queues.producers]]
+binding = "EMAIL_RETRY_QUEUE"
+queue = "email-retry"
+
+[[env.preview.queues.consumers]]
+queue = "email-retry"
+dead_letter_queue = "email-dlq"
+max_batch_size = 10
+max_retries = 3
+
+[[env.preview.ratelimits]]
+name = "RL_AUTH_LOGIN"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[[env.preview.ratelimits]]
+name = "RL_AUTH_SIGNUP"
+namespace_id = "1002"
+simple = { limit = 3, period = 60 }
+
+[[env.preview.ratelimits]]
+name = "RL_AUTH_VERIFY"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
+[[env.preview.ratelimits]]
+name = "RL_AUTH_REFRESH"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
+[[env.preview.ratelimits]]
+name = "RL_READYZ"
+namespace_id = "1005"
+simple = { limit = 60, period = 60 }
+
+# ---------------------------------------------------------------------------
+# Production environment
+# ---------------------------------------------------------------------------
+
+[env.production]
+name = "runway-api-prod"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "runway_prod"
+database_id = "8e6382c3-dcbe-4d24-b34e-9e720fe858b7"
+
+[[env.production.kv_namespaces]]
+binding = "SESSIONS"
+id = "c3ee8d4475c74a28abf245a50a1421bf"
+preview_id = "fa8bf1ef1d9f47368df32e92a6a93ec7"
+
+[[env.production.kv_namespaces]]
+binding = "SETTINGS"
+id = "68e574ac39a44f9bb044baa9db6ab37d"
+preview_id = "18292b11b5f04ab9ab19c1eab1b7694b"
+
+[[env.production.queues.producers]]
+binding = "EMAIL_RETRY_QUEUE"
+queue = "email-retry"
+
+[[env.production.queues.consumers]]
+queue = "email-retry"
+dead_letter_queue = "email-dlq"
+max_batch_size = 10
+max_retries = 3
+
+[[env.production.ratelimits]]
+name = "RL_AUTH_LOGIN"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[[env.production.ratelimits]]
+name = "RL_AUTH_SIGNUP"
+namespace_id = "1002"
+simple = { limit = 3, period = 60 }
+
+[[env.production.ratelimits]]
+name = "RL_AUTH_VERIFY"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
+[[env.production.ratelimits]]
+name = "RL_AUTH_REFRESH"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
+[[env.production.ratelimits]]
+name = "RL_READYZ"
+namespace_id = "1005"
+simple = { limit = 60, period = 60 }

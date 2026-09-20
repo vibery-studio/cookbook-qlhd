@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+  - "@cloudflare/workerd-darwin-64"
+  - "@cloudflare/workerd-darwin-arm64"
+  - "@cloudflare/workerd-linux-64"
+  - "@cloudflare/workerd-linux-arm64"
+  - "@cloudflare/workerd-windows-64"
+  - better-sqlite3

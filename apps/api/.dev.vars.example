@@ -1,0 +1,21 @@
+# Copy to `apps/api/.dev.vars` (gitignored) and fill in real values for local
+# dev. In preview/production, these are set via `wrangler secret put` — never
+# committed. Missing JWT_SECRET / TOKEN_PEPPER / READYZ_TOKEN fails boot loudly
+# (no fallback defaults for security-critical secrets).
+
+APP_ENV=development
+APP_ORIGIN=http://localhost:8787
+BUILD_SHA=dev
+
+# Generate fresh values with: `openssl rand -hex 32`
+JWT_SECRET=REPLACE_WITH_openssl_rand_hex_32
+TOKEN_PEPPER=REPLACE_WITH_openssl_rand_hex_32
+READYZ_TOKEN=REPLACE_WITH_openssl_rand_hex_16
+
+SENTRY_DSN=
+EMAIL_PROVIDER=noop
+RESEND_API_KEY=
+
+PASSWORD_MIN_LENGTH=12
+RATE_LIMIT_AUTH_LOGIN=5
+RATE_LIMIT_AUTH_SIGNUP=3

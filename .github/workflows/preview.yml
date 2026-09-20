@@ -1,0 +1,191 @@
+name: Preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-pr-${{ github.event.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  deploy-preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Creates (or reuses, if already provisioned for this PR) a per-PR D1
+      # database. `wrangler d1 create --json` prints the database record as
+      # JSON on stdout; we parse it with jq and expose the UUID as a step
+      # output so later steps can substitute it into wrangler.toml.
+      - name: Provision preview D1
+        id: provision
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          DB_NAME="runway-preview-pr-${{ github.event.number }}"
+
+          if npx wrangler d1 create "$DB_NAME" --json > /tmp/d1-create.json 2>/tmp/d1-create.err; then
+            DB_ID=$(jq -r '.uuid // .database_id // empty' /tmp/d1-create.json)
+          else
+            # Database likely already exists from a previous push on this PR.
+            # Fall back to looking it up by name instead of failing the job.
+            cat /tmp/d1-create.err
+            DB_ID=$(npx wrangler d1 list --json | jq -r --arg name "$DB_NAME" '.[] | select(.name == $name) | .uuid')
+          fi
+
+          if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
+            echo "::error::Could not resolve database_id for $DB_NAME"
+            exit 1
+          fi
+
+          echo "::add-mask::$DB_ID"
+          echo "db_id=$DB_ID" >> "$GITHUB_OUTPUT"
+          echo "db_name=$DB_NAME" >> "$GITHUB_OUTPUT"
+
+      # Phase 3 introduces the Drizzle schema and `pnpm db:migrate:preview`.
+      # Until then there is nothing to migrate; this step is a documented
+      # placeholder so preview.yml's step order doesn't change later.
+      - name: Run preview migrations
+        run: echo "migrations not yet implemented — Phase 3"
+
+      # wrangler.toml commits literal placeholders "PLACEHOLDER_PER_PR" (D1 id)
+      # and "PLACEHOLDER_PR" (worker name suffix). CI substitutes both here so
+      # each PR gets a fully isolated preview worker + D1. Mutates the checked-
+      # out working tree only (never committed).
+      - name: Substitute preview placeholders (D1 id + worker name)
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          sed -i "s/PLACEHOLDER_PER_PR/${{ steps.provision.outputs.db_id }}/" wrangler.toml
+          sed -i "s/PLACEHOLDER_PR/${{ github.event.number }}/" wrangler.toml
+
+      - name: Deploy preview worker
+        id: deploy
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --env preview \
+            --var PR_NUMBER:${{ github.event.number }} \
+            --var BUILD_SHA:${{ github.sha }} \
+            | tee /tmp/deploy.log
+          URL=$(grep -Eo 'https://[a-zA-Z0-9.-]+\.workers\.dev' /tmp/deploy.log | head -n1)
+          if [ -z "$URL" ]; then
+            echo "::error::Could not parse deployed worker URL from wrangler output"
+            exit 1
+          fi
+          echo "preview_url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test /healthz
+        run: |
+          set -euo pipefail
+          URL="${{ steps.deploy.outputs.preview_url }}/healthz"
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /tmp/healthz.out -w '%{http_code}' "$URL" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "healthz OK on attempt $i"
+              exit 0
+            fi
+            echo "attempt $i: status $STATUS, retrying in 3s"
+            sleep 3
+          done
+          echo "::error::/healthz did not return 200 after 5 attempts"
+          cat /tmp/healthz.out || true
+          exit 1
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${{ steps.deploy.outputs.preview_url }}`;
+            const body = `Preview deployed: ${url}/healthz\n\nD1: \`${{ steps.provision.outputs.db_name }}\``;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+  cleanup-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Per-PR worker name is substituted at deploy time via sed on the
+      # PLACEHOLDER_PR literal in apps/api/wrangler.toml (see the "Substitute
+      # preview placeholders" step in the deploy-preview job above).
+      # continue-on-error is defensive: on transient CF 5xx or if the worker
+      # was already deleted (e.g. force-pushed PR closed twice), cleanup
+      # should not fail the job.
+      - name: Delete preview worker
+        continue-on-error: true
+        working-directory: apps/api
+        run: |
+          for i in 1 2; do
+            npx wrangler delete --env preview --name "runway-api-preview-pr-${{ github.event.number }}" && exit 0
+            echo "delete attempt $i failed, retrying"
+            sleep 5
+          done
+
+      - name: Delete preview D1
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          DB_NAME="runway-preview-pr-${{ github.event.number }}"
+
+          DB_ID=$(curl -s \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database?name=${DB_NAME}" \
+            | jq -r '.result[0].uuid // empty')
+
+          if [ -z "$DB_ID" ]; then
+            echo "No D1 database found for $DB_NAME, nothing to delete"
+            exit 0
+          fi
+
+          echo "::add-mask::$DB_ID"
+          curl -s -X DELETE \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DB_ID}" \
+            | jq -e '.success == true'

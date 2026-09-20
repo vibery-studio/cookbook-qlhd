@@ -1,0 +1,4 @@
+{
+  "extends": "@runway/config/tsconfig",
+  "include": ["src"]
+}

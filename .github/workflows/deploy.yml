@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build
+        run: pnpm build
+
+      # Phase 3 implements the Drizzle migration runner and `db:migrate:prod`
+      # script. Placeholder kept so this step's position in the pipeline is
+      # stable once that script exists.
+      - name: Migrate production D1
+        run: |
+          if pnpm run --if-present db:migrate:prod; then
+            :
+          else
+            echo "db:migrate:prod not yet implemented — Phase 3"
+          fi
+
+      - name: Deploy production worker
+        working-directory: apps/api
+        run: |
+          npx wrangler deploy --env production --var BUILD_SHA:${{ github.sha }}
+
+      - name: Smoke test /healthz
+        run: |
+          set -euo pipefail
+          URL="https://runway-api-prod.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN || 'workers.dev' }}"
+          # Falls back to the standard workers.dev URL shape; override via the
+          # CLOUDFLARE_WORKERS_SUBDOMAIN repo variable if a custom domain is
+          # configured for production.
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /tmp/healthz.out -w '%{http_code}' "$URL/healthz" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "healthz OK on attempt $i"
+              exit 0
+            fi
+            echo "attempt $i: status $STATUS, retrying in 3s"
+            sleep 3
+          done
+          echo "::error::/healthz did not return 200 after 5 attempts"
+          cat /tmp/healthz.out || true
+          exit 1
+
+      # Phase 10 wires the real /readyz handler, which verifies the deployed
+      # code's schema_versions head against BUILD_SHA and requires the
+      # X-Readyz-Token header (READYZ_TOKEN secret). Disabled until that
+      # handler exists; this documents the intended replacement for the
+      # /healthz smoke test above.
+      - name: Post-deploy readyz gate (Phase 10)
+        if: false
+        env:
+          READYZ_TOKEN: ${{ secrets.READYZ_TOKEN }}
+        run: |
+          set -euo pipefail
+          URL="https://runway-api-prod.${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN || 'workers.dev' }}/readyz"
+          STATUS=$(curl -s -o /tmp/readyz.out -w '%{http_code}' -H "X-Readyz-Token: ${READYZ_TOKEN}" "$URL")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::/readyz did not return 200 (schema head mismatch or not ready)"
+            cat /tmp/readyz.out || true
+            exit 1
+          fi
