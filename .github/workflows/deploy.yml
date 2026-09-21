@@ -1,14 +1,17 @@
 name: Deploy
 
-# INTENTIONALLY MANUAL: production deploys go through the operator's
-# Cloudflare MCP session (out-of-band `PUT /workers/scripts/{name}` + D1
-# `POST /query` migrations), not through `wrangler deploy` in CI. This keeps
-# CLOUDFLARE_API_TOKEN out of long-lived repo secrets. Each phase's shipping
-# step documents the MCP calls the operator runs.
+# INTENTIONALLY MANUAL: production deploys run LOCALLY through the operator's
+# `wrangler login` OAuth session (`pnpm deploy:prod`), NOT through this
+# workflow. That keeps CLOUDFLARE_API_TOKEN out of long-lived repo secrets.
+# The local orchestrator (scripts/deploy-prod.sh) runs the full v1.1 safety
+# gate: preflight → recovery-point (D1 Time Travel bookmark) → migrate →
+# wrangler deploy → post-deploy /healthz + /readyz + /me anon verify → auto
+# rollback on failure. See docs/deploy.md.
 #
-# If this policy changes (e.g., you want push-to-main to auto-deploy), swap
-# workflow_dispatch → push and restore the wrangler-deploy step from git
-# history (commit 1e95928 has the original).
+# This workflow stays as a fallback path only. If the policy ever flips
+# (push-to-main auto-deploy from CI), add CLOUDFLARE_API_TOKEN to repo
+# secrets and swap workflow_dispatch → push. History reference: commit
+# 1e95928 has the original CI-driven wrangler-deploy step.
 
 on:
   workflow_dispatch:

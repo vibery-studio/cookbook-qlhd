@@ -11,6 +11,11 @@ No long-lived `CLOUDFLARE_API_TOKEN` sits in GitHub secrets. CI runs code
 quality only (lint, typecheck, audit, test, build, gitleaks); the Deploy
 workflow is `workflow_dispatch`-only and stays as a documented fallback.
 
+Every production deploy goes through **`pnpm deploy:prod`** (the local
+orchestrator, `scripts/deploy-prod.sh`). It runs a five-step safety gate
+(preflight → recovery-point → migrate → deploy → verify) and auto-rolls-back
+on any post-deploy failure. Details in the section below.
+
 ## Environments
 
 | Env | D1 name | D1 ID | Worker name |
@@ -36,10 +41,44 @@ to `apps/api/src/**`. Break a schema change into two PRs:
 
 Never destructive-alter and change reader code in the same commit.
 
-## Normal deploy — production
+## Normal deploy — production (v1.1 safety-gate orchestrator)
 
 Prerequisite: `wrangler login` (once). Wrangler refreshes the OAuth session
 automatically on use.
+
+The **one command** you should run for every production deploy:
+
+```bash
+READYZ_TOKEN=<paste-from-1password> pnpm deploy:prod
+```
+
+That single entrypoint (`scripts/deploy-prod.sh`) runs the full gate:
+
+| Step | What it does | Fail behavior |
+|------|--------------|---------------|
+| 1. preflight | `pnpm deploy:preflight` — wrangler binding parity, bundle size ≤ budget, required secrets set on env=production, schema head resolvable | exit before touching D1 or Workers |
+| 2. recovery-point | `wrangler d1 time-travel info runway_prod --json` — captures the current bookmark id + writes `.deploy-recovery.json` (gitignored) with `{ sha, timestamp, actor, bookmark_id, bookmark_name }` | continues with a warning if wrangler can't capture; you'll rely on `time-travel info` at rollback time |
+| 3. migrate | `pnpm db:migrate:prod` — applies any pending migrations | exit; DB is untouched below the last-applied row |
+| 4. deploy | `wrangler deploy --env production --var BUILD_SHA:<sha> --var SCHEMA_HEAD:<head>` | exit; previous Worker version still live |
+| 5. verify | `pnpm deploy:verify` — retry-loop (5s × up to 60s) of `/healthz` (200, `build_sha == <sha>`) → `/readyz` (200, `checks.db=="ok"`, `checks.kv=="ok"`) → `/me` no cookie (401) | on ANY failure → auto-rollback (step 6) |
+| 6. rollback (on failure only) | `pnpm deploy:rollback` — `wrangler rollback --env production`, prints the D1 bookmark id from `.deploy-recovery.json` so you know what to restore if the migration also needs undoing | exit 1 (deploy failed but rollback succeeded) or exit 3 (rollback ALSO failed → manual) |
+
+Idempotent: re-running with the same SHA is safe. Migrations already
+applied are skipped; deploy re-runs; verify re-passes. If verify
+fails mid-way, fix and re-run — deploy-prod.sh does not require
+`git commit` in between.
+
+Env knobs (rarely needed):
+
+- `DEPLOY_URL=https://…` — override the probe URL (custom domain)
+- `SKIP_MIGRATE=1` — re-deploy after a failed verify where migrations
+  already succeeded (do not use casually)
+- `SKIP_RECOVERY=1` — skip step 2 when the migration is a proven no-op
+
+### Manual deploy (fallback, no gate)
+
+If you must bypass the orchestrator (e.g. deploying a hotfix from a
+machine without the pnpm workspace installed):
 
 ```bash
 # 1. Make sure local gates are green
@@ -58,7 +97,7 @@ wrangler deploy --env production --var BUILD_SHA:$(git rev-parse HEAD)
 
 # 5. Smoke test
 curl -fsS https://runway-api-prod.<account>.workers.dev/healthz
-# expected: {"ok":true}
+# expected: {"ok":true, "build_sha":"..."}
 ```
 
 Migrations apply BEFORE the Worker deploy, so if the deploy fails the DB is
@@ -109,15 +148,22 @@ pnpm reconcile:preview-dbs       # dry-run first: --dry-run
 
 ## Rollback — Worker only (migrations unchanged)
 
-If the last deploy shipped bad code but no migration:
+`pnpm deploy:prod` fires this automatically on a failed `/healthz` +
+`/readyz` + `/me` verify. To rollback manually:
 
 ```bash
-# List deployments and pick the previous version
-wrangler deployments list --env production
-wrangler rollback <version-id> --env production
+# Automatic path — reads .deploy-recovery.json for the bookmark id
+# (if present) and rolls the Worker back to the previous version:
+pnpm deploy:rollback
+
+# Manual path — pick a specific past version explicitly:
+wrangler deployments list --env production --config apps/api/wrangler.toml
+pnpm deploy:rollback -- --version <version-id>
 ```
 
-Smoke test `/healthz`. Rollback is instantaneous.
+Smoke test `/healthz`. Rollback is instantaneous. If a migration ALSO needs
+undoing, follow "Rollback — code + migration" below using the
+`bookmark_id` in `.deploy-recovery.json`.
 
 ## Rollback — code + migration
 

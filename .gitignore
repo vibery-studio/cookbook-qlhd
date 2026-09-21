@@ -25,6 +25,11 @@ coverage/
 
 packages/contracts/dist/
 
+# Local deploy artefacts — recovery-point manifest written by scripts/deploy-prod.sh
+# BEFORE migrations run. Contains D1 Time Travel bookmark id for the last deploy;
+# never committed (deploy-specific, per-operator).
+.deploy-recovery.json
+
 # Local session/tooling state (agent-specific; not part of the blueprint)
 .claude/
 .agentkit/
