@@ -8,6 +8,7 @@ import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
 import { createEmailPortWithRetry } from "../adapters/email-with-retry";
+import { FlagsService } from "../flags/flags-service";
 import { clientIp, normalizeEmailForRateLimit, rateLimit } from "../middleware/rate-limit";
 import { createAuditLogger } from "../observability/logger";
 import {
@@ -111,6 +112,10 @@ const signupRoute = createRoute({
     },
     422: {
       description: "Validation failed",
+      content: { "application/problem+json": { schema: ProblemDto } },
+    },
+    503: {
+      description: "Signups temporarily disabled via feature flag",
       content: { "application/problem+json": { schema: ProblemDto } },
     },
   },
@@ -275,6 +280,25 @@ const authRoutesModule = {
     );
 
     app.openapi(signupRoute, async (c) => {
+      // Kill-switch gate (Phase 2 v1.1): if signup is disabled, refuse
+      // BEFORE we touch the auth service. Existing users are unaffected;
+      // they log in via /auth/login.
+      const flags = new FlagsService({ db: getDb(c.env), kv: c.env.SETTINGS });
+      const signupEnabled = await flags.get("signup.enabled");
+      if (!signupEnabled) {
+        return c.json(
+          problem(503, "Signups are temporarily disabled", ProblemType.ServiceUnavailable, {
+            instance: c.req.path,
+            request_id: c.get("requestId"),
+          }),
+          503,
+          {
+            "content-type": "application/problem+json",
+            "retry-after": "3600",
+          },
+        );
+      }
+
       const body = c.req.valid("json");
       const db = getDb(c.env);
       const verifyUrlBase = `${c.env.APP_ORIGIN}/verify-email`;

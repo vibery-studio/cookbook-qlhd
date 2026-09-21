@@ -14,6 +14,8 @@
  * ship an audit-log D1 table later, which requires storage-cost review.
  */
 export const PERMISSIONS = [
+  "flags:read",
+  "flags:write",
   "notes:read",
   "notes:write",
   "settings:read",

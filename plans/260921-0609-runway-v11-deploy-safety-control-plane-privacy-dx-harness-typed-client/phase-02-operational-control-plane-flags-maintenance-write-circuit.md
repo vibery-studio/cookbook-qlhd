@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Operational Control Plane (flags, maintenance, write circuit)"
-status: pending
+status: completed
 priority: P1
 effort: "1-2d"
 dependencies: []

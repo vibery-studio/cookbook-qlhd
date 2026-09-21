@@ -6,6 +6,8 @@ import { logger } from "./middleware/logger";
 import { errorHandler } from "./middleware/error-handler";
 import { requireOrigin } from "./middleware/origin";
 import { requireFetchHeader } from "./middleware/require-fetch-header";
+import { requireNotMaintenance } from "./middleware/require-not-maintenance";
+import { requireWritesEnabled } from "./middleware/require-writes-enabled";
 import { securityHeaders } from "./middleware/security-headers";
 import { mountRoutes } from "./routes";
 import { problem, ProblemType } from "./dto/error";
@@ -30,6 +32,16 @@ function buildApp(env: Bindings) {
   // Installed AFTER logger so the log line captures the final status
   // BEFORE headers are stamped — headers don't affect status.
   app.use("*", securityHeaders());
+  // Control-plane gates (Phase 2 v1.1). Order matters:
+  //   1. `requireNotMaintenance` runs FIRST — a maintenance window
+  //      supersedes every other gate. Safelists /healthz, /readyz,
+  //      /admin/flags/* so probes + escape-hatch stay reachable.
+  //   2. `requireWritesEnabled` runs AFTER maintenance — writes-off
+  //      is strictly weaker (reads still pass). Also safelists
+  //      /admin/flags/* so operators can flip the circuit back off.
+  app.use("*", requireNotMaintenance());
+  app.use("*", requireWritesEnabled());
+
   // CSRF defense (Phase 5). Both middlewares no-op on GET/HEAD/OPTIONS,
   // so applying globally is safe for read-only endpoints (/healthz,
   // /openapi.json, /docs) — those never trigger the header/origin check.

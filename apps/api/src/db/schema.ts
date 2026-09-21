@@ -182,6 +182,32 @@ export const idempotencyKeys = sqliteTable(
 );
 
 /**
+ * Feature flags (Phase 2 — v1.1 operational control plane). Runtime-mutable
+ * behavior switches — distinct from `settings` (which mutate *values*). Read
+ * hot-path served from KV cache (5min TTL) with D1 fallback; writes bust
+ * cache + emit a SYNC audit event.
+ *
+ * Storage:
+ *   - `enabled`     boolean 0/1 (INTEGER for SQLite compatibility).
+ *   - `percentage`  null for boolean-only flags; 0-100 for gradual rollout.
+ *   - `allowlist`   nullable JSON array of principal ids (overrides percentage
+ *                   evaluation — matched principals always get true when the
+ *                   flag is enabled).
+ *
+ * The registry (`apps/api/src/flags/registry.ts`) declares which keys are
+ * valid; unknown keys are rejected at the admin write path. `updated_by` is
+ * null for seed rows.
+ */
+export const featureFlags = sqliteTable("feature_flags", {
+  key: text("key").primaryKey(),
+  enabled: integer("enabled").notNull().default(0),
+  percentage: integer("percentage"),
+  allowlist: text("allowlist"),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
+/**
  * Demo `notes` resource (Phase 9). Showcases idempotency + ownership
  * end-to-end. Delete this + its migration when adapting the blueprint
  * to a real product. Owner enforcement is application-level (no FK).
@@ -213,6 +239,7 @@ export const schema = {
   refreshTokens,
   jwtRevocations,
   settings,
+  featureFlags,
   idempotencyKeys,
   notes,
 };

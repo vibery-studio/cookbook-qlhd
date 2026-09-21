@@ -4,6 +4,7 @@ import type { Variables } from "../openapi";
 import { authRoutes } from "./auth.routes";
 import { meRoutes } from "./me.routes";
 import { adminRoutes } from "./admin.routes";
+import { adminFlagsRoutes } from "./admin-flags.routes";
 import { adminSettingsRoutes } from "./admin-settings.routes";
 import { demoRoutes } from "./demo.routes";
 import { healthRoutes } from "./health.routes";
@@ -20,6 +21,7 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   meRoutes(app);
   adminRoutes(app);
   adminSettingsRoutes(app);
+  adminFlagsRoutes(app);
   demoRoutes(app);
   healthRoutes(app);
 }

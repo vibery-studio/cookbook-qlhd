@@ -60,7 +60,11 @@ export interface EmailServiceDeps {
 }
 
 export type EmailServiceResult =
-  | { kind: "sent"; messageId: string; provider: "resend" | "noop" | "queued" }
+  | {
+      kind: "sent";
+      messageId: string;
+      provider: "resend" | "noop" | "queued" | "kill-switch";
+    }
   | { kind: "queued"; attempt: number; nextDelaySeconds: number }
   | { kind: "failed"; reason: string };
 

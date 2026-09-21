@@ -26,8 +26,13 @@ export interface EmailSent {
    * "was it *actually* delivered right now?" MUST check for `queued`
    * (e.g., the cron sweeper should not charge a resend slot for a
    * queued send — see `crons/verify-email-sweeper.ts`).
+   * `kill-switch` = the `email.enabled` flag was OFF; the message
+   * was intentionally dropped without buffering. Callers that treat
+   * a successful send as "the user received it" MUST also treat
+   * `kill-switch` as a no-op (e.g., the resend cooldown should still
+   * apply since we cannot tell the user we sent nothing).
    */
-  provider: "resend" | "noop" | "queued";
+  provider: "resend" | "noop" | "queued" | "kill-switch";
 }
 
 /**
