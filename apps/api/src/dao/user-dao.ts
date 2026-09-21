@@ -109,6 +109,98 @@ export async function updateUserStatus(
 }
 
 /**
+ * Flag a user for scheduled erasure (Phase 3). Idempotent: re-requesting
+ * during grace updates `updated_at` only. The privacy sweeper reads
+ * `deletion_requested_at` + a configured grace window; sessions are
+ * revoked by the caller BEFORE this flag flips.
+ */
+export async function flagUserForDeletion(
+  db: Db,
+  id: string,
+  now: number,
+): Promise<void> {
+  await db
+    .update(users)
+    .set({ deletionRequestedAt: now, updatedAt: now })
+    .where(eq(users.id, id));
+}
+
+/**
+ * Clear the pending-deletion flag. Valid ONLY while the grace window
+ * has not yet elapsed — the deletion route enforces the window check.
+ */
+export async function clearDeletionRequest(db: Db, id: string, now: number): Promise<void> {
+  await db
+    .update(users)
+    .set({ deletionRequestedAt: null, updatedAt: now })
+    .where(eq(users.id, id));
+}
+
+/**
+ * Record a completed export request (`/me/export` handler side).
+ */
+export async function stampLastExport(db: Db, id: string, now: number): Promise<void> {
+  await db.update(users).set({ lastExportAt: now, updatedAt: now }).where(eq(users.id, id));
+}
+
+/**
+ * Anonymize a user row + delete every dependent record (Phase 3
+ * sweeper's completion step). Preserves the row as immutable proof of
+ * erasure. `anonEmail` MUST be caller-supplied and unique
+ * (`deleted-<id>@runway.local` is the convention).
+ */
+export async function anonymizeUser(
+  db: Db,
+  input: {
+    id: string;
+    anonEmail: string;
+    anonPasswordHash: string;
+    deletedAt: number;
+  },
+): Promise<void> {
+  await db.batch([
+    db.delete(userRoles).where(eq(userRoles.userId, input.id)),
+    db.delete(verificationTokens).where(eq(verificationTokens.userId, input.id)),
+    db.delete(refreshTokens).where(eq(refreshTokens.userId, input.id)),
+    db.delete(jwtRevocations).where(eq(jwtRevocations.userId, input.id)),
+    db
+      .update(users)
+      .set({
+        email: input.anonEmail,
+        passwordHash: input.anonPasswordHash,
+        status: "disabled",
+        deletedAt: input.deletedAt,
+        deletionRequestedAt: null,
+        updatedAt: input.deletedAt,
+      })
+      .where(eq(users.id, input.id)),
+  ]);
+}
+
+/**
+ * Cursor for the sweeper: users whose `deletion_requested_at` is
+ * older than `cutoff` and are not yet `deleted_at`-stamped.
+ */
+export async function findUsersReadyForErasure(
+  db: Db,
+  cutoff: number,
+  limit: number,
+): Promise<UserDto[]> {
+  const rows = await db
+    .select()
+    .from(users)
+    .limit(limit);
+  return rows
+    .filter(
+      (r) =>
+        r.deletionRequestedAt !== null &&
+        r.deletionRequestedAt < cutoff &&
+        r.deletedAt === null,
+    )
+    .map(toDto);
+}
+
+/**
  * Cursor-paginate users by ULID (lexicographic → creation-time-ordered).
  * `cursor` is the last id from the previous page (exclusive). `limit` is
  * the page size. Fetches `limit + 1` under the hood to compute

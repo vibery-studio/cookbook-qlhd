@@ -44,8 +44,49 @@ export const users = sqliteTable(
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
     verifyEmailResendCount: integer("verify_email_resend_count").notNull().default(0),
+    /**
+     * GDPR account-deletion pipeline (Phase 3 v1.1). `deletionRequestedAt`
+     * flags a user for erasure by the nightly privacy sweeper; the actual
+     * erasure runs after `privacy.deletion_grace_seconds` has passed. Sessions
+     * are revoked immediately at request time (not gated by the grace
+     * window) — the grace protects against accidental self-erasure only.
+     * `deletedAt` records the sweeper's completion timestamp; the user
+     * row is retained + anonymized as immutable proof of erasure.
+     */
+    deletionRequestedAt: integer("deletion_requested_at"),
+    deletedAt: integer("deleted_at"),
+    /**
+     * Last successful `/me/export` timestamp. Enforces one export per user
+     * per grace window (default 24h, see docs/privacy.md).
+     */
+    lastExportAt: integer("last_export_at"),
   },
   (table) => [index("idx_users_email").on(table.email)],
+);
+
+/**
+ * User data export requests (Phase 3 v1.1). One row per `POST /me/export`
+ * call. v1.1 delivers the archive inline in the HTTP response; the
+ * `archive_url` column is reserved for a future R2-backed async path
+ * documented in `docs/privacy.md`. Rows expire per
+ * `privacy.export_retention_seconds` and are swept by the same pruner
+ * that handles deleted-user erasure.
+ */
+export const userExports = sqliteTable(
+  "user_exports",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    status: text("status").notNull().default("completed"), // pending | completed | failed
+    archiveUrl: text("archive_url"),
+    requestedAt: integer("requested_at").notNull(),
+    completedAt: integer("completed_at"),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [
+    index("idx_user_exports_user").on(table.userId, table.requestedAt),
+    index("idx_user_exports_expires").on(table.expiresAt),
+  ],
 );
 
 /**
@@ -242,4 +283,5 @@ export const schema = {
   featureFlags,
   idempotencyKeys,
   notes,
+  userExports,
 };

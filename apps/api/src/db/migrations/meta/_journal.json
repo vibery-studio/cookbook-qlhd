@@ -50,6 +50,20 @@
       "when": 1789956300000,
       "tag": "0006_seed_flags_permissions",
       "breakpoints": false
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789958112394,
+      "tag": "0007_curly_human_torch",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789958200000,
+      "tag": "0008_seed_privacy_settings",
+      "breakpoints": false
     }
   ]
 }

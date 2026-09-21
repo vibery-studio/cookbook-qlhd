@@ -11,6 +11,15 @@ const migrations = await readD1Migrations(migrationsPath);
 export default defineWorkersConfig({
   test: {
     setupFiles: ["./test/apply-migrations.ts"],
+    // CI cold-start of the miniflare workerd pool is significantly slower
+    // than local (setup ~700s vs ~160s on macOS). Individual integration
+    // tests that chain signup → verify → login → assertion routinely
+    // approach 3s on a warm local runner; give CI a 15s ceiling per test
+    // so the cold-start cost doesn't cascade into flaky
+    // "Test timed out in 5000ms" failures. Individual slow tests should
+    // still be investigated — this is a floor, not a permission slip.
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
     poolOptions: {
       workers: {
         main: "./src/index.ts",

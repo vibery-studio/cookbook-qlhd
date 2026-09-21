@@ -143,7 +143,12 @@ describe("SettingsService (unit)", () => {
     const service = new SettingsService({ db: getDb(env), kv: env.SETTINGS });
     const snapshot = await service.list();
     expect(snapshot.map((s) => s.key).sort()).toEqual(
-      ["email.from_address", "email.from_name"].sort(),
+      [
+        "email.from_address",
+        "email.from_name",
+        "privacy.deletion_grace_seconds",
+        "privacy.export_retention_seconds",
+      ].sort(),
     );
     // No D1 rows yet → all defaults, no updated_by
     expect(snapshot.every((s) => s.updatedBy === null)).toBe(true);
@@ -170,9 +175,16 @@ describe("admin settings routes (integration)", () => {
     const body: {
       items: Array<{ key: string; value: unknown; description: string }>;
     } = await res.json();
-    expect(body.items.length).toBe(2);
+    // 2 email + 2 privacy (Phase 3 v1.1 added deletion_grace_seconds
+    // and export_retention_seconds).
+    expect(body.items.length).toBe(4);
     expect(body.items.map((i) => i.key).sort()).toEqual(
-      ["email.from_address", "email.from_name"].sort(),
+      [
+        "email.from_address",
+        "email.from_name",
+        "privacy.deletion_grace_seconds",
+        "privacy.export_retention_seconds",
+      ].sort(),
     );
   });
 

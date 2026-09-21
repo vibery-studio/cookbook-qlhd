@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Privacy Lifecycle Module (export, deletion, retention)"
-status: pending
+status: completed
 priority: P1
 effort: "2-3d"
 dependencies: []

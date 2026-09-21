@@ -32,6 +32,28 @@ export const SETTINGS_REGISTRY = {
     default: "Runway",
     description: "From name on all outbound emails",
   },
+  /**
+   * Grace window between `POST /me/delete` and the sweeper's actual
+   * erasure. Sessions are revoked immediately at request time — this
+   * only governs the pause before data disappears. Default 7 days
+   * (604800s); minimum 60s so an operator can't zero it in a single
+   * PUT and instantly delete a target user (see risk assessment
+   * in `docs/privacy.md`).
+   */
+  "privacy.deletion_grace_seconds": {
+    schema: z.number().int().min(60).max(60 * 60 * 24 * 90),
+    default: 604800,
+    description: "Delay between a deletion request and the sweep erasure",
+  },
+  /**
+   * How long `/me/export` archive rows survive before the sweeper
+   * prunes them. Default 30 days.
+   */
+  "privacy.export_retention_seconds": {
+    schema: z.number().int().min(60 * 60).max(60 * 60 * 24 * 365),
+    default: 2592000,
+    description: "Retention window for export rows and their archive links",
+  },
 } as const;
 
 export type SettingsRegistry = typeof SETTINGS_REGISTRY;
