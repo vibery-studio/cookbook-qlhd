@@ -75,6 +75,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Typed client drift check
+        # Fails the build when the committed @runway/client generated
+        # types have drifted from the current OpenAPI spec. Fix locally
+        # with `pnpm client:generate` + commit.
+        run: pnpm client:check
+
       - name: Bundle size gate
         run: pnpm check:bundle-size
 

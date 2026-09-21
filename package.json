@@ -21,6 +21,8 @@
     "reconcile:preview-dbs": "tsx scripts/reconcile-preview-dbs.ts",
     "openapi:export": "tsx scripts/export-openapi.ts",
     "openapi:diff": "tsx scripts/openapi-diff.ts",
+    "client:generate": "pnpm --filter @runway/client generate",
+    "client:check": "pnpm --filter @runway/client check",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --local",
     "db:migrate:dev": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_dev --remote",

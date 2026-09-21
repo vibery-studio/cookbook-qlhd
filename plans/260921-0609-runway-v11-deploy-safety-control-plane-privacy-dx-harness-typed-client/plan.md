@@ -1,7 +1,7 @@
 ---
 title: "Runway v1.1 — deploy safety, control plane, privacy, dx harness, typed client"
 description: "Ship the operational essentials Codex flagged as missing from v1.0: a real deployment safety gate, an operational control plane (flags + maintenance + write circuit), a privacy lifecycle module (GDPR export/deletion), a local-dev test-fixture harness, and a generated typed OpenAPI client. Everything is scoped to preserve v1's YAGNI/KISS/DRY discipline; each phase closes a gap that every serious product would otherwise re-invent poorly."
-status: pending
+status: completed
 priority: P1
 effort: "5-7 days end-to-end"
 tags: [v1.1, essentials, ops, privacy, dx, contracts]
@@ -54,7 +54,7 @@ multi-tenancy, OAuth adapter, workflow engine, analytics stack.
 | 2 | [Phase 2: Operational Control Plane](./phase-02-operational-control-plane-flags-maintenance-write-circuit.md) | Completed |
 | 3 | [Phase 3: Privacy Lifecycle Module](./phase-03-privacy-lifecycle-module-export-deletion-retention.md) | Completed |
 | 4 | [Phase 4: Local-Dev + Test Fixture Harness](./phase-04-local-dev-test-fixture-harness.md) | Completed |
-| 5 | [Phase 5: Generated Typed Client from OpenAPI](./phase-05-generated-typed-client-from-openapi.md) | Pending |
+| 5 | [Phase 5: Generated Typed Client from OpenAPI](./phase-05-generated-typed-client-from-openapi.md) | Completed |
 
 ## Success Criteria
 

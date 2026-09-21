@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Generated Typed Client from OpenAPI"
-status: pending
+status: completed
 priority: P2
 effort: "1-2d"
 dependencies: [1, 2, 3]
