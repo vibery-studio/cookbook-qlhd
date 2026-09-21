@@ -53,7 +53,7 @@ multi-tenancy, OAuth adapter, workflow engine, analytics stack.
 | 1 | [Phase 1: Deploy Safety Gate](./phase-01-deploy-safety-gate.md) | Completed (local orchestrator) |
 | 2 | [Phase 2: Operational Control Plane](./phase-02-operational-control-plane-flags-maintenance-write-circuit.md) | Completed |
 | 3 | [Phase 3: Privacy Lifecycle Module](./phase-03-privacy-lifecycle-module-export-deletion-retention.md) | Completed |
-| 4 | [Phase 4: Local-Dev + Test Fixture Harness](./phase-04-local-dev-test-fixture-harness.md) | Pending |
+| 4 | [Phase 4: Local-Dev + Test Fixture Harness](./phase-04-local-dev-test-fixture-harness.md) | Completed |
 | 5 | [Phase 5: Generated Typed Client from OpenAPI](./phase-05-generated-typed-client-from-openapi.md) | Pending |
 
 ## Success Criteria

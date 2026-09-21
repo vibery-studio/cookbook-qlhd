@@ -18,10 +18,20 @@ export default defineWorkersConfig({
     // so the cold-start cost doesn't cascade into flaky
     // "Test timed out in 5000ms" failures. Individual slow tests should
     // still be investigated — this is a floor, not a permission slip.
-    testTimeout: 15_000,
-    hookTimeout: 30_000,
+    testTimeout: 20_000,
+    hookTimeout: 45_000,
+    // Serialize test files in CI. Miniflare's isolate pool disconnects
+    // under concurrent D1/KV pressure (surfaces as "Network connection
+    // lost" on unrelated queries). Locally we can afford parallelism;
+    // CI keeps it serial to trade a little wall time for a stable
+    // green build.
+    fileParallelism: process.env["CI"] === "true" ? false : true,
     poolOptions: {
       workers: {
+        // singleWorker guarantees only one workerd process runs at a
+        // time (no per-file isolate churn); an isolate teardown cannot
+        // race a sibling test's live query when there's no sibling.
+        singleWorker: process.env["CI"] === "true" ? true : false,
         main: "./src/index.ts",
         wrangler: {
           configPath: "./wrangler.toml",

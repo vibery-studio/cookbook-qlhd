@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Local-Dev + Test Fixture Harness"
-status: pending
+status: completed
 priority: P2
 effort: "1-2d"
 dependencies: []

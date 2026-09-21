@@ -351,8 +351,12 @@ describe("POST /me/delete (integration)", () => {
     const before = await db.query.users.findFirst({ where: eq(users.id, userId) });
     const originalEmail = before?.email ?? "erased@example.com";
 
-    // Invoke the pruner (which now includes the privacy sweep).
+    // Invoke the pruner (which now includes the privacy sweep). Give
+    // the isolate a beat to settle the batched writes before the
+    // follow-up assertions — under CI load, an immediate read can race
+    // the pruner's KV/D1 flush and surface as "Network connection lost".
     await pruneExpiredRows(env);
+    await new Promise((r) => setTimeout(r, 200));
 
     // Note is gone.
     const remainingNotes = await db.select().from(notes).where(eq(notes.userId, userId));

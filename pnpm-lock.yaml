@@ -72,6 +72,9 @@ importers:
       '@runway/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@runway/test-fixtures':
+        specifier: workspace:*
+        version: link:../../packages/test-fixtures
       eslint:
         specifier: 9.37.0
         version: 9.37.0
@@ -191,6 +194,15 @@ importers:
       vitest:
         specifier: 3.2.6
         version: 3.2.6(@types/node@22.10.5)(tsx@4.19.2)(yaml@2.9.1)
+
+  packages/test-fixtures:
+    devDependencies:
+      '@runway/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
 
 packages:
 

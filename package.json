@@ -28,6 +28,7 @@
     "db:migrate:prod": "wrangler --config apps/api/wrangler.toml d1 migrations apply runway_prod --remote --env production",
     "db:schema-head": "tsx scripts/get-schema-head.ts",
     "db:seed:admin": "tsx scripts/seed-admin.ts",
+    "dev:reset": "tsx scripts/dev-reset.ts",
     "deploy:preflight": "tsx scripts/deploy-preflight.ts",
     "deploy:verify": "tsx scripts/deploy-verify.ts",
     "deploy:rollback": "tsx scripts/deploy-rollback.ts",
