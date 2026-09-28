@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản lý hợp đồng — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   TOKENS — reused from the course CRM mockup for visual consistency.
+   Vietnamese line-height 1.28+ (uppercase stacks two marks: Ừ Ồ Ậ Ế Đ).
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --bg-app:#FBFBFC; --bg-surface:#FFFFFF; --bg-sidebar:#F4F5F7;
+  --bg-sunken:#F7F8FA; --bg-hover:#EEF0F3; --bg-active:#E8EAEF;
+  --text-strong:#16181D; --text:#2E3138; --text-muted:#5C6270; --text-faint:#616875;
+  --text-on-accent:#FFFFFF;
+  --accent:#2C5FD6; --accent-soft:#E8EEFC; --accent-border:#B9CCF6;
+  /* contract status ramp: draft → pending → approved → issued (+ rejected) */
+  --st-draft:#4A5260;    --st-draft-bg:#EDEFF2;
+  --st-pending:#8A5A12;  --st-pending-bg:#FBF0DD;
+  --st-approved:#1B6E4B; --st-approved-bg:#E3F3EB;
+  --st-issued:#1F5FA8;   --st-issued-bg:#E5EFFA;
+  --st-rejected:#A63A3A; --st-rejected-bg:#FBE9E9;
+  --danger:#B3261E; --danger-bg:#FCEAE8; --danger-border:#F2C9C5;
+  --ok:#1B6E4B; --ok-bg:#E3F3EB; --ok-border:#BFE0CE;
+  --border:#E3E5EA; --border-strong:#CDD1D9;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+  --fs-micro:12px; --fs-sm:12px; --fs-base:13px; --fs-md:14px;
+  --fs-lg:16px; --fs-xl:20px; --fs-2xl:26px;
+  --lh-head:1.28; --lh-body:1.55;
+  --r1:4px; --r2:6px; --r3:10px;
+  --row-h:44px; --sidebar-w:240px; --drawer-w:560px;
+  --dur:150ms;
+  --font:"Be Vietnam Pro",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0ms; } *,*::before,*::after{ transition-duration:.001ms !important; } }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font);font-size:var(--fs-base);line-height:var(--lh-body);
+  color:var(--text);background:var(--bg-app);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:inherit;color:inherit}
+
+/* ── App shell ─────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh;overflow:hidden}
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.side{background:var(--bg-sidebar);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:var(--s4)}
+.brand{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s2) var(--s5)}
+.brand-mark{width:26px;height:26px;border-radius:var(--r2);background:var(--accent);
+  color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+.brand-name{font-weight:600;color:var(--text-strong);font-size:var(--fs-md)}
+.brand-sub{font-size:var(--fs-micro);color:var(--text-faint);font-family:var(--mono)}
+.nav{display:flex;flex-direction:column;gap:2px;margin-bottom:var(--s5)}
+.nav-item{display:flex;align-items:center;gap:var(--s3);padding:var(--s2) var(--s3);
+  border-radius:var(--r2);color:var(--text-muted);font-size:var(--fs-md);font-weight:500;
+  transition:background var(--dur)}
+.nav-item:hover{background:var(--bg-hover)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav-item .ic{width:16px;height:16px;flex:none}
+.nav-badge{margin-left:auto;font-size:var(--fs-micro);font-family:var(--mono);
+  background:var(--st-pending-bg);color:var(--st-pending);padding:1px 6px;border-radius:20px}
+.side-label{font-size:var(--fs-micro);text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-faint);font-weight:600;padding:0 var(--s3) var(--s2)}
+.side-foot{margin-top:auto;padding-top:var(--s4);border-top:1px solid var(--border)}
+.user{display:flex;align-items:center;gap:var(--s2);padding:var(--s2)}
+.avatar{width:28px;height:28px;border-radius:50%;background:#6A4BB5;color:#fff;
+  display:grid;place-items:center;font-size:var(--fs-sm);font-weight:600;flex:none}
+.user-txt{min-width:0;flex:1}
+.user-name{font-size:var(--fs-md);font-weight:600;color:var(--text-strong);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:var(--fs-sm);color:var(--text-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-pill{flex:none;font-size:var(--fs-sm);font-weight:500;
+  background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--accent);
+  padding:2px 9px;border-radius:20px;white-space:nowrap}
+
+/* ── Main ──────────────────────────────────────────────────── */
+.main{display:flex;flex-direction:column;overflow:hidden;background:var(--bg-app)}
+#viewbody{flex:1;display:flex;flex-direction:column;overflow:auto;min-height:0}
+.topbar{display:flex;align-items:center;gap:var(--s4);padding:var(--s4) var(--s5);
+  border-bottom:1px solid var(--border);background:var(--bg-surface)}
+.page-title{font-size:var(--fs-xl);font-weight:600;color:var(--text-strong);line-height:var(--lh-head)}
+.page-sub{font-size:var(--fs-sm);color:var(--text-muted)}
+.spacer{flex:1}
+.search{display:flex;align-items:center;gap:var(--s2);background:var(--bg-sunken);
+  border:1px solid var(--border);border-radius:var(--r2);padding:var(--s2) var(--s3);width:260px}
+.search input{border:none;background:none;outline:none;width:100%;font-size:var(--fs-md)}
+.btn{display:inline-flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4);
+  border-radius:var(--r2);font-size:var(--fs-md);font-weight:600;transition:all var(--dur);
+  border:1px solid transparent}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#2450BC}
+.btn-ghost{background:var(--bg-surface);border-color:var(--border-strong);color:var(--text)}
+.btn-ghost:hover{background:var(--bg-hover)}
+.btn-sm{padding:var(--s1) var(--s3);font-size:var(--fs-sm)}
+
+/* ── Toolbar (filters) ─────────────────────────────────────── */
+.toolbar{display:flex;align-items:center;gap:var(--s2);padding:var(--s3) var(--s5);
+  border-bottom:1px solid var(--border);background:var(--bg-surface);flex-wrap:wrap}
+.tab{padding:var(--s2) var(--s3);border-radius:var(--r2);font-size:var(--fs-sm);font-weight:600;
+  color:var(--text-muted);transition:background var(--dur);display:inline-flex;gap:6px;align-items:center}
+.tab:hover{background:var(--bg-hover)}
+.tab.active{background:var(--bg-active);color:var(--text-strong)}
+.tab .count{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint)}
+.tab.active .count{color:var(--text-muted)}
+
+/* ── Table ─────────────────────────────────────────────────── */
+.scroll{flex:1;overflow:auto;padding:var(--s4) var(--s5)}
+.table{width:100%;border-collapse:separate;border-spacing:0;background:var(--bg-surface);
+  border:1px solid var(--border);border-radius:var(--r3);overflow:hidden}
+thead th{text-align:left;font-size:var(--fs-micro);text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-faint);font-weight:600;padding:var(--s3) var(--s4);background:var(--bg-sunken);
+  border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:0 var(--s4);height:var(--row-h);border-bottom:1px solid var(--border);
+  font-size:var(--fs-md);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{transition:background var(--dur)}
+tbody tr:hover{background:var(--bg-sunken);cursor:pointer}
+.c-code{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-muted)}
+.c-title{font-weight:600;color:var(--text-strong)}
+.c-client{color:var(--text)}
+.c-amount{font-family:var(--mono);font-weight:500;color:var(--text-strong);text-align:right}
+.c-meta{color:var(--text-muted);font-size:var(--fs-sm)}
+th.right,td.right{text-align:right}
+
+/* ── Status badge ──────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
+  font-size:var(--fs-sm);font-weight:600;white-space:nowrap}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.b-draft{color:var(--st-draft);background:var(--st-draft-bg)}
+.b-pending{color:var(--st-pending);background:var(--st-pending-bg)}
+.b-approved{color:var(--st-approved);background:var(--st-approved-bg)}
+.b-issued{color:var(--st-issued);background:var(--st-issued-bg)}
+.b-rejected{color:var(--st-rejected);background:var(--st-rejected-bg)}
+
+/* ── Drawer ────────────────────────────────────────────────── */
+.scrim{position:fixed;inset:0;background:rgba(20,22,28,.32);opacity:0;pointer-events:none;
+  transition:opacity var(--dur);z-index:40}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:var(--drawer-w);max-width:94vw;
+  background:var(--bg-surface);border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(20,22,28,.10);
+  transform:translateX(100%);transition:transform var(--dur) cubic-bezier(.22,.68,.24,1);
+  z-index:50;display:flex;flex-direction:column}
+.drawer.open{transform:translateX(0)}
+.dr-head{padding:var(--s5);border-bottom:1px solid var(--border)}
+.dr-eyebrow{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s2)}
+.dr-code{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-muted)}
+.dr-title{font-size:var(--fs-xl);font-weight:700;color:var(--text-strong);line-height:var(--lh-head);
+  margin-bottom:var(--s2)}
+.dr-client{color:var(--text-muted);font-size:var(--fs-md)}
+.dr-close{position:absolute;top:var(--s4);right:var(--s4);width:30px;height:30px;border-radius:var(--r2);
+  display:grid;place-items:center;color:var(--text-muted)}
+.dr-close:hover{background:var(--bg-hover)}
+.dr-body{flex:1;overflow:auto;padding:var(--s5)}
+.dr-section{margin-bottom:var(--s5)}
+.dr-section h4{font-size:var(--fs-micro);text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-faint);font-weight:600;margin-bottom:var(--s3)}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:var(--s2) var(--s4);font-size:var(--fs-md)}
+.kv dt{color:var(--text-muted)}
+.kv dd{color:var(--text-strong);font-weight:500}
+
+/* line items */
+.li-table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+.li-table th{text-align:left;color:var(--text-faint);font-weight:600;font-size:var(--fs-micro);
+  text-transform:uppercase;padding:var(--s2) 0;border-bottom:1px solid var(--border)}
+.li-table td{padding:var(--s2) 0;border-bottom:1px solid var(--border);color:var(--text)}
+.li-table .num{text-align:right;font-family:var(--mono)}
+.li-total td{border-bottom:none;padding-top:var(--s3);font-weight:700;color:var(--text-strong)}
+
+/* approval timeline */
+.timeline{position:relative;padding-left:var(--s5)}
+.timeline::before{content:"";position:absolute;left:6px;top:4px;bottom:4px;width:2px;background:var(--border)}
+.tl-item{position:relative;padding-bottom:var(--s4)}
+.tl-item:last-child{padding-bottom:0}
+.tl-item::before{content:"";position:absolute;left:-22px;top:3px;width:14px;height:14px;border-radius:50%;
+  background:var(--bg-surface);border:2px solid var(--border-strong)}
+.tl-item.done::before{background:var(--st-approved);border-color:var(--st-approved)}
+.tl-item.cur::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tl-item.rej::before{background:var(--st-rejected);border-color:var(--st-rejected)}
+.tl-line{font-size:var(--fs-md);color:var(--text-strong);font-weight:500}
+.tl-meta{font-size:var(--fs-sm);color:var(--text-muted)}
+.tl-note{font-size:var(--fs-sm);color:var(--text);background:var(--bg-sunken);
+  border:1px solid var(--border);border-radius:var(--r2);padding:var(--s2) var(--s3);margin-top:6px}
+
+/* drawer footer actions (role-gated) */
+.dr-foot{padding:var(--s4) var(--s5);border-top:1px solid var(--border);
+  display:flex;gap:var(--s2);align-items:center;background:var(--bg-sunken)}
+.gate-note{font-size:var(--fs-sm);color:var(--text-muted);display:flex;align-items:center;gap:6px}
+.btn-approve{background:var(--st-approved);color:#fff}
+.btn-approve:hover{filter:brightness(1.05)}
+.btn-reject{background:var(--bg-surface);border:1px solid var(--danger-border);color:var(--danger)}
+.btn-reject:hover{background:var(--danger-bg)}
+.btn-issue{background:var(--st-issued);color:#fff}
+
+/* generate modal */
+.modal{position:fixed;inset:0;display:grid;place-items:center;z-index:60;opacity:0;pointer-events:none;
+  transition:opacity var(--dur)}
+.modal.open{opacity:1;pointer-events:auto}
+.modal-card{width:520px;max-width:94vw;background:var(--bg-surface);border-radius:var(--r3);
+  box-shadow:0 24px 64px rgba(20,22,28,.24);transform:translateY(8px);transition:transform var(--dur)}
+.modal.open .modal-card{transform:translateY(0)}
+.modal-head{padding:var(--s5);border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:var(--fs-lg);font-weight:700;color:var(--text-strong);line-height:var(--lh-head)}
+.modal-head p{font-size:var(--fs-sm);color:var(--text-muted);margin-top:2px}
+.modal-body{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s4)}
+.field label{display:block;font-size:var(--fs-sm);font-weight:600;color:var(--text);margin-bottom:6px}
+.field input,.field select{width:100%;padding:var(--s2) var(--s3);border:1px solid var(--border-strong);
+  border-radius:var(--r2);font-size:var(--fs-md);background:var(--bg-surface);outline:none}
+.field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field .hint{font-size:var(--fs-micro);color:var(--text-faint);margin-top:4px}
+.modal-foot{padding:var(--s4) var(--s5);border-top:1px solid var(--border);display:flex;
+  justify-content:flex-end;gap:var(--s2)}
+.tpl-preview{background:var(--bg-sunken);border:1px dashed var(--border-strong);border-radius:var(--r2);
+  padding:var(--s3);font-size:var(--fs-sm);color:var(--text-muted);font-family:var(--mono)}
+
+/* ── Shared view scaffolding ───────────────────────────────── */
+.view-lead{padding:var(--s4) var(--s5) 0;color:var(--text-muted);font-size:var(--fs-md);max-width:720px}
+.section-grid{padding:var(--s5);display:grid;gap:var(--s4)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:1100px){.grid-3{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r3);padding:var(--s4);
+  transition:box-shadow var(--dur),border-color var(--dur)}
+.card.click{cursor:pointer}
+.card.click:hover{border-color:var(--border-strong);box-shadow:0 4px 16px rgba(20,22,28,.06)}
+.card-head{display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s3)}
+.card-ic{width:36px;height:36px;border-radius:var(--r2);background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;flex:none}
+.card-title{font-size:var(--fs-md);font-weight:600;color:var(--text-strong);line-height:var(--lh-head)}
+.card-sub{font-size:var(--fs-sm);color:var(--text-muted)}
+.card-meta{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-faint);text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--s2)}
+.chip{font-size:var(--fs-sm);background:var(--bg-sunken);border:1px solid var(--border);
+  border-radius:20px;padding:2px 9px;color:var(--text-muted)}
+.card-stat{display:flex;gap:var(--s5);margin-top:var(--s3);padding-top:var(--s3);border-top:1px solid var(--border)}
+.card-stat b{display:block;font-size:var(--fs-lg);color:var(--text-strong);font-weight:700}
+.card-stat span{font-size:var(--fs-sm);color:var(--text-muted)}
+
+/* flow pills (template approval flow) */
+.flow-pills{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:var(--s2)}
+.flow-pill{font-size:var(--fs-sm);background:var(--bg-sunken);border:1px solid var(--border);
+  border-radius:var(--r1);padding:2px 8px;color:var(--text)}
+.flow-arrow{color:var(--text-faint);font-size:var(--fs-sm)}
+
+/* ── Roles / permission matrix ─────────────────────────────── */
+.matrix{width:100%;border-collapse:separate;border-spacing:0;background:var(--bg-surface);
+  border:1px solid var(--border);border-radius:var(--r3);overflow:hidden}
+.matrix th{text-align:left;font-size:var(--fs-sm);font-weight:600;color:var(--text-muted);
+  padding:var(--s3) var(--s4);background:var(--bg-sunken);border-bottom:1px solid var(--border)}
+.matrix th.role-col{text-align:center;width:130px}
+.matrix td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);font-size:var(--fs-md)}
+.matrix td.perm{color:var(--text-strong)}
+.matrix td.perm code{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-muted);
+  background:var(--bg-sunken);padding:1px 6px;border-radius:var(--r1);margin-left:6px}
+.matrix td.cell{text-align:center}
+.matrix tr:last-child td{border-bottom:none}
+.yes{color:var(--st-approved)}
+.no{color:var(--text-faint);opacity:.5}
+.role-legend{display:flex;gap:var(--s4);padding:var(--s3) var(--s5);flex-wrap:wrap}
+.role-card{display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-md)}
+.role-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.callout{margin:0 var(--s5) var(--s5);background:var(--accent-soft);border:1px solid var(--accent-border);
+  border-radius:var(--r3);padding:var(--s4);display:flex;gap:var(--s3);align-items:flex-start}
+.callout svg{flex:none;color:var(--accent);margin-top:2px}
+.callout-t{font-size:var(--fs-md);color:var(--text-strong);font-weight:600;margin-bottom:2px}
+.callout-p{font-size:var(--fs-sm);color:var(--text)}
+
+/* ── Audit log ─────────────────────────────────────────────── */
+.audit-list{padding:var(--s4) var(--s5);display:flex;flex-direction:column;gap:2px}
+.audit-row{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);
+  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r2)}
+.audit-ic{width:28px;height:28px;border-radius:var(--r2);display:grid;place-items:center;flex:none;
+  font-size:var(--fs-md)}
+.audit-main{flex:1;min-width:0}
+.audit-line{font-size:var(--fs-md);color:var(--text-strong)}
+.audit-line b{font-weight:600}
+.audit-sub{font-size:var(--fs-sm);color:var(--text-muted);font-family:var(--mono)}
+.audit-time{font-size:var(--fs-sm);color:var(--text-faint);font-family:var(--mono);white-space:nowrap}
+.audit-event{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-muted);
+  background:var(--bg-sunken);border:1px solid var(--border);border-radius:var(--r1);padding:1px 7px;white-space:nowrap}
+
+/* ── Template detail drawer (reuses .drawer) ───────────────── */
+.tpl-field-row{display:grid;grid-template-columns:1fr auto;gap:var(--s2);align-items:center;
+  padding:var(--s2) var(--s3);border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--bg-surface);margin-bottom:6px}
+.tpl-field-name{font-size:var(--fs-md);color:var(--text-strong);font-weight:500}
+.tpl-field-type{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-muted);
+  background:var(--bg-sunken);border:1px solid var(--border);border-radius:var(--r1);padding:1px 7px}
+.tpl-req{font-size:var(--fs-sm);color:var(--danger);margin-left:6px}
+.terms-box{background:var(--bg-sunken);border:1px solid var(--border);border-radius:var(--r2);
+  padding:var(--s3);font-size:var(--fs-md);color:var(--text);line-height:var(--lh-body)}
+.terms-box ol{margin:0;padding-left:var(--s5)}
+.terms-box li{margin-bottom:6px}
+
+/* ── Document preview (the generated contract) ─────────────── */
+.doc-scrim{position:fixed;inset:0;background:rgba(20,22,28,.45);opacity:0;pointer-events:none;
+  transition:opacity var(--dur);z-index:70;overflow:auto;padding:var(--s6) 0}
+.doc-scrim.open{opacity:1;pointer-events:auto}
+.doc-actions{position:fixed;top:var(--s4);right:var(--s5);z-index:72;display:flex;gap:var(--s2)}
+.doc-actions .btn{box-shadow:0 2px 8px rgba(20,22,28,.15)}
+.doc-paper{width:820px;max-width:94vw;margin:0 auto;background:#fff;color:#1a1a1a;
+  border-radius:var(--r2);box-shadow:0 24px 80px rgba(20,22,28,.35);
+  padding:64px 72px;font-family:"Be Vietnam Pro",serif;position:relative;z-index:71}
+.doc-gov{text-align:center;font-size:13px;line-height:1.5;margin-bottom:6px}
+.doc-gov b{font-weight:600}
+.doc-motto{text-align:center;font-size:13px;font-weight:600;margin-bottom:24px}
+.doc-motto u{text-decoration:none;border-bottom:1px solid #1a1a1a;padding-bottom:1px}
+.doc-h1{text-align:center;font-size:22px;font-weight:700;letter-spacing:.01em;margin:24px 0 4px}
+.doc-code{text-align:center;font-size:13px;color:#555;font-family:var(--mono);margin-bottom:28px}
+.doc-body{font-size:14px;line-height:1.75}
+.doc-body p{margin:0 0 12px}
+.doc-legal-ref{font-style:italic;color:#444;font-size:13px;margin-bottom:20px}
+.doc-party{margin-bottom:16px}
+.doc-party .lbl{font-weight:700;margin-bottom:4px}
+.doc-party .line{display:flex;gap:8px;margin-bottom:2px}
+.doc-party .k{color:#555;min-width:150px}
+.doc-art{font-weight:700;margin:22px 0 8px;font-size:15px}
+.doc-table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+.doc-table th,.doc-table td{border:1px solid #bbb;padding:8px 10px;text-align:left}
+.doc-table th{background:#f2f2f2;font-weight:600}
+.doc-table .n{text-align:right;font-variant-numeric:tabular-nums}
+.doc-table tfoot td{font-weight:700;background:#fafafa}
+.doc-sign{display:flex;justify-content:space-between;margin-top:40px;text-align:center}
+.doc-sign .col{width:45%}
+.doc-sign .role{font-weight:700;font-size:14px}
+.doc-sign .hint{font-size:12px;color:#666;font-style:italic;margin-bottom:64px}
+.doc-sign .nm{font-weight:600}
+.doc-watermark{position:absolute;top:64px;right:72px;font-family:var(--mono);font-size:11px;
+  color:#999;border:1px solid #ddd;border-radius:20px;padding:3px 10px}
+.doc-status-draft{color:var(--st-draft)}
+
+/* empty micro-note */
+.mock-note{position:fixed;right:var(--s4);bottom:var(--s3);font-size:var(--fs-sm);
+  font-family:var(--mono);color:var(--text-muted);background:rgba(255,255,255,.85);
+  padding:3px 10px;border-radius:20px;border:1px solid var(--border);z-index:30;
+  backdrop-filter:blur(4px)}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">H</div>
+      <div>
+        <div class="brand-name">Hợp đồng</div>
+        <div class="brand-sub">nội bộ · của bạn</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item active" data-view="contracts" onclick="go('contracts')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2" width="11" height="12" rx="1.5"/><path d="M5 5.5h6M5 8h6M5 10.5h4"/></svg>Hợp đồng</a>
+      <a class="nav-item" data-view="templates" onclick="go('templates')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7"/></svg>Mẫu hợp đồng</a>
+      <a class="nav-item" data-view="queue" onclick="go('queue')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.5v11M2.5 8h11"/></svg>Chờ tôi duyệt<span class="nav-badge">3</span></a>
+      <a class="nav-item" data-view="customers" onclick="go('customers')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c.5-2.5 2.5-4 5-4s4.5 1.5 5 4"/></svg>Khách hàng</a>
+    </nav>
+
+    <div class="side-label">Hệ thống</div>
+    <nav class="nav">
+      <a class="nav-item" data-view="roles" onclick="go('roles')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l5 2.5v3c0 3-2 5-5 6-3-1-5-3-5-6v-3L8 2z"/></svg>Phân quyền</a>
+      <a class="nav-item" data-view="audit" onclick="go('audit')"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3h10v10H3zM3 6.5h10"/></svg>Nhật ký</a>
+    </nav>
+
+    <div class="side-foot">
+      <div class="user">
+        <div class="avatar">TV</div>
+        <div class="user-txt">
+          <div class="user-name">Tường Vi</div>
+          <div class="user-role">tuongvi@congty.vn</div>
+        </div>
+        <span class="role-pill" id="rolePill">Quản lý</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN — topbar + body rendered per view ══ -->
+  <main class="main">
+    <div class="topbar" id="topbar"><!-- injected per view --></div>
+    <div id="viewbody"><!-- injected per view --></div>
+  </main>
+</div>
+
+<!-- ══ DRAWER (contract detail + approval) ══ -->
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <button class="dr-close" onclick="closeDrawer()">✕</button>
+  <div class="dr-head">
+    <div class="dr-eyebrow"><span class="dr-code" id="drCode">HD-2026-007</span><span class="badge b-pending" id="drBadge">Chờ duyệt</span></div>
+    <div class="dr-title" id="drTitle">Hợp đồng dịch vụ tư vấn triển khai</div>
+    <div class="dr-client" id="drClient">Công ty TNHH Minh Phát · Nguyễn Văn Hùng</div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:var(--s3)" onclick="openDoc(curContract)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>
+      Xem văn bản hợp đồng
+    </button>
+  </div>
+  <div class="dr-body">
+    <div class="dr-section">
+      <h4>Thông tin</h4>
+      <dl class="kv">
+        <dt>Mẫu</dt><dd id="drTpl">Dịch vụ tư vấn</dd>
+        <dt>Ngày hiệu lực</dt><dd id="drDate">01/10/2026</dd>
+        <dt>Thời hạn</dt><dd id="drTerm">6 tháng</dd>
+        <dt>Người tạo</dt><dd id="drOwner">Minh Khánh</dd>
+      </dl>
+    </div>
+
+    <div class="dr-section">
+      <h4>Hạng mục</h4>
+      <table class="li-table">
+        <thead><tr><th>Hạng mục</th><th class="num">SL</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th></tr></thead>
+        <tbody id="drItems"></tbody>
+        <tfoot><tr class="li-total"><td colspan="3">Tổng cộng (đã gồm VAT)</td><td class="num" id="drTotal">88.000.000 ₫</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="dr-section">
+      <h4>Luồng duyệt</h4>
+      <div class="timeline" id="drTimeline"></div>
+    </div>
+  </div>
+  <div class="dr-foot" id="drFoot"><!-- role-gated actions injected --></div>
+</aside>
+
+<!-- ══ GENERATE MODAL ══ -->
+<div class="modal" id="genModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Tạo hợp đồng từ mẫu</h3>
+      <p>Chọn mẫu, điền thông tin — hệ thống dựng hợp đồng đầy đủ và lưu vào thư viện.</p>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Mẫu hợp đồng</label>
+        <select id="genTpl">
+          <option>Dịch vụ tư vấn</option>
+          <option>Cung cấp phần mềm</option>
+          <option>Thi công lắp đặt</option>
+          <option>Hợp tác đại lý</option>
+        </select>
+        <div class="hint">Mẫu quy định các điều khoản, hạng mục mặc định và luồng duyệt.</div>
+      </div>
+      <div class="field">
+        <label>Khách hàng</label>
+        <input value="Công ty TNHH Minh Phát" id="genClient">
+      </div>
+      <div class="field">
+        <label>Giá trị hợp đồng</label>
+        <input value="88.000.000 ₫" id="genAmount">
+      </div>
+      <div class="tpl-preview" id="genPreview">Sẽ tạo: HD-2026-013 · Dịch vụ tư vấn · trạng thái NHÁP → gửi duyệt</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeGen()">Huỷ</button>
+      <button class="btn btn-primary" onclick="genSubmit()">Tạo & xem văn bản →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DOCUMENT PREVIEW (the generated contract, rendered as paper) ══ -->
+<div class="doc-scrim" id="docScrim" onclick="if(event.target===this)closeDoc()">
+  <div class="doc-actions">
+    <button class="btn btn-ghost" onclick="closeDoc()">Đóng</button>
+    <button class="btn btn-primary" onclick="alert('(mockup) Tải PDF — trong app thật sẽ xuất file .pdf')">⬇ Tải PDF</button>
+  </div>
+  <div class="doc-paper" id="docPaper"><!-- injected --></div>
+</div>
+
+<div class="mock-note">mockup · quản lý hợp đồng · workshop demo</div>
+
+<script>
+// ── Demo data — a lived-in library across all statuses ─────────
+const money = n => n.toLocaleString('vi-VN') + ' ₫';
+const CONTRACTS = [
+  {code:'HD-2026-012', title:'Hợp đồng cung cấp phần mềm quản lý kho', client:'Công ty CP Thảo Nguyên', contact:'Trần Thị Hằng', tpl:'Cung cấp phần mềm', amount:145000000, status:'issued', owner:'Minh Khánh', updated:'Hôm nay, 09:12', date:'20/09/2026', term:'12 tháng',
+    items:[['License phần mềm (năm 1)',1,120000000],['Triển khai & đào tạo',1,25000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'18/09'},{s:'pending',who:'Minh Khánh',t:'18/09'},{s:'approved',who:'Tường Vi',t:'19/09',note:'Duyệt. Nhớ gắn phụ lục SLA.'},{s:'issued',who:'Tường Vi',t:'20/09'}]},
+  {code:'HD-2026-007', title:'Hợp đồng dịch vụ tư vấn triển khai', client:'Công ty TNHH Minh Phát', contact:'Nguyễn Văn Hùng', tpl:'Dịch vụ tư vấn', amount:88000000, status:'pending', owner:'Minh Khánh', updated:'Hôm nay, 08:40', date:'01/10/2026', term:'6 tháng',
+    items:[['Phí tư vấn triển khai',1,72000000],['Chi phí đi lại (ước tính)',1,8000000],['VAT 10%',1,8000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'Hôm nay 08:20'},{s:'pending',who:'Minh Khánh',t:'Hôm nay 08:40'}]},
+  {code:'HD-2026-011', title:'Hợp đồng thi công lắp đặt điện nhẹ', client:'Khách sạn Biển Xanh', contact:'Lê Quốc Bảo', tpl:'Thi công lắp đặt', amount:210000000, status:'pending', owner:'Thành Trí', updated:'Hôm qua, 16:20', date:'05/10/2026', term:'3 tháng',
+    items:[['Vật tư thiết bị',1,150000000],['Nhân công lắp đặt',1,60000000]],
+    flow:[{s:'created',who:'Thành Trí',t:'Hôm qua 15:50'},{s:'pending',who:'Thành Trí',t:'Hôm qua 16:20'}]},
+  {code:'HD-2026-010', title:'Hợp đồng hợp tác đại lý phân phối', client:'Cửa hàng Tân Phát', contact:'Phạm Đức Anh', tpl:'Hợp tác đại lý', amount:0, status:'pending', owner:'Minh Khánh', updated:'Hôm qua, 11:05', date:'10/10/2026', term:'12 tháng',
+    items:[['Chiết khấu đại lý','—','20%'],['Cam kết doanh số / quý',1,300000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'Hôm qua 10:40'},{s:'pending',who:'Minh Khánh',t:'Hôm qua 11:05'}]},
+  {code:'HD-2026-009', title:'Hợp đồng dịch vụ bảo trì định kỳ', client:'Công ty TNHH Minh Phát', contact:'Nguyễn Văn Hùng', tpl:'Dịch vụ tư vấn', amount:36000000, status:'approved', owner:'Thành Trí', updated:'2 ngày trước', date:'15/09/2026', term:'12 tháng',
+    items:[['Bảo trì định kỳ (12 lượt)',12,3000000]],
+    flow:[{s:'created',who:'Thành Trí',t:'12/09'},{s:'pending',who:'Thành Trí',t:'12/09'},{s:'approved',who:'Tường Vi',t:'13/09',note:'OK, chờ khách ký rồi phát hành.'}]},
+  {code:'HD-2026-008', title:'Hợp đồng cung cấp phần mềm CRM', client:'Công ty CP Thảo Nguyên', contact:'Trần Thị Hằng', tpl:'Cung cấp phần mềm', amount:96000000, status:'approved', owner:'Minh Khánh', updated:'3 ngày trước', date:'10/09/2026', term:'12 tháng',
+    items:[['License CRM (năm 1)',1,84000000],['Tuỳ chỉnh báo cáo',1,12000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'08/09'},{s:'pending',who:'Minh Khánh',t:'08/09'},{s:'approved',who:'Tường Vi',t:'09/09'}]},
+  {code:'HD-2026-006', title:'Hợp đồng dịch vụ tư vấn chiến lược', client:'Startup Vườn Ươm', contact:'Đỗ Hải Yến', tpl:'Dịch vụ tư vấn', amount:54000000, status:'rejected', owner:'Thành Trí', updated:'4 ngày trước', date:'—', term:'3 tháng',
+    items:[['Phí tư vấn trọn gói',1,54000000]],
+    flow:[{s:'created',who:'Thành Trí',t:'05/09'},{s:'pending',who:'Thành Trí',t:'05/09'},{s:'rejected',who:'Tường Vi',t:'06/09',note:'Giá thấp hơn sàn. Làm lại theo bảng giá mới.'}]},
+  {code:'HD-2026-013', title:'Hợp đồng cung cấp phần mềm điểm danh', client:'Trường Mầm non Hoa Sen', contact:'Vũ Thị Ngọc', tpl:'Cung cấp phần mềm', amount:42000000, status:'draft', owner:'Tường Vi', updated:'Vừa xong', date:'—', term:'12 tháng',
+    items:[['License (năm 1)',1,36000000],['Triển khai',1,6000000]],
+    flow:[{s:'created',who:'Tường Vi',t:'Vừa xong'}]},
+  {code:'HD-2026-005', title:'Hợp đồng thi công lắp đặt camera', client:'Khách sạn Biển Xanh', contact:'Lê Quốc Bảo', tpl:'Thi công lắp đặt', amount:128000000, status:'issued', owner:'Minh Khánh', updated:'1 tuần trước', date:'01/09/2026', term:'2 tháng',
+    items:[['Thiết bị camera 32 kênh',1,98000000],['Nhân công',1,30000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'25/08'},{s:'pending',who:'Minh Khánh',t:'25/08'},{s:'approved',who:'Tường Vi',t:'26/08'},{s:'issued',who:'Minh Khánh',t:'01/09'}]},
+  {code:'HD-2026-004', title:'Hợp đồng hợp tác đại lý khu vực', client:'Cửa hàng Tân Phát', contact:'Phạm Đức Anh', tpl:'Hợp tác đại lý', amount:0, status:'issued', owner:'Thành Trí', updated:'1 tuần trước', date:'20/08/2026', term:'12 tháng',
+    items:[['Chiết khấu đại lý','—','18%']],
+    flow:[{s:'created',who:'Thành Trí',t:'15/08'},{s:'pending',who:'Thành Trí',t:'15/08'},{s:'approved',who:'Tường Vi',t:'16/08'},{s:'issued',who:'Thành Trí',t:'20/08'}]},
+  {code:'HD-2026-003', title:'Hợp đồng dịch vụ đào tạo nội bộ', client:'Startup Vườn Ươm', contact:'Đỗ Hải Yến', tpl:'Dịch vụ tư vấn', amount:28000000, status:'issued', owner:'Minh Khánh', updated:'2 tuần trước', date:'10/08/2026', term:'1 tháng',
+    items:[['4 buổi đào tạo',4,7000000]],
+    flow:[{s:'created',who:'Minh Khánh',t:'05/08'},{s:'pending',who:'Minh Khánh',t:'05/08'},{s:'approved',who:'Tường Vi',t:'06/08'},{s:'issued',who:'Minh Khánh',t:'10/08'}]},
+  {code:'HD-2026-002', title:'Hợp đồng cung cấp phần mềm kế toán', client:'Công ty CP Thảo Nguyên', contact:'Trần Thị Hằng', tpl:'Cung cấp phần mềm', amount:0, status:'draft', owner:'Tường Vi', updated:'2 tuần trước', date:'—', term:'12 tháng',
+    items:[['License (đang chốt cấu hình)','—','—']],
+    flow:[{s:'created',who:'Tường Vi',t:'01/08'}]},
+];
+
+const STATUS = {
+  draft:   {label:'Nháp',        cls:'b-draft'},
+  pending: {label:'Chờ duyệt',   cls:'b-pending'},
+  approved:{label:'Đã duyệt',    cls:'b-approved'},
+  issued:  {label:'Đã phát hành',cls:'b-issued'},
+  rejected:{label:'Từ chối',     cls:'b-rejected'},
+};
+const FLOWLABEL = {created:'Tạo hợp đồng', pending:'Gửi duyệt', approved:'Đã duyệt', issued:'Đã phát hành', rejected:'Từ chối'};
+
+// ── Extra data for the sub-pages ───────────────────────────────
+const TEMPLATES = [
+  {name:'Dịch vụ tư vấn', ic:'📄', fields:['Khách hàng','Phí tư vấn','Thời hạn','Phạm vi công việc'], flow:['Nhân viên tạo','Quản lý duyệt','Phát hành'], used:4, terms:'Thanh toán 50/50 · phạt chậm 0.05%/ngày',
+    fieldSpec:[['Tên khách hàng','text',1],['Người đại diện','text',1],['Phí tư vấn','tiền',1],['Thời hạn hợp đồng','số tháng',1],['Phạm vi công việc','đoạn văn',1],['Ngày hiệu lực','ngày',0]],
+    defaultItems:[['Phí tư vấn triển khai',1,0],['Chi phí đi lại (ước tính)',1,0]],
+    termList:['Thanh toán 50% khi ký, 50% khi nghiệm thu.','Phạt chậm thanh toán 0,05%/ngày trên số tiền chậm.','Bảo mật thông tin hai chiều trong suốt thời hạn hợp đồng.','Tranh chấp giải quyết tại Toà án nơi Bên A đặt trụ sở.']},
+  {name:'Cung cấp phần mềm', ic:'💻', fields:['Khách hàng','License','Số người dùng','Triển khai','Bảo hành'], flow:['Nhân viên tạo','Quản lý duyệt','Phát hành'], used:4, terms:'License năm 1 · gia hạn theo báo giá · SLA 99.5%',
+    fieldSpec:[['Tên khách hàng','text',1],['Gói license','chọn',1],['Số người dùng','số',1],['Chi phí triển khai','tiền',1],['Thời hạn bảo hành','số tháng',1],['SLA cam kết','%',0]],
+    defaultItems:[['License phần mềm (năm 1)',1,0],['Triển khai & đào tạo',1,0]],
+    termList:['License có hiệu lực 12 tháng kể từ ngày phát hành.','Gia hạn theo báo giá tại thời điểm gia hạn.','Cam kết SLA uptime 99,5%/tháng.','Hỗ trợ kỹ thuật trong giờ hành chính.']},
+  {name:'Thi công lắp đặt', ic:'🔧', fields:['Khách hàng','Vật tư','Nhân công','Nghiệm thu','Bảo hành'], flow:['Nhân viên tạo','Quản lý duyệt','Phát hành'], used:2, terms:'Tạm ứng 30% · nghiệm thu theo giai đoạn',
+    fieldSpec:[['Tên khách hàng','text',1],['Hạng mục vật tư','đoạn văn',1],['Chi phí nhân công','tiền',1],['Mốc nghiệm thu','đoạn văn',1],['Thời hạn bảo hành','số tháng',1]],
+    defaultItems:[['Vật tư thiết bị',1,0],['Nhân công lắp đặt',1,0]],
+    termList:['Tạm ứng 30% giá trị hợp đồng khi ký.','Nghiệm thu và thanh toán theo từng giai đoạn.','Bảo hành công trình 12 tháng.','Bên B chịu trách nhiệm an toàn lao động.']},
+  {name:'Hợp tác đại lý', ic:'🤝', fields:['Đại lý','Chiết khấu','Cam kết doanh số','Khu vực'], flow:['Nhân viên tạo','Quản lý duyệt','Giám đốc duyệt','Phát hành'], used:2, terms:'Chiết khấu bậc thang · độc quyền khu vực',
+    fieldSpec:[['Tên đại lý','text',1],['Mức chiết khấu','%',1],['Cam kết doanh số/quý','tiền',1],['Khu vực độc quyền','text',1]],
+    defaultItems:[['Chiết khấu đại lý','—','%'],['Cam kết doanh số / quý',1,0]],
+    termList:['Chiết khấu bậc thang theo doanh số quý.','Độc quyền phân phối trong khu vực chỉ định.','Cam kết doanh số tối thiểu mỗi quý.','Chấm dứt nếu không đạt cam kết 2 quý liên tiếp.']},
+];
+const CUSTOMERS = [
+  {name:'Công ty TNHH Minh Phát', contact:'Nguyễn Văn Hùng', tax:'0312xxxxxx', phone:'0901 234 567', count:3, value:124000000},
+  {name:'Công ty CP Thảo Nguyên', contact:'Trần Thị Hằng', tax:'0313xxxxxx', phone:'0902 345 678', count:3, value:241000000},
+  {name:'Khách sạn Biển Xanh', contact:'Lê Quốc Bảo', tax:'0314xxxxxx', phone:'0903 456 789', count:2, value:338000000},
+  {name:'Cửa hàng Tân Phát', contact:'Phạm Đức Anh', tax:'0315xxxxxx', phone:'0904 567 890', count:2, value:0},
+  {name:'Startup Vườn Ươm', contact:'Đỗ Hải Yến', tax:'0316xxxxxx', phone:'0905 678 901', count:2, value:82000000},
+  {name:'Trường Mầm non Hoa Sen', contact:'Vũ Thị Ngọc', tax:'0317xxxxxx', phone:'0906 789 012', count:1, value:42000000},
+];
+const ROLES = [
+  {key:'admin', label:'Giám đốc', dot:'#A63A3A'},
+  {key:'manager', label:'Quản lý', dot:'#2C5FD6'},
+  {key:'staff', label:'Nhân viên', dot:'#6A4BB5'},
+];
+const PERMS = [
+  {label:'Xem hợp đồng', code:'contract:read', admin:1, manager:1, staff:1},
+  {label:'Tạo & sửa nháp', code:'contract:write', admin:1, manager:1, staff:1},
+  {label:'Gửi duyệt', code:'contract:submit', admin:1, manager:1, staff:1},
+  {label:'Duyệt / từ chối', code:'contract:approve', admin:1, manager:1, staff:0},
+  {label:'Phát hành', code:'contract:issue', admin:1, manager:1, staff:0},
+  {label:'Quản lý mẫu', code:'template:write', admin:1, manager:0, staff:0},
+  {label:'Quản lý người dùng', code:'user:write', admin:1, manager:0, staff:0},
+  {label:'Xem nhật ký', code:'audit:read', admin:1, manager:1, staff:0},
+];
+const AUDIT = [
+  {ev:'contract.issued', ic:'📤', bg:'var(--st-issued-bg)', who:'Tường Vi', line:'phát hành <b>HD-2026-012</b> · Cung cấp phần mềm quản lý kho', t:'Hôm nay 09:12', ip:'ip 118.69.x.x'},
+  {ev:'contract.submitted', ic:'📨', bg:'var(--st-pending-bg)', who:'Minh Khánh', line:'gửi duyệt <b>HD-2026-007</b> · Dịch vụ tư vấn triển khai', t:'Hôm nay 08:40', ip:'ip 118.69.x.x'},
+  {ev:'contract.created', ic:'✏️', bg:'var(--bg-hover)', who:'Minh Khánh', line:'tạo <b>HD-2026-007</b> từ mẫu "Dịch vụ tư vấn"', t:'Hôm nay 08:20', ip:'ip 118.69.x.x'},
+  {ev:'contract.approved', ic:'✓', bg:'var(--st-approved-bg)', who:'Tường Vi', line:'duyệt <b>HD-2026-009</b> · Bảo trì định kỳ', t:'Hôm qua 14:02', ip:'ip 118.69.x.x'},
+  {ev:'auth.login', ic:'🔑', bg:'var(--bg-hover)', who:'Thành Trí', line:'đăng nhập thành công', t:'Hôm qua 11:48', ip:'ip 27.72.x.x'},
+  {ev:'contract.rejected', ic:'✕', bg:'var(--st-rejected-bg)', who:'Tường Vi', line:'từ chối <b>HD-2026-006</b> · "Giá thấp hơn sàn"', t:'4 ngày trước', ip:'ip 118.69.x.x'},
+  {ev:'permission.denied', ic:'🔒', bg:'var(--st-rejected-bg)', who:'Minh Khánh', line:'bị chặn: thử duyệt <b>HD-2026-011</b> (thiếu quyền <code>contract:approve</code>)', t:'4 ngày trước', ip:'ip 27.72.x.x'},
+  {ev:'template.updated', ic:'📄', bg:'var(--accent-soft)', who:'Tường Vi', line:'cập nhật mẫu "Hợp tác đại lý" · thêm bước Giám đốc duyệt', t:'1 tuần trước', ip:'ip 118.69.x.x'},
+];
+
+// ── Render table ───────────────────────────────────────────────
+function badge(s){const st=STATUS[s];return `<span class="badge ${st.cls}">${st.label}</span>`}
+function esc(s){return String(s)}
+function rolePermsText(rk){return PERMS.filter(p=>p[rk]).length}
+
+const TOPBARS = {
+  contracts:{title:'Hợp đồng', sub:'12 hợp đồng · 3 đang chờ duyệt', search:'Tìm theo tên, khách, mã…', cta:'Tạo hợp đồng', ctaFn:'openGen()'},
+  templates:{title:'Mẫu hợp đồng', sub:'4 mẫu · dùng cho mọi hợp đồng mới', search:'Tìm mẫu…', cta:'Tạo mẫu', ctaFn:''},
+  queue:{title:'Chờ tôi duyệt', sub:'3 hợp đồng đang chờ bạn duyệt', search:'', cta:'', ctaFn:''},
+  customers:{title:'Khách hàng', sub:'6 khách · liên kết với hợp đồng', search:'Tìm khách…', cta:'Thêm khách', ctaFn:''},
+  roles:{title:'Phân quyền', sub:'3 vai · quyền theo vai (RBAC)', search:'', cta:'', ctaFn:''},
+  audit:{title:'Nhật ký', sub:'Mọi thay đổi quan trọng đều được ghi lại', search:'Lọc sự kiện…', cta:'', ctaFn:''},
+};
+
+function renderTopbar(view){
+  const t = TOPBARS[view];
+  document.getElementById('topbar').innerHTML = `
+    <div>
+      <div class="page-title">${t.title}</div>
+      <div class="page-sub">${t.sub}</div>
+    </div>
+    <div class="spacer"></div>
+    ${t.search?`<div class="search">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-faint)" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+      <input placeholder="${t.search}"></div>`:''}
+    ${t.cta?`<button class="btn btn-primary" ${t.ctaFn?`onclick="${t.ctaFn}"`:''}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>
+      ${t.cta}</button>`:''}`;
+}
+
+// ── VIEWS ──────────────────────────────────────────────────────
+function viewContracts(){
+  return `
+  <div class="toolbar">
+    <button class="tab active">Tất cả <span class="count">12</span></button>
+    <button class="tab">Nháp <span class="count">2</span></button>
+    <button class="tab">Chờ duyệt <span class="count">3</span></button>
+    <button class="tab">Đã duyệt <span class="count">2</span></button>
+    <button class="tab">Đã phát hành <span class="count">4</span></button>
+    <button class="tab">Từ chối <span class="count">1</span></button>
+    <div class="spacer"></div>
+    <button class="tab">Mẫu: Tất cả ▾</button>
+  </div>
+  <div class="scroll">
+    <table class="table">
+      <thead><tr>
+        <th>Mã</th><th>Hợp đồng</th><th>Khách hàng</th>
+        <th class="right">Giá trị</th><th>Trạng thái</th><th>Người tạo</th><th>Cập nhật</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>`;
+}
+function renderRows(){
+  const el = document.getElementById('rows'); if(!el) return;
+  el.innerHTML = CONTRACTS.map((c,i)=>`
+    <tr onclick="openDrawer(${i})">
+      <td class="c-code">${c.code}</td>
+      <td class="c-title">${c.title}</td>
+      <td class="c-client">${c.client}</td>
+      <td class="right c-amount">${c.amount ? money(c.amount) : '—'}</td>
+      <td>${badge(c.status)}</td>
+      <td class="c-meta">${c.owner}</td>
+      <td class="c-meta">${c.updated}</td>
+    </tr>`).join('');
+}
+
+function viewTemplates(){
+  return `
+  <div class="view-lead">Mỗi mẫu quy định trước các trường cần điền, hạng mục mặc định, điều khoản và <b>luồng duyệt</b>. Khi tạo hợp đồng, hệ thống dựng sẵn theo mẫu — chỉ điền phần riêng.</div>
+  <div class="section-grid grid-2">
+    ${TEMPLATES.map((t,i)=>`
+      <div class="card click" onclick="openTemplate(${i})">
+        <div class="card-head">
+          <div class="card-ic" style="font-size:18px">${t.ic}</div>
+          <div>
+            <div class="card-title">${t.name}</div>
+            <div class="card-sub">${t.terms}</div>
+          </div>
+          <div class="card-meta">${t.used} hợp đồng<br>đang dùng</div>
+        </div>
+        <div class="card-sub" style="font-weight:600;color:var(--text)">Trường cần điền</div>
+        <div class="chips">${t.fields.map(f=>`<span class="chip">${f}</span>`).join('')}</div>
+        <div class="card-sub" style="font-weight:600;color:var(--text);margin-top:var(--s3)">Luồng duyệt</div>
+        <div class="flow-pills">${t.flow.map((s,i)=>`${i?'<span class="flow-arrow">→</span>':''}<span class="flow-pill">${s}</span>`).join('')}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function viewQueue(){
+  const pend = CONTRACTS.map((c,i)=>({c,i})).filter(x=>x.c.status==='pending');
+  const canApprove = CURRENT_ROLE==='manager';
+  return `
+  ${canApprove
+    ? `<div class="callout"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l5 2.5v3c0 3-2 5-5 6-3-1-5-3-5-6v-3L8 2z"/><path d="M6 8l1.5 1.5L10.5 6.5"/></svg>
+        <div><div class="callout-t">Bạn là Quản lý — có quyền duyệt</div><div class="callout-p">3 hợp đồng đang chờ. Bấm vào từng cái để xem chi tiết và duyệt.</div></div></div>`
+    : `<div class="callout" style="background:var(--st-rejected-bg);border-color:var(--danger-border)"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="var(--danger)" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>
+        <div><div class="callout-t" style="color:var(--danger)">Bạn là Nhân viên — không có quyền duyệt</div><div class="callout-p">Bạn thấy hàng chờ nhưng không thể duyệt. Chỉ Quản lý mới có quyền <code style="font-family:var(--mono)">contract:approve</code>.</div></div></div>`}
+  <div class="scroll" style="padding-top:0">
+    <table class="table">
+      <thead><tr><th>Mã</th><th>Hợp đồng</th><th>Khách hàng</th><th class="right">Giá trị</th><th>Người gửi</th><th></th></tr></thead>
+      <tbody>${pend.map(x=>`
+        <tr onclick="openDrawer(${x.i})">
+          <td class="c-code">${x.c.code}</td>
+          <td class="c-title">${x.c.title}</td>
+          <td class="c-client">${x.c.client}</td>
+          <td class="right c-amount">${x.c.amount?money(x.c.amount):'—'}</td>
+          <td class="c-meta">${x.c.owner}</td>
+          <td class="right">${canApprove?'<span class="badge b-approved" style="cursor:pointer">Duyệt →</span>':'<span class="c-meta">🔒</span>'}</td>
+        </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+function viewCustomers(){
+  return `
+  <div class="section-grid grid-3">
+    ${CUSTOMERS.map(c=>`
+      <div class="card click">
+        <div class="card-head">
+          <div class="card-ic">${c.name.replace(/^(Công ty |Cửa hàng |Khách sạn |Trường )/,'').slice(0,2).toUpperCase()}</div>
+          <div><div class="card-title">${c.name}</div><div class="card-sub">${c.contact}</div></div>
+        </div>
+        <div class="card-sub">MST ${c.tax} · ${c.phone}</div>
+        <div class="card-stat">
+          <div><b>${c.count}</b><span>hợp đồng</span></div>
+          <div><b>${c.value?money(c.value):'—'}</b><span>tổng giá trị</span></div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function viewRoles(){
+  return `
+  <div class="role-legend">
+    ${ROLES.map(r=>`<div class="role-card"><span class="role-dot" style="background:${r.dot}"></span>${r.label} <span class="c-meta">· ${rolePermsText(r.key)} quyền</span></div>`).join('')}
+  </div>
+  <div class="callout"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l5 2.5v3c0 3-2 5-5 6-3-1-5-3-5-6v-3L8 2z"/></svg>
+    <div><div class="callout-t">Quyền đi theo vai, không theo người</div>
+    <div class="callout-p">Nhân viên nghỉ việc → khoá tài khoản là mất sạch quyền. Không ai "quên gỡ quyền". Đây là phần đã dựng sẵn trong nền — bạn chỉ khai báo vai, không tự viết lại cơ chế.</div></div></div>
+  <div class="section-grid" style="padding-top:0">
+    <table class="matrix">
+      <thead><tr><th>Quyền</th>${ROLES.map(r=>`<th class="role-col">${r.label}</th>`).join('')}</tr></thead>
+      <tbody>${PERMS.map(p=>`
+        <tr><td class="perm">${p.label}<code>${p.code}</code></td>
+        ${ROLES.map(r=>`<td class="cell">${p[r.key]?'<span class="yes">●</span>':'<span class="no">○</span>'}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function viewAudit(){
+  return `
+  <div class="view-lead">Mọi hành động quan trọng — tạo, gửi, duyệt, từ chối, phát hành, đăng nhập, bị chặn quyền — đều ghi lại kèm người thực hiện, thời gian và IP. Ghi ở tầng nền, không sửa được.</div>
+  <div class="audit-list">
+    ${AUDIT.map(a=>`
+      <div class="audit-row">
+        <div class="audit-ic" style="background:${a.bg}">${a.ic}</div>
+        <div class="audit-main">
+          <div class="audit-line"><b>${a.who}</b> ${a.line}</div>
+          <div class="audit-sub">${a.ip}</div>
+        </div>
+        <span class="audit-event">${a.ev}</span>
+        <span class="audit-time">${a.t}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── Router ─────────────────────────────────────────────────────
+const VIEWS = {contracts:viewContracts, templates:viewTemplates, queue:viewQueue, customers:viewCustomers, roles:viewRoles, audit:viewAudit};
+let CUR_VIEW = 'contracts';
+function go(view){
+  CUR_VIEW = view;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  renderTopbar(view);
+  document.getElementById('viewbody').innerHTML = VIEWS[view]();
+  if(view==='contracts') renderRows();
+  document.querySelector('.main').scrollTop = 0;
+}
+go('contracts');
+
+// ── Drawer ─────────────────────────────────────────────────────
+// current user = Quản lý (can approve). Toggling role reveals the RBAC gate.
+let CURRENT_ROLE = 'manager'; // 'manager' | 'staff'
+let curContract = 0;
+function openDrawer(i){
+  restoreContractDrawer();
+  curContract = i;
+  const c = CONTRACTS[i];
+  document.getElementById('drCode').textContent = c.code;
+  document.getElementById('drBadge').className = 'badge '+STATUS[c.status].cls;
+  document.getElementById('drBadge').textContent = STATUS[c.status].label;
+  document.getElementById('drTitle').textContent = c.title;
+  document.getElementById('drClient').textContent = c.client + ' · ' + c.contact;
+  document.getElementById('drTpl').textContent = c.tpl;
+  document.getElementById('drDate').textContent = c.date;
+  document.getElementById('drTerm').textContent = c.term;
+  document.getElementById('drOwner').textContent = c.owner;
+  document.getElementById('drItems').innerHTML = c.items.map(it=>`
+    <tr><td>${it[0]}</td><td class="num">${it[1]}</td>
+    <td class="num">${typeof it[2]==='number'?money(it[2]):it[2]}</td>
+    <td class="num">${typeof it[2]==='number'?money((it[1]||1)*it[2]):it[2]}</td></tr>`).join('');
+  document.getElementById('drTotal').textContent = c.amount ? money(c.amount) : '—';
+
+  // timeline
+  const cur = c.status;
+  document.getElementById('drTimeline').innerHTML = c.flow.map((f,idx)=>{
+    let cls = 'done';
+    if(f.s==='rejected') cls='rej';
+    else if(idx===c.flow.length-1 && (cur==='pending'||cur==='draft')) cls='cur';
+    return `<div class="tl-item ${cls}">
+      <div class="tl-line">${FLOWLABEL[f.s]}</div>
+      <div class="tl-meta">${f.who} · ${f.t}</div>
+      ${f.note?`<div class="tl-note">"${f.note}"</div>`:''}
+    </div>`;
+  }).join('');
+
+  // role-gated footer — the RUNWAY payoff, visible
+  const foot = document.getElementById('drFoot');
+  if(c.status==='pending'){
+    if(CURRENT_ROLE==='manager'){
+      foot.innerHTML = `<button class="btn btn-approve" onclick="closeDrawer()">✓ Duyệt</button>
+        <button class="btn btn-reject" onclick="closeDrawer()">Từ chối</button>
+        <span class="gate-note" style="margin-left:auto">Bạn là <b>Quản lý</b> — được duyệt</span>`;
+    } else {
+      foot.innerHTML = `<span class="gate-note">🔒 Chỉ <b>Quản lý</b> mới duyệt được. Bạn là Nhân viên — chỉ tạo & gửi.</span>`;
+    }
+  } else if(c.status==='approved'){
+    foot.innerHTML = `<button class="btn btn-issue" onclick="closeDrawer()">Phát hành hợp đồng →</button>
+      <span class="gate-note" style="margin-left:auto">Đã duyệt · sẵn sàng phát hành</span>`;
+  } else if(c.status==='draft'){
+    foot.innerHTML = `<button class="btn btn-primary" onclick="closeDrawer()">Gửi duyệt →</button>
+      <span class="gate-note" style="margin-left:auto">Bản nháp của ${c.owner}</span>`;
+  } else {
+    foot.innerHTML = `<span class="gate-note">${STATUS[c.status].label} · ${c.updated}</span>`;
+  }
+
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('scrim').classList.add('open');
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('scrim').classList.remove('open');
+  restoreContractDrawer();
+}
+
+// The drawer's inner markup gets rewritten by template detail; keep a copy to restore.
+const CONTRACT_DRAWER_HTML = document.getElementById('drawer').innerHTML;
+let drawerMode = 'contract';
+function restoreContractDrawer(){
+  if(drawerMode!=='contract'){
+    document.getElementById('drawer').innerHTML = CONTRACT_DRAWER_HTML;
+    drawerMode = 'contract';
+  }
+}
+
+// ── (a) TEMPLATE DETAIL — opens in the drawer ──────────────────
+function openTemplate(i){
+  const t = TEMPLATES[i];
+  const canEdit = CURRENT_ROLE==='manager'; // template:write is admin-only really, but show manager as read
+  document.getElementById('drawer').innerHTML = `
+    <button class="dr-close" onclick="closeDrawer()">✕</button>
+    <div class="dr-head">
+      <div class="dr-eyebrow"><span class="dr-code">MẪU · ${t.used} đang dùng</span></div>
+      <div class="dr-title">${t.ic} ${t.name}</div>
+      <div class="dr-client">${t.terms}</div>
+    </div>
+    <div class="dr-body">
+      <div class="dr-section">
+        <h4>Trường cần điền khi tạo hợp đồng</h4>
+        ${t.fieldSpec.map(f=>`
+          <div class="tpl-field-row">
+            <div class="tpl-field-name">${f[0]}${f[2]?'<span class="tpl-req">*</span>':''}</div>
+            <span class="tpl-field-type">${f[1]}</span>
+          </div>`).join('')}
+        <div class="card-sub" style="margin-top:6px">Trường có dấu <span style="color:var(--danger)">*</span> là bắt buộc.</div>
+      </div>
+      <div class="dr-section">
+        <h4>Hạng mục mặc định</h4>
+        <table class="li-table">
+          <thead><tr><th>Hạng mục</th><th class="num">SL</th><th class="num">Đơn giá</th></tr></thead>
+          <tbody>${t.defaultItems.map(it=>`<tr><td>${it[0]}</td><td class="num">${it[1]}</td><td class="num">${it[2]===0?'điền khi tạo':it[2]}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div class="dr-section">
+        <h4>Điều khoản mặc định</h4>
+        <div class="terms-box"><ol>${t.termList.map(x=>`<li>${x}</li>`).join('')}</ol></div>
+      </div>
+      <div class="dr-section">
+        <h4>Luồng duyệt</h4>
+        <div class="flow-pills">${t.flow.map((s,k)=>`${k?'<span class="flow-arrow">→</span>':''}<span class="flow-pill">${s}</span>`).join('')}</div>
+      </div>
+    </div>
+    <div class="dr-foot">
+      <button class="btn btn-primary" onclick="closeDrawer();openGen(${i})">Tạo hợp đồng từ mẫu này →</button>
+      ${canEdit
+        ? `<span class="gate-note" style="margin-left:auto">✎ Sửa mẫu (chỉ Giám đốc)</span>`
+        : `<span class="gate-note" style="margin-left:auto">🔒 Chỉ Giám đốc sửa được mẫu</span>`}
+    </div>`;
+  drawerMode = 'template';
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('scrim').classList.add('open');
+}
+
+// ── (b) DOCUMENT PREVIEW — the filled contract as paper ────────
+function openDoc(i){
+  const c = CONTRACTS[i];
+  const today = c.date && c.date!=='—' ? c.date : new Date().toLocaleDateString('vi-VN');
+  const isDraft = c.status==='draft' || c.status==='pending';
+  const rows = c.items.map(it=>{
+    const amt = typeof it[2]==='number' ? (it[1]||1)*it[2] : it[2];
+    return `<tr><td>${it[0]}</td><td class="n">${it[1]}</td>
+      <td class="n">${typeof it[2]==='number'?money(it[2]):it[2]}</td>
+      <td class="n">${typeof amt==='number'?money(amt):amt}</td></tr>`;
+  }).join('');
+  document.getElementById('docPaper').innerHTML = `
+    <div class="doc-watermark">${isDraft?'BẢN NHÁP · chưa phát hành':'HD đã phát hành'}</div>
+    <div class="doc-gov"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b></div>
+    <div class="doc-motto"><u>Độc lập – Tự do – Hạnh phúc</u></div>
+    <div class="doc-h1">HỢP ĐỒNG ${c.tpl.toUpperCase()}</div>
+    <div class="doc-code">Số: ${c.code}</div>
+    <div class="doc-body">
+      <p class="doc-legal-ref">Căn cứ Bộ luật Dân sự và Luật Thương mại hiện hành; căn cứ nhu cầu và khả năng của hai bên,</p>
+      <p>Hôm nay, ngày ${today}, tại trụ sở Bên A, hai bên gồm:</p>
+      <div class="doc-party">
+        <div class="lbl">BÊN A (Bên cung cấp): CÔNG TY CỦA BẠN</div>
+        <div class="line"><span class="k">Người đại diện:</span> <span>Bà Tường Vi — Giám đốc</span></div>
+        <div class="line"><span class="k">Mã số thuế:</span> <span>0300xxxxxx</span></div>
+      </div>
+      <div class="doc-party">
+        <div class="lbl">BÊN B (Khách hàng): ${c.client.toUpperCase()}</div>
+        <div class="line"><span class="k">Người đại diện:</span> <span>${c.contact}</span></div>
+        <div class="line"><span class="k">Điện thoại:</span> <span>${(CUSTOMERS.find(x=>x.name===c.client)||{}).phone||'—'}</span></div>
+      </div>
+      <p>Hai bên thống nhất ký kết hợp đồng với các điều khoản sau:</p>
+
+      <div class="doc-art">Điều 1. Nội dung &amp; giá trị hợp đồng</div>
+      <table class="doc-table">
+        <thead><tr><th>Hạng mục</th><th class="n">SL</th><th class="n">Đơn giá</th><th class="n">Thành tiền</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3">TỔNG GIÁ TRỊ HỢP ĐỒNG (đã gồm VAT)</td><td class="n">${c.amount?money(c.amount):'— (theo phụ lục)'}</td></tr></tfoot>
+      </table>
+
+      <div class="doc-art">Điều 2. Thời hạn &amp; hiệu lực</div>
+      <p>Hợp đồng có thời hạn <b>${c.term}</b>, hiệu lực kể từ ngày ${today}.</p>
+
+      <div class="doc-art">Điều 3. Điều khoản chung</div>
+      <div style="padding-left:0"><ol style="margin:0;padding-left:22px">${(TEMPLATES.find(t=>t.name===c.tpl)||{termList:[]}).termList.map(x=>`<li style="margin-bottom:6px">${x}</li>`).join('')}</ol></div>
+
+      <div class="doc-sign">
+        <div class="col">
+          <div class="role">ĐẠI DIỆN BÊN A</div>
+          <div class="hint">(Ký, ghi rõ họ tên)</div>
+          <div class="nm">Tường Vi</div>
+        </div>
+        <div class="col">
+          <div class="role">ĐẠI DIỆN BÊN B</div>
+          <div class="hint">(Ký, ghi rõ họ tên)</div>
+          <div class="nm">${c.contact}</div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('docScrim').classList.add('open');
+}
+function closeDoc(){ document.getElementById('docScrim').classList.remove('open'); }
+
+// ── Role toggle (click the role pill to demo the RBAC gate) ────
+document.getElementById('rolePill').style.cursor='pointer';
+document.getElementById('rolePill').title='Bấm để đổi vai (demo phân quyền)';
+document.getElementById('rolePill').onclick=function(){
+  CURRENT_ROLE = CURRENT_ROLE==='manager' ? 'staff' : 'manager';
+  const isMgr = CURRENT_ROLE==='manager';
+  this.textContent = isMgr ? 'Quản lý' : 'Nhân viên';
+  this.style.background = isMgr ? 'var(--accent-soft)' : '#EFEAFB';
+  this.style.borderColor = isMgr ? 'var(--accent-border)' : '#D9CCF2';
+  this.style.color = isMgr ? 'var(--accent)' : '#6A4BB5';
+  document.querySelector('.user-name').textContent = isMgr ? 'Tường Vi' : 'Minh Khánh';
+  document.querySelector('.user-role').textContent = isMgr ? 'tuongvi@congty.vn' : 'minhkhanh@congty.vn';
+  document.querySelector('.avatar').textContent = isMgr ? 'TV' : 'MK';
+  document.querySelector('.avatar').style.background = isMgr ? '#6A4BB5' : '#1F5FA8';
+  closeDrawer();
+  go(CUR_VIEW); // re-render current view so queue/roles react to the role live
+};
+
+// ── Generate modal ─────────────────────────────────────────────
+function openGen(tplIndex){
+  if(typeof tplIndex==='number'){
+    document.getElementById('genTpl').value = TEMPLATES[tplIndex].name;
+    document.getElementById('genTpl').dispatchEvent(new Event('change'));
+  }
+  document.getElementById('genModal').classList.add('open');
+}
+function closeGen(){document.getElementById('genModal').classList.remove('open')}
+document.getElementById('genTpl').onchange=function(){
+  document.getElementById('genPreview').textContent =
+    `Sẽ tạo: HD-2026-013 · ${this.value} · trạng thái NHÁP → gửi duyệt`;
+};
+// "Tạo & gửi duyệt" → build a fresh draft contract, show it as a document (the wow)
+function genSubmit(){
+  const tplName = document.getElementById('genTpl').value;
+  const client = document.getElementById('genClient').value;
+  const amountStr = document.getElementById('genAmount').value;
+  const amount = parseInt(amountStr.replace(/[^\d]/g,''))||0;
+  const tpl = TEMPLATES.find(t=>t.name===tplName)||TEMPLATES[0];
+  const cust = CUSTOMERS.find(x=>x.name===client);
+  const draft = {
+    code:'HD-2026-014', title:`Hợp đồng ${tplName.toLowerCase()}`, client, contact:cust?cust.contact:'(đại diện khách)',
+    tpl:tplName, amount, status:'draft', owner: CURRENT_ROLE==='manager'?'Tường Vi':'Minh Khánh',
+    updated:'Vừa xong', date:'—', term:'12 tháng',
+    items: tpl.defaultItems.map(it=>[it[0], it[1]===0?1:it[1], typeof it[2]==='number'&&it[2]===0 ? Math.round(amount*0.9) : it[2]]),
+  };
+  CONTRACTS.unshift(draft);
+  closeGen();
+  curContract = 0;
+  openDoc(0); // show the freshly generated document
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDoc();closeDrawer();closeGen();}});
+</script>
+</body>
+</html>
