@@ -15,7 +15,8 @@ provides:
   - "events: document.created, document.submitted"
   - "events: document.approved, document.rejected"
   - "events: document.issued, document.voided"
-status: draft
+status: proven
+proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-claude projects/tw-baogia-workshop/rehearsal): 196 API tests, all 8 §7 probes with real output"
 ---
 
 <!-- This is a WORKBOOK — one recipe of the AI App Cookbook, in the Workbook System format (see FRAMEWORK.md). The human attaches this file to Claude Code and says "build this workbook." Everything below §1 is Claude's contract, not learner reading. -->
