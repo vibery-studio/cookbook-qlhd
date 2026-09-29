@@ -1,6 +1,6 @@
 ---
 workbook: documents
-version: "1.0"
+version: "1.1"
 kind: feature
 risk: high
 requires: []
@@ -16,7 +16,7 @@ provides:
   - "events: document.approved, document.rejected"
   - "events: document.issued, document.voided"
 status: proven
-proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-claude projects/tw-baogia-workshop/rehearsal): 196 API tests, all 8 §7 probes with real output"
+proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-claude projects/tw-baogia-workshop/rehearsal): 196 API tests, all 8 §7 probes with real output · v1.1 adds the no-eligible-approver rule (I9) — not yet rehearsed"
 ---
 
 <!-- This is a WORKBOOK — one recipe of the AI App Cookbook, in the Workbook System format (see FRAMEWORK.md). The human attaches this file to Claude Code and says "build this workbook." Everything below §1 is Claude's contract, not learner reading. -->
@@ -59,6 +59,7 @@ proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-cla
 - **I6 (issued is immutable):** an issued document is never edited. A wrong document is VOIDED (it keeps its number, marked void, with a reason) and a replacement is generated, which gets a NEW number.
 - **I7 (every move is signed for):** each status change writes exactly one audit row (actor, from → to, number if any, time) in the SAME atomic write as the change — a move without its row cannot exist.
 - **I8 (a double-click is one document):** create and every status action accept an idempotency key; replaying the same request returns the original result, never a second document or a second number.
+- **I9 (every step has someone who can take it):** a document is submitted only if EVERY step of its approval policy has at least one active approver who is NOT the creator (holds the step's permission, and its role if the step names one). Otherwise submit is refused BEFORE anything becomes pending, naming the step and why ("Bước 'Giám đốc duyệt' không có ai khác duyệt được — người tạo không tự duyệt"). A document never waits forever in Chờ duyệt for an approver who cannot exist.
 
 **Out of scope (do not build, even if tempting):** e-signature · sending the document by email/Zalo (the `email` workbook listens for `document.issued`) · marking a payment request PAID / bank reconciliation (the `payments` workbook owns money confirmation — see §2c) · a WYSIWYG template designer (templates are edited as HTML/markdown with placeholders) · tax-authority e-invoice submission (this workbook's "invoice" is a commercial document) · the customer/deal model itself (the `crm` workbook, or the minimal subject stub in §8).
 
@@ -116,6 +117,7 @@ proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-cla
 | Price source | price list by document date / typed by staff | price list whenever one exists ("Không tự gõ giá"); typed prices only for truly bespoke work (then it's a `manual` merge field, and the human decides whether it needs approval) | **price list effective on the document date** |
 | Who sees which documents | team-wide read / own only | team-wide for a small sales team working one library (the workshop app lists everyone's contracts); own-only when documents carry data colleagues must not see | **team-wide read; drafts editable by their creator only** |
 | After a rejection | terminal + "copy into a new draft" / reopen the same document to draft | terminal keeps the rejection note attached to exactly what was rejected; reopen is simpler but blurs the history | **terminal + copy** — *proposed default, no source rule; the human decides* |
+| A step only the creator could take (e.g. Giám đốc creates a "Hợp tác đại lý" whose last step is Giám đốc, and there is one Giám đốc) | refuse at submit, naming the step / a second holder of that role / a named deputy per step / solo-owner self-approval (audited `self_approved`) | refuse at submit always (I9) — then the human picks the fix: another person creates it, a second person gets the role, or a deputy is named for that step; self-approval only for a one-person business (see "Who may approve") | **refuse at submit with a Vietnamese message naming the step + the ways out** — *proposed default; confirm at the gate* |
 
 Claude states each of these at the §3 gate with its default and asks the human to confirm or change — none is guessed silently. For the workshop contract app, the confirmed set is: number at issue · per type + year · fixed steps per template (3 steps; 4 for "Hợp tác đại lý") · two actions · strict · each on its own · void + replacement · new version, drafts pinned · printable HTML · integer đồng · price entered per line (the workshop app has no price list; prices are `manual` fields and every contract goes through approval anyway) · team-wide read · terminal + copy.
 
@@ -126,6 +128,7 @@ Claude states each of these at the §3 gate with its default and asks the human 
 - **Filling a missing field with a guess** → a real naive build, missing the signer's title, printed "Chủ cửa hàng" on the contract — a legal paper stating a fact nobody recorded. A required field with no value STOPS generation and names the field (`chuc_vu_nguoi_ky`); the human adds the data, then regenerates (I3). *(source: naive-build-demo/REPORT.md probe 9b; ANSWER-KEY §5.8 row "Dừng: thiếu chuc_vu_nguoi_ky")*
 - **The creator confirms their own money** → in the same naive build, a salesperson called `POST /documents/3/paid` on their own payment request: customer flipped to Chốt, revenue +2.565.000, no role check. Any action that approves, issues, or confirms money is permission-gated AND refused for the document's creator (I5); marking paid belongs to the `payments` workbook under the same rule. *(source: naive-build-demo/REPORT.md probe 9a)*
 - **Inheriting approval down the chain** → "the quote was approved, so the contract is too" lets a 15% discount reach a signed contract without the director seeing the contract. Each document is approved on its own (I5). *(source: ANSWER-KEY §5.8 "an approved quote does not approve the contract made from it")*
+- **A step nobody can take** → the top person creates a document whose last step only they hold; separation of duties (I5) rightly refuses their approval, and the document sits in Chờ duyệt forever with no one able to move it. Check at submit that every step has an eligible approver other than the creator (I9) and say which step fails. *(source: 2026-09-28/29 rehearsals — a Giám-đốc-created "Hợp tác đại lý" could never be approved)*
 - **Trusting the client's total** → a request carrying `total: 1000000` becomes the price. The server recomputes from the price list; the client's number is ignored (I4). *(source: ANSWER-KEY §5.8 critic row "Gửi tổng tiền 1.000.000 … Server vẫn tính 2.565.000đ")*
 - **Typing prices by hand when a price list exists** → old prices survive (the box has 4 orders at the pre-July G6 price) and every quote is a negotiation. Look the price up by the document date (I4). *(source: 09_Bang_Gia.xlsx "Quy định" rule 3 "Giá lấy theo bảng giá đang áp dụng vào ngày lập chứng từ. Không tự gõ giá."; price rows G6 2.400.000 → 2.700.000 from 01/07/2026)*
 - **Editing an issued document** → the paper the customer holds and the paper in the system disagree, silently. Issued = immutable; wrong = void + new document with a new number (I6). *(source: 09_Bang_Gia.xlsx "Quy định" rule 6 "Chứng từ đã gửi khách thì không sửa. Sai thì hủy và làm chứng từ mới, số mới.")*
@@ -213,7 +216,7 @@ Claude states each of these at the §3 gate with its default and asks the human 
 
 **Secrets:** a PDF-renderer credential (if chosen) from env only — never committed, never logged, never echoed into chat.
 
-**Fail-closed:** guard errors DENY · an unknown permission is a denial · a policy that can't be evaluated (missing threshold field) means "approval required", never "skip approval" · if the project has NO auth yet, ship every endpoint DISABLED with a clear message "install the auth-roles workbook to enable documents" — this feature has no safe anonymous surface · revoking someone's role must take effect immediately: invalidate the cached permissions and sessions on revoke (a leaver must not approve for another five minutes).
+**Fail-closed:** guard errors DENY · a step with no eligible approver other than the creator refuses the SUBMIT (409 Problem+JSON naming the step), never parks the document · an unknown permission is a denial · a policy that can't be evaluated (missing threshold field) means "approval required", never "skip approval" · if the project has NO auth yet, ship every endpoint DISABLED with a clear message "install the auth-roles workbook to enable documents" — this feature has no safe anonymous surface · revoking someone's role must take effect immediately: invalidate the cached permissions and sessions on revoke (a leaver must not approve for another five minutes).
 
 **Rate-limit hint:** none required for staff-only endpoints; if the platform supports it, cap `POST /documents` per user to blunt a runaway script, and note it in the DONE report.
 
@@ -236,6 +239,7 @@ Claude states each of these at the §3 gate with its default and asks the human 
 - `approval_is_per_document` — approved quote → contract from it still requires its own approval (I5)
 - `threshold_rule_selects_approval` — discount 5% → issuable without approval; 15% → pending with a director step (I5)
 - `multi_step_in_order` — 4-step template: step 2 cannot be decided before step 1; any rejection → rejected, no number (I5)
+- `submit_refused_when_no_eligible_approver` — the only Giám đốc creates a "Hợp tác đại lý" and submits → 409 naming step "Giám đốc duyệt", status still draft, no approval steps created; give a second person the Giám đốc role → submit succeeds and that person can approve the step (I9)
 - `pending_is_locked` — PATCH a pending document → 409; approval bound to `snapshot_hash` (I2, I5)
 - `issued_is_immutable_void_keeps_number` — PATCH issued → 409; void → status voided, number kept; replacement gets the next number (I6)
 - `every_move_writes_one_audit_row` — create → submit → approve → issue = 4 rows, each with from/to (I7)
@@ -265,7 +269,7 @@ Claude states each of these at the §3 gate with its default and asks the human 
 7. Void it with a reason and generate a replacement → the old one keeps its number marked void; the new one has the next number.
 
 <!-- FIXED closing audit — keep verbatim. -->
-**Closing audit — print all four, countable, before claiming done:** (1) the Layer Map — all 10 layers → real file paths or explicit n/a; (2) the Guard audit — every §6 row → where it is enforced; (3) the rung chosen in §3 and why; (4) every invariant I1–I8 → the named test or probe that proves it.
+**Closing audit — print all four, countable, before claiming done:** (1) the Layer Map — all 10 layers → real file paths or explicit n/a; (2) the Guard audit — every §6 row → where it is enforced; (3) the rung chosen in §3 and why; (4) every invariant I1–I9 → the named test or probe that proves it.
 
 ## §8 SNAP POINTS (composition)
 
