@@ -8,7 +8,7 @@ Runway: members-only Cloudflare Workers API blueprint (Hono + `@hono/zod-openapi
 
 - `apps/api` — the Worker (all routing/wiring).
 - `packages/auth` (crypto primitives), `rbac` (policy engine + Hono middleware), `email-templates` (React Email + Zod), `contracts` (exported OpenAPI JSON, build artifact), `client` (typed client generated from contracts), `test-fixtures` (integration-test harness), `config` (shared ESLint/tsconfig/vitest + custom ESLint rules).
-- Docs: `docs/index.md` is the map. Plans: `plans/`.
+- Docs: `docs/index.md` is the map.
 
 ## Commands
 

@@ -43,8 +43,3 @@ self-contained; read in any order.
 
 - [bruno/README.md](./bruno/README.md) — Bruno collection covering
   CSRF, auth, RBAC, idempotency invariants
-
-## Plan history
-
-- [../plans/260920-1359-runway-blueprint-v1-api/plan.md](../plans/260920-1359-runway-blueprint-v1-api/plan.md)
-  — 11-phase build-out from empty repo → tagged v1.0.0
