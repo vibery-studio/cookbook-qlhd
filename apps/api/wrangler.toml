@@ -22,6 +22,12 @@ PASSWORD_MIN_LENGTH = "12"
 RATE_LIMIT_AUTH_LOGIN = "5"
 RATE_LIMIT_AUTH_SIGNUP = "3"
 
+[assets]
+directory = "../web/dist"
+not_found_handling = "single-page-application"
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "runway_dev"
@@ -101,6 +107,12 @@ simple = { limit = 60, period = 60 }
 # before `wrangler deploy --env preview`, giving each PR an isolated worker.
 name = "runway-api-preview-pr-PLACEHOLDER_PR"
 
+[env.preview.assets]
+directory = "../web/dist"
+not_found_handling = "single-page-application"
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+
 [env.preview.vars]
 APP_ENV = "preview"
 APP_ORIGIN = "https://runway-api-preview-pr-PLACEHOLDER_PR.workers.dev"
@@ -174,6 +186,12 @@ simple = { limit = 60, period = 60 }
 
 [env.production]
 name = "runway-api-prod"
+
+[env.production.assets]
+directory = "../web/dist"
+not_found_handling = "single-page-application"
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.production.vars]
 APP_ENV = "production"

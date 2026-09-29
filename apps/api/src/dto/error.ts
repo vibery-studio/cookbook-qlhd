@@ -32,6 +32,17 @@ export const ProblemDto = z
       .optional(),
     /** Extension on 409 `duplicate` (customers): id of the record that already exists. */
     existing_id: z.string().optional(),
+    /** 422 `missing-fields` (SPEC-03 §3.5) */
+    missing_fields: z.array(z.object({ key: z.string(), label: z.string() })).optional(),
+    /** 422 `unresolved-placeholder` */
+    placeholders: z.array(z.string()).optional(),
+    /** 409 `no-eligible-approver` / `would-block-later-step` */
+    step_no: z.number().int().optional(),
+    label: z.string().optional(),
+    /** 409 `state-conflict` */
+    current_status: z.string().optional(),
+    /** 403 separation-of-duties rule: `creator_cannot_approve` | `one_person_one_step` */
+    rule: z.string().optional(),
   })
   .openapi("Problem");
 
@@ -62,6 +73,12 @@ export const ProblemType = {
   AlreadyActive: "already-active",
   InvalidOrExpiredToken: "invalid-or-expired-token",
   TemplateCheckFailed: "template-check-failed",
+  MissingFields: "missing-fields",
+  UnresolvedPlaceholder: "unresolved-placeholder",
+  NoEligibleApprover: "no-eligible-approver",
+  StateConflict: "state-conflict",
+  ChangedAfterApproval: "changed-after-approval",
+  WouldBlockLaterStep: "would-block-later-step",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -74,6 +91,12 @@ export interface ProblemOptions {
   request_id?: string;
   errors?: Problem["errors"];
   existing_id?: string;
+  missing_fields?: Problem["missing_fields"];
+  placeholders?: string[];
+  step_no?: number;
+  label?: string;
+  current_status?: string;
+  rule?: string;
 }
 
 /**
@@ -100,6 +123,12 @@ export function problem(
     ...(options.request_id !== undefined && { request_id: options.request_id }),
     ...(options.errors !== undefined && { errors: options.errors }),
     ...(options.existing_id !== undefined && { existing_id: options.existing_id }),
+    ...(options.missing_fields !== undefined && { missing_fields: options.missing_fields }),
+    ...(options.placeholders !== undefined && { placeholders: options.placeholders }),
+    ...(options.step_no !== undefined && { step_no: options.step_no }),
+    ...(options.label !== undefined && { label: options.label }),
+    ...(options.current_status !== undefined && { current_status: options.current_status }),
+    ...(options.rule !== undefined && { rule: options.rule }),
   };
 }
 

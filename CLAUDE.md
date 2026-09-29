@@ -25,7 +25,7 @@ pnpm lint && pnpm typecheck && pnpm build
 pnpm db:generate                           # drizzle-kit, generate only — never push/migrate
 pnpm db:migrate:local                      # apply migrations to local D1
 RUNWAY_LOCAL=1 pnpm dev:seed-admin         # with pnpm dev up: admin@runway.local / correct-horse-battery-staple (local D1)
-pnpm client:generate                       # after any API change (CI fails on drift)
+pnpm openapi:export && pnpm client:generate   # after any API change (CI fails on drift); generate alone reuses a STALE dist/openapi.json
 ```
 
 Reset local data: `mv apps/api/.wrangler/state /tmp/state-$(date +%H%M%S)` then migrate. **Not** `pnpm dev:reset`:

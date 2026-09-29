@@ -10,6 +10,8 @@ import { adminFlagsRoutes } from "./admin-flags.routes";
 import { adminSettingsRoutes } from "./admin-settings.routes";
 import { adminUsersRoutes } from "./admin-users.routes";
 import { auditRoutes } from "./audit.routes";
+import { approvalsRoutes } from "./approvals.routes";
+import { contractsRoutes } from "./contracts.routes";
 import { customersRoutes } from "./customers.routes";
 import { priceListRoutes } from "./price-list.routes";
 import { templatesRoutes } from "./templates.routes";
@@ -38,6 +40,8 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   priceListRoutes(app);
   templatesRoutes(app);
   templatesWriteRoutes(app);
+  contractsRoutes(app);
+  approvalsRoutes(app);
   adminSettingsRoutes(app);
   adminFlagsRoutes(app);
   demoRoutes(app);
