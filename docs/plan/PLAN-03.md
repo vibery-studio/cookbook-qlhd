@@ -1,6 +1,6 @@
 # PLAN-03: Vòng đời hợp đồng — tạo, gửi duyệt, duyệt/từ chối, phát hành có số, hủy + thay thế
 
-Status: Draft
+Status: Approved 2026-09-29
 Spec: docs/spec/SPEC-03.md · Roadmap: ROADMAP-01 row 3 · builds on row 02 (`template_versions`, `getTemplateVersionById`, `getCurrentVersion`)
 
 ## 1. Acceptance tests — written first, seen failing

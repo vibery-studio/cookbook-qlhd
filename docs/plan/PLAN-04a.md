@@ -1,6 +1,6 @@
 # PLAN-04a: Giao diện nền `apps/web` (khung, đăng nhập/kích hoạt, Khách hàng, Phân quyền, Nhật ký, Người dùng)
 
-Status: Draft
+Status: Approved 2026-09-29
 Spec: docs/spec/SPEC-04a.md
 
 ## 1. Acceptance tests — written first, seen failing

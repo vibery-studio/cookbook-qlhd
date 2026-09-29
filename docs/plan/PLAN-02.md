@@ -1,6 +1,6 @@
 # PLAN-02: Mẫu hợp đồng có phiên bản (templates + seed "Hợp đồng cung cấp dịch vụ phần mềm")
 
-Status: Draft
+Status: Approved 2026-09-29
 Spec: docs/spec/SPEC-02.md
 Roadmap row: 2 (needs row 1 — done; row 3 builds on `template_versions`)
 
