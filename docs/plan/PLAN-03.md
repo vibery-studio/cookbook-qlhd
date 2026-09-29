@@ -1,6 +1,6 @@
 # PLAN-03: Vòng đời hợp đồng — tạo, gửi duyệt, duyệt/từ chối, phát hành có số, hủy + thay thế
 
-Status: Approved 2026-09-29
+Status: Done 2026-09-30
 Spec: docs/spec/SPEC-03.md · Roadmap: ROADMAP-01 row 3 · builds on row 02 (`template_versions`, `getTemplateVersionById`, `getCurrentVersion`)
 
 ## 1. Acceptance tests — written first, seen failing
@@ -203,4 +203,4 @@ Run 2026-09-29 on the real app (dev server already up on :8787, local D1 at 0014
   - D-6: the card's step 1 (remove `NotImplementedYet` + route mapping when unused) is not done — `not-implemented.ts` is still imported by `contracts.routes.ts` and `approvals.routes.ts`; `WORKBOOKS.md` not present. **Fixed by driver:** stub class + 11 try/catch wrappers + 501 responses removed, OpenAPI + client regenerated, suite re-run green (247 passed). `WORKBOOKS.md` never existed in this repo — n/a.
   - D-7: card step 2 (fresh D1 via `mv apps/api/.wrangler/state`) not done by request; used the running D1 (0 contracts at the start).
 - Local D1 left with 36 contracts (10 draft, 5 pending, 4 approved, 15 issued, 2 rejected, 1 voided), template v7, users p3-*.
-- Human approval: [ ]
+- Human approval: [x] 2026-09-30 (D-1, D-6 fixed; D-2…D-5 accepted)
