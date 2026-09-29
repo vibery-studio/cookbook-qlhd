@@ -82,7 +82,7 @@ export async function requestDeletion(
   await flagUserForDeletion(deps.db, input.userId, now);
 
   const scheduledCompletionAt = now + input.graceSeconds;
-  const audit = createAuditLogger({ ctx: undefined });
+  const audit = createAuditLogger({ ctx: undefined, db: deps.db });
   audit(
     {
       actor: input.userId,
@@ -92,6 +92,7 @@ export async function requestDeletion(
     },
     { sync: true },
   );
+  await audit.flush();
 
   return { kind: "ok", scheduledCompletionAt };
 }
@@ -117,7 +118,7 @@ export async function cancelDeletion(
 
   await clearDeletionRequest(deps.db, userId, now);
 
-  const audit = createAuditLogger({ ctx: undefined });
+  const audit = createAuditLogger({ ctx: undefined, db: deps.db });
   audit(
     {
       actor: userId,
@@ -126,6 +127,7 @@ export async function cancelDeletion(
     },
     { sync: true },
   );
+  await audit.flush();
 
   return { kind: "ok" };
 }
@@ -180,7 +182,7 @@ export async function sweepPendingDeletions(
     // served with stale credentials in some other region.
     await invalidatePrincipalCache(deps.kv, raw.id);
 
-    const audit = createAuditLogger({ ctx: undefined });
+    const audit = createAuditLogger({ ctx: undefined, db: deps.db });
     audit(
       {
         actor: "system",
@@ -190,6 +192,7 @@ export async function sweepPendingDeletions(
       },
       { sync: true },
     );
+    await audit.flush();
   }
 
   return { erased: candidates.length, identityHashes };

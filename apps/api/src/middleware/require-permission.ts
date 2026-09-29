@@ -16,6 +16,8 @@ import {
 } from "@runway/rbac";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
+import { getDb } from "../db/client";
+import { writeAuditEvent } from "../dao/audit-dao";
 import { problem, ProblemType } from "../dto/error";
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -30,8 +32,24 @@ export function requirePerm(
 ): MiddlewareHandler<Env> {
   return rbacRequirePermission<Env>(permission, {
     resource: options.resource,
-    onDeny: (c: Context<Env>, deny) =>
-      c.json(
+    onDeny: async (c: Context<Env>, deny) => {
+      const principal = c.get("principal");
+      // Anonymous 401s are not denials (requireAuth handles them) — only record known principals.
+      if (principal !== undefined) {
+        const meta = { permission, method: c.req.method, path: c.req.path };
+        // Awaited BEFORE the 403 so the row exists when the client sees the response.
+        await writeAuditEvent(getDb(c.env), {
+          actor: principal.id,
+          action: "permission.denied",
+          target: c.req.path,
+          metadata: meta,
+          ip: c.req.header("cf-connecting-ip") ?? null,
+        });
+        console.log(
+          JSON.stringify({ ts: Date.now(), kind: "audit", actor: principal.id, action: "permission.denied", target: c.req.path, metadata: meta }),
+        );
+      }
+      return c.json(
         problem(deny.status, deny.title, ProblemType.Forbidden, {
           detail: deny.detail,
           instance: c.req.path,
@@ -39,6 +57,7 @@ export function requirePerm(
         }),
         deny.status,
         { "content-type": "application/problem+json" },
-      ),
+      );
+    },
   });
 }

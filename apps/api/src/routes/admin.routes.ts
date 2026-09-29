@@ -53,7 +53,9 @@ const listUsersRoute = createRoute({
 });
 
 export function adminRoutes(app: OpenAPIHono<Env>): void {
-  app.use("/admin/users", requireAuth(), requirePerm("users:read"));
+  // GET only: POST /admin/users (invite) carries its own `users:write` guard, so a refused invite is
+  // audited with the permission it actually lacked.
+  app.on("GET", "/admin/users", requireAuth(), requirePerm("users:read"));
 
   app.openapi(listUsersRoute, async (c) => {
     const query = c.req.valid("query");
@@ -62,10 +64,6 @@ export function adminRoutes(app: OpenAPIHono<Env>): void {
       { db, kv: c.env.SESSIONS, env: c.env },
       { cursor: query.cursor, limit: query.limit },
     );
-    // TODO(C-01-004): read display_name from the DAO; the service does not carry it yet.
-    return c.json(
-      { ...page, items: page.items.map((u) => ({ ...u, display_name: null })) },
-      200,
-    );
+    return c.json(page, 200);
   });
 }

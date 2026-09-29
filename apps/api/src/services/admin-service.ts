@@ -28,6 +28,7 @@ export interface AdminServiceDeps {
 export interface AdminUserItem {
   id: string;
   email: string;
+  display_name: string | null;
   status: "pending" | "active" | "disabled";
   roles: string[];
 }
@@ -55,6 +56,7 @@ export async function listUsers(
     page.items.map(async (u) => ({
       id: u.id,
       email: u.email,
+      display_name: u.displayName,
       status: u.status,
       roles: await listRoleNamesForUser(deps.db, u.id),
     })),

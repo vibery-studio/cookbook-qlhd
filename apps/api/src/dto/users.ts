@@ -25,7 +25,8 @@ export const AdminUserSchema = z
 
 export const InviteUserBody = z
   .object({
-    email: EmailSchema,
+    // " KHANH@nhatminh.vn " is the same person as "khanh@nhatminh.vn" (SPEC-01 §4 Input)
+    email: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() : v), EmailSchema),
     display_name: z.string().min(1).max(100),
     role: BusinessRole,
   })

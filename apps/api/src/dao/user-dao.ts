@@ -7,14 +7,24 @@
  * enforced here via `db.batch([...])` — dependent rows are deleted before
  * the parent, all in one atomic batch.
  */
-import { asc, eq, gt } from "drizzle-orm";
+import { asc, eq, gt, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { jwtRevocations, refreshTokens, users, userRoles, verificationTokens } from "../db/schema";
+import {
+  auditEvents,
+  jwtRevocations,
+  refreshTokens,
+  users,
+  userRoles,
+  verificationTokens,
+} from "../db/schema";
+import { deepScrub } from "../observability/logger";
+import { generateUlid } from "../utils/id";
 
 /** The only shape callers of this module ever see for a user. */
 export interface UserDto {
   id: string;
   email: string;
+  displayName: string | null;
   status: "pending" | "active" | "disabled";
   verifiedAt: number | null;
   createdAt: number;
@@ -43,6 +53,7 @@ function toDto(row: UserRow): UserDto {
   return {
     id: row.id,
     email: row.email,
+    displayName: row.displayName,
     status: row.status as UserDto["status"],
     verifiedAt: row.verifiedAt,
     createdAt: row.createdAt,
@@ -239,4 +250,131 @@ export async function deleteUser(db: Db, id: string): Promise<void> {
     db.delete(jwtRevocations).where(eq(jwtRevocations.userId, id)),
     db.delete(users).where(eq(users.id, id)),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Statement builders (C-01-004). Each returns an UNEXECUTED query so the
+// service can put it in one `db.batch([...])` with the writes it belongs to.
+// ---------------------------------------------------------------------------
+
+/**
+ * SQL predicate (a parenthesised boolean expression) that is TRUE when taking
+ * `userId` out of the active-admin set is safe: the target is not an active
+ * admin, or another ACTIVE admin exists. Evaluated inside the write statement
+ * itself, so two concurrent demotions serialize on D1's single writer and the
+ * second one sees the first one's effect (no read-then-write window).
+ */
+export function notLastActiveAdmin(userId: string): SQL {
+  return sql`(
+    NOT EXISTS (
+      SELECT 1 FROM users tu
+        JOIN user_roles tr ON tr.user_id = tu.id
+        JOIN roles trr ON trr.id = tr.role_id
+       WHERE tu.id = ${userId} AND tu.status = 'active' AND trr.name = 'admin'
+    )
+    OR EXISTS (
+      SELECT 1 FROM users ou
+        JOIN user_roles orr ON orr.user_id = ou.id
+        JOIN roles orl ON orl.id = orr.role_id
+       WHERE ou.id <> ${userId} AND ou.status = 'active' AND orl.name = 'admin'
+    )
+  )`;
+}
+
+/** Predicate: `userId` has status `status` right now (used as a batch dependency). */
+export function userHasStatus(userId: string, status: UserDto["status"]): SQL {
+  return sql`EXISTS (SELECT 1 FROM users WHERE id = ${userId} AND status = ${status})`;
+}
+
+export interface InvitedUserInput {
+  id: string;
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  now: number;
+}
+
+/** Pending user with an unusable (random-secret) password hash. */
+export function insertInvitedUserStmt(db: Db, input: InvitedUserInput) {
+  return db.insert(users).values({
+    id: input.id,
+    email: input.email,
+    displayName: input.displayName,
+    passwordHash: input.passwordHash,
+    status: "pending",
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+}
+
+/** pending → active with a real password; CAS on `status = 'pending'`. */
+export function activateUserStmt(
+  db: Db,
+  input: { id: string; passwordHash: string; now: number },
+) {
+  return db
+    .update(users)
+    .set({
+      passwordHash: input.passwordHash,
+      status: "active",
+      verifiedAt: input.now,
+      updatedAt: input.now,
+    })
+    .where(sql`${users.id} = ${input.id} AND ${users.status} = 'pending'`)
+    .returning({ id: users.id });
+}
+
+/** Partial user update; `when` (optional) makes the write conditional. */
+export function updateUserFieldsStmt(
+  db: Db,
+  input: {
+    id: string;
+    now: number;
+    status?: "active" | "disabled";
+    displayName?: string;
+    when?: SQL;
+  },
+) {
+  const set: Partial<typeof users.$inferInsert> = { updatedAt: input.now };
+  if (input.status !== undefined) set.status = input.status;
+  if (input.displayName !== undefined) set.displayName = input.displayName;
+  const base = sql`${users.id} = ${input.id}`;
+  return db
+    .update(users)
+    .set(set)
+    .where(input.when ? sql`${base} AND ${input.when}` : base)
+    .returning({ id: users.id });
+}
+
+/** Revoke every live refresh token of the user, optionally only when `when` holds. */
+export function revokeUserRefreshTokensStmt(db: Db, input: { userId: string; now: number; when?: SQL }) {
+  const base = sql`${refreshTokens.userId} = ${input.userId} AND ${refreshTokens.revokedAt} IS NULL`;
+  return db
+    .update(refreshTokens)
+    .set({ revokedAt: input.now })
+    .where(input.when ? sql`${base} AND ${input.when}` : base);
+}
+
+/**
+ * Conditional twin of `auditInsert`: the row exists only when `when` is true,
+ * so a refused change (e.g. last_admin) leaves no audit row while an applied
+ * change always has one (same batch). Metadata: ids + field names only.
+ */
+export function auditInsertWhen(
+  db: Db,
+  input: {
+    actor: string | null;
+    action: string;
+    target: string;
+    metadata?: Record<string, unknown>;
+    ts: number;
+    when: SQL;
+  },
+) {
+  const metadata = input.metadata ? JSON.stringify(deepScrub(input.metadata)) : null;
+  return db
+    .insert(auditEvents)
+    .select(
+      sql`SELECT ${generateUlid()}, ${input.ts}, ${input.actor}, ${input.action}, ${input.target}, ${metadata}, NULL WHERE ${input.when}`,
+    );
 }

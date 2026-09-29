@@ -45,6 +45,7 @@ import {
 import { revokeJti } from "../dao/jwt-revocation-dao";
 import { invalidatePrincipalCache } from "../dao/session-cache";
 import type { Db } from "../db/client";
+import { writeAuditEvent } from "../dao/audit-dao";
 import { createAuditLogger } from "../observability/logger";
 
 // -------------------------- TTL constants ---------------------------------
@@ -187,7 +188,7 @@ export async function verifyEmail(
   const now = deps.now();
   const tokenHash = hashToken(input.rawToken, deps.env.TOKEN_PEPPER);
 
-  const consumed = await consumeVerificationToken(deps.db, tokenHash, now);
+  const consumed = await consumeVerificationToken(deps.db, tokenHash, now, "verify_email");
   if (consumed === null) return { kind: "invalid-or-used" };
 
   if (consumed.purpose === "verify_email") {
@@ -215,7 +216,7 @@ const DUMMY_HASH_PROMISE = hashPassword("dummy-for-timing-safety");
 
 export async function login(
   deps: AuthServiceDeps,
-  input: { email: string; password: string },
+  input: { email: string; password: string; ip?: string | null },
 ): Promise<LoginResult> {
   const userRow = await findUserPasswordHashByEmail(deps.db, input.email);
 
@@ -241,6 +242,13 @@ export async function login(
   if (user.status === "disabled") return { kind: "disabled" };
 
   const tokens = await issueTokens(deps, user.id);
+  // auth.login lands in D1 before the login response (write errors are swallowed inside).
+  await writeAuditEvent(deps.db, {
+    actor: user.id,
+    action: "auth.login",
+    target: `user:${user.id}`,
+    ip: input.ip ?? null,
+  });
   return { kind: "ok", userId: user.id, tokens };
 }
 
@@ -268,7 +276,7 @@ export async function refresh(
     //
     // Security-critical audit event — SYNC so the record survives an
     // isolate death and lands in Logpush before the response returns.
-    const audit = createAuditLogger({ ctx: undefined });
+    const audit = createAuditLogger({ ctx: undefined, db: deps.db });
     audit(
       {
         actor: outcome.userId,
@@ -278,6 +286,7 @@ export async function refresh(
       },
       { sync: true },
     );
+    await audit.flush();
     await revokeUserRefreshChain(deps.db, outcome.userId, now);
     await invalidatePrincipalCache(deps.kv, outcome.userId);
     return { kind: "reuse-detected", userId: outcome.userId };

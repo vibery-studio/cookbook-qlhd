@@ -1,7 +1,9 @@
 import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { AuditListResponse, AuditQuery } from "../dto/audit";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { problem, ProblemType, problemResponse } from "../dto/error";
+import { listAudit } from "../dao/audit-dao";
+import { getDb } from "../db/client";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
@@ -30,9 +32,20 @@ const listAuditRoute = createRoute({
 
 export function auditRoutes(app: OpenAPIHono<Env>): void {
   app.use("/audit", requireAuth(), requirePerm("audit:read"));
-  app.openapi(listAuditRoute, (c) =>
-    c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, {
-      "content-type": "application/problem+json",
-    }),
-  );
+  app.openapi(listAuditRoute, async (c) => {
+    const q = c.req.valid("query");
+    const result = await listAudit(getDb(c.env), q);
+    if (result.kind === "bad-cursor") {
+      return c.json(
+        problem(422, "Validation failed", ProblemType.Validation, {
+          detail: "invalid cursor",
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        422,
+        { "content-type": "application/problem+json" },
+      );
+    }
+    return c.json({ items: result.items, next_cursor: result.nextCursor }, 200);
+  });
 }

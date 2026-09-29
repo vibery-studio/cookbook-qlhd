@@ -56,7 +56,13 @@ export type Variables = {
  * `@hono/swagger-ui` which this module intentionally stays free of.
  */
 export function createApp(env: Bindings) {
-  const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>();
+  const app = new OpenAPIHono<{ Bindings: Bindings; Variables: Variables }>({
+    // Without a hook, zod-openapi answers a failed request schema with a raw 400 ZodError body.
+    // Re-throw so the error handler returns the house 422 Problem+JSON (scrubbed messages).
+    defaultHook: (result) => {
+      if (!result.success) throw result.error;
+    },
+  });
 
   app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
     type: "apiKey",

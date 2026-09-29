@@ -112,7 +112,7 @@ export class SettingsService implements SettingsPort {
     // Security-critical audit — SYNC so the record lands in
     // Logpush before the response returns. logger.audit's deepScrub
     // is defense-in-depth for future PII-carrying keys.
-    const audit = createAuditLogger({ ctx: undefined });
+    const audit = createAuditLogger({ ctx: undefined, db: this.deps.db });
     audit(
       {
         actor,
@@ -122,6 +122,7 @@ export class SettingsService implements SettingsPort {
       },
       { sync: true },
     );
+    await audit.flush();
   }
 
   async list(): Promise<SettingSnapshot[]> {

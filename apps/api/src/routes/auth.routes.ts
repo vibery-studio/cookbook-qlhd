@@ -3,7 +3,7 @@ import type { OpenAPIHono } from "@hono/zod-openapi";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { EmailSchema } from "../dto/common";
-import { notImplementedProblem, problem, ProblemDto, ProblemType } from "../dto/error";
+import { problem, ProblemDto, ProblemType } from "../dto/error";
 import { ActivateBody } from "../dto/users";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
@@ -26,6 +26,7 @@ import {
   signup as authSignup,
   verifyEmail,
 } from "../services/auth-service";
+import { activateUser } from "../services/user-admin-service";
 
 /**
  * Auth routes (Phase 5). Handlers are thin — they call auth-service and
@@ -160,10 +161,6 @@ const activateRoute = createRoute({
       description: "Validation failed / weak password",
       content: { "application/problem+json": { schema: ProblemDto } },
     },
-    501: {
-      description: "Not implemented",
-      content: { "application/problem+json": { schema: ProblemDto } },
-    },
   },
 });
 
@@ -286,7 +283,7 @@ const authRoutesModule = {
           // before the 429 flushes. Include request_id so incident
           // triage can correlate the breach with the surrounding
           // request logs.
-          createAuditLogger({ ctx: undefined })(
+          createAuditLogger({ ctx: c.executionCtx, db: getDb(c.env) })(
             {
               actor: null,
               action: "auth.login.rate_limited",
@@ -391,11 +388,24 @@ const authRoutesModule = {
       return c.json({ verified: true as const }, 200);
     });
 
-    app.openapi(activateRoute, (c) =>
-      c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, {
-        "content-type": "application/problem+json",
-      }),
-    );
+    app.openapi(activateRoute, async (c) => {
+      const body = c.req.valid("json");
+      const res = await activateUser(
+        { db: getDb(c.env), kv: c.env.SESSIONS, env: c.env, now: () => Math.floor(Date.now() / 1000) },
+        { rawToken: body.token, password: body.password },
+      );
+      if (res.kind === "invalid-or-expired") {
+        return c.json(
+          problem(400, "Invalid or expired activation link", ProblemType.InvalidOrExpiredToken, {
+            instance: c.req.path,
+            request_id: c.get("requestId"),
+          }),
+          400,
+          { "content-type": "application/problem+json" },
+        );
+      }
+      return c.body(null, 204);
+    });
 
     app.openapi(loginRoute, async (c) => {
       const body = c.req.valid("json");
@@ -408,7 +418,7 @@ const authRoutesModule = {
           now: () => Math.floor(Date.now() / 1000),
           env: c.env,
         },
-        { email: body.email, password: body.password },
+        { email: body.email, password: body.password, ip: c.req.header("cf-connecting-ip") ?? null },
       );
       if (result.kind === "invalid-credentials") {
         return c.json(

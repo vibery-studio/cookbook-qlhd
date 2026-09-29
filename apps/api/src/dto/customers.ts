@@ -17,16 +17,26 @@ export const CustomerSchema = z
   })
   .openapi("Customer");
 
+/** Trim; an empty string means "no value" (SPEC-01 §4 Input) — the service stores NULL. */
+const blankToUndefined = (v: unknown) => {
+  if (typeof v !== "string") return v;
+  const t = v.trim();
+  return t === "" ? undefined : t;
+};
+
 const customerFields = {
-  contact_person: z.string().max(200).optional(),
-  tax_code: z
-    .string()
-    .max(20)
-    .regex(/^[0-9-]+$/, "digits and '-' only")
-    .optional(),
-  phone: z.string().max(30).optional(),
-  email: EmailSchema.optional(),
-  address: z.string().max(500).optional(),
+  contact_person: z.preprocess(blankToUndefined, z.string().max(200).optional()),
+  tax_code: z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .max(20)
+      .regex(/^[0-9-]+$/, "digits and '-' only")
+      .optional(),
+  ),
+  phone: z.preprocess(blankToUndefined, z.string().max(30).optional()),
+  email: z.preprocess(blankToUndefined, EmailSchema.optional()),
+  address: z.preprocess(blankToUndefined, z.string().max(500).optional()),
 };
 
 export const CreateCustomerBody = z

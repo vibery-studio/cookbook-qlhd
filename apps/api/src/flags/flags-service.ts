@@ -102,7 +102,7 @@ export class FlagsService implements FlagsPort {
       ? "flag.kill_switch_activated"
       : "flag.updated";
 
-    const audit = createAuditLogger({ ctx: undefined });
+    const audit = createAuditLogger({ ctx: undefined, db: this.deps.db });
     audit(
       {
         actor,
@@ -116,6 +116,7 @@ export class FlagsService implements FlagsPort {
       },
       { sync: true },
     );
+    await audit.flush();
   }
 
   async list(): Promise<FlagSnapshot[]> {

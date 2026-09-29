@@ -39,7 +39,7 @@ describe("verification-token-dao: consumeVerificationToken CAS", () => {
     });
 
     const results = await Promise.all(
-      Array.from({ length: 5 }, () => consumeVerificationToken(db, tokenHash, now)),
+      Array.from({ length: 5 }, () => consumeVerificationToken(db, tokenHash, now, "verify_email")),
     );
 
     const successes = results.filter((r) => r !== null);
@@ -70,7 +70,7 @@ describe("verification-token-dao: consumeVerificationToken CAS", () => {
       createdAt: now - 100,
     });
 
-    const result = await consumeVerificationToken(db, tokenHash, now);
+    const result = await consumeVerificationToken(db, tokenHash, now, "verify_email");
     expect(result).toBeNull();
 
     const row = await db.query.verificationTokens.findFirst({
@@ -93,11 +93,11 @@ describe("verification-token-dao: consumeVerificationToken CAS", () => {
       createdAt: now,
     });
 
-    const first = await consumeVerificationToken(db, tokenHash, now);
+    const first = await consumeVerificationToken(db, tokenHash, now, "verify_email");
     expect(first).toEqual({ userId, purpose: "verify_email" });
 
     const later = now + 10;
-    const second = await consumeVerificationToken(db, tokenHash, later);
+    const second = await consumeVerificationToken(db, tokenHash, later, "verify_email");
     expect(second).toBeNull();
 
     // Row shows only the FIRST used_at timestamp — the second call never
@@ -112,7 +112,7 @@ describe("verification-token-dao: consumeVerificationToken CAS", () => {
     const db = getDb(env);
     const now = Math.floor(Date.now() / 1000);
 
-    const result = await consumeVerificationToken(db, "does-not-exist", now);
+    const result = await consumeVerificationToken(db, "does-not-exist", now, "verify_email");
     expect(result).toBeNull();
   });
 });

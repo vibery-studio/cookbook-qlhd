@@ -22,6 +22,9 @@
  * metadata).
  */
 
+import type { Db } from "../db/client";
+import { writeAuditEvent } from "../dao/audit-dao";
+
 const REDACTED = "[REDACTED]";
 
 /**
@@ -101,23 +104,46 @@ export interface AuditDeps {
    * `undefined` is legal.
    */
   ctx?: { waitUntil: (p: Promise<unknown>) => void } | undefined;
+  /** When present, every event is also written to D1 `audit_events` (errors swallowed). */
+  db?: Db | undefined;
 }
 
-export type AuditFn = (event: AuditEvent, opts?: AuditOptions) => void;
+export interface AuditFn {
+  (event: AuditEvent, opts?: AuditOptions): void;
+  /** Resolves when every D1 write started by this logger has settled (never rejects). */
+  flush: () => Promise<void>;
+}
 
 /**
  * Build a bound audit function. Callers get a single-arg-shaped
  * `audit(event, opts?)` that they pass around; the deps stay
- * closed-over.
+ * closed-over. With `deps.db`, each event is dual-written: console line
+ * (Logpush) + D1 row. The D1 write goes through `ctx.waitUntil` when a ctx
+ * exists, else a floated promise; `await audit.flush()` to wait for it.
  */
 export function createAuditLogger(deps: AuditDeps): AuditFn {
-  return function audit(event, opts = {}) {
+  const pending = new Set<Promise<void>>();
+
+  const audit = function audit(event: AuditEvent, opts: AuditOptions = {}): void {
     const scrubbed = deepScrub(event) as Record<string, unknown>;
     const line = JSON.stringify({
       ts: Date.now(),
       kind: "audit",
       ...scrubbed,
     });
+
+    if (deps.db !== undefined) {
+      const p = writeAuditEvent(deps.db, {
+        actor: event.actor,
+        action: event.action,
+        target: event.target ?? null,
+        metadata: event.metadata ?? null,
+        ip: event.ip ?? null,
+      }).catch(() => undefined);
+      pending.add(p);
+      void p.finally(() => pending.delete(p));
+      if (deps.ctx !== undefined) deps.ctx.waitUntil(p);
+    }
 
     if (opts.sync === true || deps.ctx === undefined) {
       // Sync path (or no waitUntil available). console.log itself
@@ -146,7 +172,12 @@ export function createAuditLogger(deps: AuditDeps): AuditFn {
         }
       }),
     );
+  } as AuditFn;
+
+  audit.flush = async () => {
+    await Promise.all([...pending]);
   };
+  return audit;
 }
 
 /**

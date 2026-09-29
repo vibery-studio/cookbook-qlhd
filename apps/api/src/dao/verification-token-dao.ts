@@ -10,11 +10,11 @@
  * leaking which case occurred hands an attacker probing token space free
  * oracle information.
  */
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { verificationTokens } from "../db/schema";
 
-export type VerificationPurpose = "verify_email" | "password_reset";
+export type VerificationPurpose = "verify_email" | "password_reset" | "invite";
 
 export interface VerificationTokenDto {
   tokenHash: string;
@@ -77,13 +77,16 @@ export async function consumeVerificationToken(
   db: Db,
   tokenHash: string,
   now: number,
+  purpose: VerificationPurpose,
 ): Promise<ConsumeResult | null> {
+  // `purpose` in the CAS: an invite token posted to /auth/verify must not be burned (SPEC-01).
   const rows = await db
     .update(verificationTokens)
     .set({ usedAt: now })
     .where(
       and(
         eq(verificationTokens.tokenHash, tokenHash),
+        eq(verificationTokens.purpose, purpose),
         isNull(verificationTokens.usedAt),
         gt(verificationTokens.expiresAt, now),
       ),
@@ -103,4 +106,71 @@ export async function findVerificationTokenByHash(
     where: eq(verificationTokens.tokenHash, tokenHash),
   });
   return row ? toDto(row) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Invite tokens (C-01-004). Unexecuted builders for `db.batch`.
+// ---------------------------------------------------------------------------
+
+export function insertInviteTokenStmt(db: Db, input: Omit<CreateVerificationTokenInput, "purpose">) {
+  return db.insert(verificationTokens).values({
+    tokenHash: input.tokenHash,
+    userId: input.userId,
+    purpose: "invite",
+    expiresAt: input.expiresAt,
+    usedAt: null,
+    createdAt: input.createdAt,
+  });
+}
+
+/** Re-invite: the token row exists only if the user is still `pending` (CAS). */
+export function insertInviteTokenIfPendingStmt(
+  db: Db,
+  input: Omit<CreateVerificationTokenInput, "purpose">,
+) {
+  return db
+    .insert(verificationTokens)
+    .select(
+      sql`SELECT ${input.tokenHash}, u.id, 'invite', ${input.expiresAt}, NULL, ${input.createdAt} FROM users u WHERE u.id = ${input.userId} AND u.status = 'pending'`,
+    )
+    .returning({ tokenHash: verificationTokens.tokenHash });
+}
+
+/** Mark every other unused invite token of the user as used (old links die). */
+export function invalidateOtherInviteTokensStmt(
+  db: Db,
+  input: { userId: string; exceptHash: string; now: number },
+) {
+  return db
+    .update(verificationTokens)
+    .set({ usedAt: input.now })
+    .where(
+      and(
+        eq(verificationTokens.userId, input.userId),
+        eq(verificationTokens.purpose, "invite"),
+        isNull(verificationTokens.usedAt),
+        ne(verificationTokens.tokenHash, input.exceptHash),
+      ),
+    );
+}
+
+/** CAS consume restricted to purpose 'invite'; RETURNING user_id (0 rows = invalid/used/expired). */
+export function consumeInviteTokenStmt(db: Db, tokenHash: string, now: number) {
+  return db
+    .update(verificationTokens)
+    .set({ usedAt: now })
+    .where(
+      and(
+        eq(verificationTokens.tokenHash, tokenHash),
+        eq(verificationTokens.purpose, "invite"),
+        isNull(verificationTokens.usedAt),
+        gt(verificationTokens.expiresAt, now),
+      ),
+    )
+    .returning({ userId: verificationTokens.userId });
+}
+
+/** Predicate: this invite token was consumed at `now` (dependency for the rest of the batch). */
+export function inviteConsumedAt(tokenHash: string, now: number) {
+  return sql`EXISTS (SELECT 1 FROM verification_tokens WHERE token_hash = ${tokenHash} AND purpose = 'invite' AND used_at = ${now})`;
 }

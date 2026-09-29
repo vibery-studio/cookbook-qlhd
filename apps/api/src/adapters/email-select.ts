@@ -36,11 +36,11 @@ import { generateUlid } from "../utils/id";
 const KILL_SWITCH_AUDIT_INTERVAL_MS = 60_000;
 let lastKillSwitchAuditAt = 0;
 
-function auditKillSwitchIfDue(): void {
+function auditKillSwitchIfDue(env: Bindings): void {
   const now = Date.now();
   if (now - lastKillSwitchAuditAt < KILL_SWITCH_AUDIT_INTERVAL_MS) return;
   lastKillSwitchAuditAt = now;
-  const audit = createAuditLogger({ ctx: undefined });
+  const audit = createAuditLogger({ ctx: undefined, db: getDb(env) });
   audit(
     {
       actor: "system",
@@ -84,7 +84,7 @@ export async function selectEmailAdapter(env: Bindings): Promise<EmailPort> {
   const flags = new FlagsService({ db: getDb(env), kv: env.SETTINGS });
   const emailEnabled = await flags.get("email.enabled");
   if (!emailEnabled) {
-    auditKillSwitchIfDue();
+    auditKillSwitchIfDue(env);
     return killSwitchEmailAdapter;
   }
 

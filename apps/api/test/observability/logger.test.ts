@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Db } from "../../src/db/client";
+import { writeAuditEvent } from "../../src/dao/audit-dao";
 import { createAuditLogger, deepScrub } from "../../src/observability/logger";
 
 describe("deepScrub", () => {
@@ -157,5 +159,24 @@ describe("createAuditLogger", () => {
     const audit = createAuditLogger({ ctx: undefined });
     audit({ actor: null, action: "test.fallback" });
     expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("audit D1 dual-write", () => {
+  it("a D1 write failure does not throw from audit() or writeAuditEvent", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const boom = () => {
+      throw new Error("D1 down");
+    };
+    const db = { insert: boom } as unknown as Db;
+    await expect(writeAuditEvent(db, { actor: "u", action: "x.y" })).resolves.toBeUndefined();
+    const audit = createAuditLogger({ ctx: undefined, db });
+    expect(() => audit({ actor: "u", action: "x.y" })).not.toThrow();
+    await expect(audit.flush()).resolves.toBeUndefined();
+    expect(logSpy).toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
   });
 });
