@@ -49,7 +49,7 @@ export function AuditScreen() {
   return (
     <section className="grid gap-s4">
       <div className="grid gap-s2">
-        <h2 className="text-2xl font-bold leading-head text-strong">Nhật ký</h2>
+        <h1 className="text-2xl font-bold leading-head text-strong">Nhật ký</h1>
         <p className="max-w-[720px] text-md text-muted text-wrap-pretty">
           Mọi hành động quan trọng đều được ghi lại kèm người thực hiện, thời gian và IP. Ghi ở tầng nền, không sửa được.
         </p>

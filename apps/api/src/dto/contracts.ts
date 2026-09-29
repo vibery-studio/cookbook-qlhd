@@ -52,6 +52,7 @@ export const ContractStepSchema = z
     required_permission: z.string(),
     required_role: z.string().nullable(),
     decided_by: z.string().nullable(),
+    decided_by_name: z.string().nullable(),
     decided_at: TimestampSchema.nullable(),
     note: z.string().nullable(),
     snapshot_hash_at_decision: z.string().nullable(),
@@ -71,6 +72,8 @@ export const ContractCan = z
     issue: z.boolean(),
     void: z.boolean(),
     copy: z.boolean(),
+    withdraw: z.boolean(),
+    delete: z.boolean(),
   })
   .openapi("ContractCan");
 
@@ -114,6 +117,7 @@ export const ContractListQuery = z.object({
   status: ContractStatusEnum.optional(),
   customer_id: z.string().optional(),
   created_by: z.string().optional(),
+  template_id: UlidSchema.optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(50),
 });
@@ -124,6 +128,7 @@ export const ContractListItem = z
     number: z.string().nullable(),
     status: ContractStatusEnum,
     customer_name: z.string(),
+    template_name: z.string(),
     total: z.number().int(),
     created_by: z.string(),
     created_by_name: z.string().nullable(),

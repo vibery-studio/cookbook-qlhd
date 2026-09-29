@@ -126,4 +126,6 @@ export const CONTRACT_ACTIONS = {
   rejected: "contract.rejected",
   issued: "contract.issued",
   voided: "contract.voided",
+  withdrawn: "contract.withdrawn",
+  deleted: "contract.deleted",
 } as const;

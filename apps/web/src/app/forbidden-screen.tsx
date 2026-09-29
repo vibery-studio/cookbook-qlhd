@@ -15,7 +15,7 @@ export function ForbiddenScreen({ className }: { className?: string }) {
         🔒
       </div>
       <div className="grid gap-s2">
-        <h2 className="text-xl font-bold leading-head text-strong">Không có quyền truy cập</h2>
+        <h1 className="text-xl font-bold leading-head text-strong">Không có quyền truy cập</h1>
         <p className="max-w-[var(--drawer-w)] text-md text-body text-wrap-pretty">Bạn không có quyền xem màn hình này.</p>
       </div>
       <Button variant="secondary" onClick={() => { void navigate(firstAllowed, { replace: true }); }}>

@@ -6,6 +6,7 @@ import {
   listContracts as listContractsDao,
   type ContractDetailRow,
 } from "../../dao/contract-read-dao";
+import { listLifecycleEvents, type LifecycleEvent } from "../../dao/contract-withdraw-dao";
 import type { Db } from "../../db/client";
 import type { ApprovalQueueDto, ContractDto, ContractListDto } from "../../dto/contracts";
 import { CONTRACT_ACTIONS, type RequiredStep } from "../../domain/contract/types";
@@ -41,7 +42,7 @@ function decodeCursor(raw: string): { n: number; id: string } | null {
 export async function listContracts(
   db: Db,
   _actor: Principal,
-  q: { status?: ContractDto["status"]; customer_id?: string; created_by?: string; cursor?: string; limit: number },
+  q: { status?: ContractDto["status"]; customer_id?: string; created_by?: string; template_id?: string; cursor?: string; limit: number },
 ): Promise<ListResult> {
   let after: { updatedAt: number; id: string } | undefined;
   if (q.cursor !== undefined) {
@@ -49,7 +50,7 @@ export async function listContracts(
     if (c === null) return { kind: "invalid", errors: BAD_CURSOR };
     after = { updatedAt: c.n, id: c.id };
   }
-  const filters = { customerId: q.customer_id, createdBy: q.created_by };
+  const filters = { customerId: q.customer_id, createdBy: q.created_by, templateId: q.template_id };
   const [rows, counts] = await Promise.all([
     listContractsDao(db, { ...filters, status: q.status, after, limit: q.limit }),
     countByStatus(db, filters),
@@ -63,6 +64,7 @@ export async function listContracts(
       number: r.number,
       status: r.status,
       customer_name: r.customerName,
+      template_name: r.templateName,
       total: r.total,
       created_by: r.createdBy,
       created_by_name: r.createdByName,
@@ -73,13 +75,18 @@ export async function listContracts(
   };
 }
 
-function buildTimeline(d: ContractDetailRow): ContractDto["timeline"] {
+function buildTimeline(d: ContractDetailRow, life: LifecycleEvent[]): ContractDto["timeline"] {
   const { contract: c, steps, names } = d;
   const who = (id: string | null) => (id === null ? null : (names.get(id) ?? id));
   const out: ContractDto["timeline"] = [
     { action: CONTRACT_ACTIONS.created, at: c.createdAt, actor: who(c.createdBy) },
   ];
-  if (c.submittedAt !== null) out.push({ action: CONTRACT_ACTIONS.submitted, at: c.submittedAt, actor: who(c.createdBy) });
+  // submitted/withdrawn come from the audit log: withdraw resets `submitted_at`, the history stays
+  const submits = life.filter((e) => e.action === CONTRACT_ACTIONS.submitted);
+  if (submits.length === 0 && c.submittedAt !== null) {
+    out.push({ action: CONTRACT_ACTIONS.submitted, at: c.submittedAt, actor: who(c.createdBy) });
+  }
+  for (const e of life) out.push({ action: e.action, at: e.at, actor: who(e.actor) });
   for (const s of steps) {
     if (s.decidedAt === null || s.status === "waiting") continue;
     out.push({
@@ -118,6 +125,8 @@ function buildCan(d: ContractDetailRow, actor: Principal): ContractDto["can"] {
     reject: canDecide,
     issue: has("contract:issue") && c.status === "approved",
     void: has("contract:issue") && c.status === "issued",
+    withdraw: isCreator && c.status === "pending" && steps.every((s) => s.decidedBy === null),
+    delete: isCreator && c.status === "draft",
     copy: has("contract:write") && (c.status === "rejected" || (c.status === "voided" && c.replacedById === null)),
   };
 }
@@ -127,6 +136,7 @@ export async function contractDetail(db: Db, actor: Principal, id: string): Prom
   const d = await getContractDetail(db, id);
   if (d === null) return null;
   const c = d.contract;
+  const life = await listLifecycleEvents(db, id);
   return {
     id: c.id,
     type: c.type,
@@ -164,11 +174,12 @@ export async function contractDetail(db: Db, actor: Principal, id: string): Prom
       required_permission: s.requiredPermission,
       required_role: s.requiredRole,
       decided_by: s.decidedBy,
+      decided_by_name: s.decidedBy === null ? null : (d.names.get(s.decidedBy) ?? null),
       decided_at: s.decidedAt,
       note: s.note,
       snapshot_hash_at_decision: s.snapshotHashAtDecision,
     })),
-    timeline: buildTimeline(d),
+    timeline: buildTimeline(d, life),
     can: buildCan(d, actor),
   };
 }

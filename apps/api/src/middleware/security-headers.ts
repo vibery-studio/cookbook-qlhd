@@ -55,6 +55,9 @@ export function securityHeaders(): MiddlewareHandler {
     if (c.req.path === "/docs") c.header("content-security-policy", DOCS_CSP);
     // The printable contract (SPEC-03 AC-27) is customer-data HTML: no script, no fetch, inline print CSS
     // only. Stricter than the default; frame-ancestors 'self' so the web app can preview it.
-    if (RENDER_PATH.test(c.req.path)) c.header("content-security-policy", RENDER_CSP);
+    if (RENDER_PATH.test(c.req.path)) {
+      c.header("content-security-policy", RENDER_CSP);
+      c.header("x-frame-options", "SAMEORIGIN"); // XFO DENY would still block the iframe (SPEC-04b R-1)
+    }
   };
 }

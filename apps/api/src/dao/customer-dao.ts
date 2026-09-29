@@ -2,9 +2,9 @@
  * Customers DAO (SPEC-01 FR-5). Pure `(db, input) → DTO`. The change and its audit row travel in ONE
  * `db.batch` (D1 batches are atomic): a UNIQUE violation rolls both back, a lost CAS writes no audit row.
  */
-import { and, asc, eq, gt, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, ne, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { auditEvents, customers } from "../db/schema";
+import { auditEvents, contracts, customers } from "../db/schema";
 import { generateUlid } from "../utils/id";
 import { auditInsert } from "./audit-dao";
 
@@ -20,6 +20,9 @@ export interface CustomerDto {
   created_at: number;
   updated_at: number;
   version: number;
+  /** contracts with status='issued' only (voided/draft/pending never count) */
+  issued_count: number;
+  issued_total: number;
 }
 
 export interface CustomerFields {
@@ -34,7 +37,37 @@ export interface CustomerFields {
 
 type Row = typeof customers.$inferSelect;
 
-function toDto(r: Row): CustomerDto {
+interface IssuedAgg {
+  count: number;
+  total: number;
+}
+
+/** One grouped query for a page of ids (no N+1). Missing customers → 0/0 at the call site. */
+async function issuedAggregates(db: Db, ids: string[]): Promise<Map<string, IssuedAgg>> {
+  const out = new Map<string, IssuedAgg>();
+  if (ids.length === 0) return out;
+  const rows = await db
+    .select({
+      customerId: contracts.customerId,
+      n: sql<number>`count(*)`,
+      total: sql<number>`coalesce(sum(${contracts.total}), 0)`,
+    })
+    .from(contracts)
+    .where(and(inArray(contracts.customerId, ids), eq(contracts.status, "issued")))
+    .groupBy(contracts.customerId);
+  for (const r of rows) out.set(r.customerId, { count: Number(r.n), total: Number(r.total) });
+  return out;
+}
+
+async function withIssued(db: Db, rows: Row[]): Promise<CustomerDto[]> {
+  const agg = await issuedAggregates(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => toDto(r, agg.get(r.id)));
+}
+
+function toDto(r: Row, issued?: IssuedAgg): CustomerDto {
   return {
     id: r.id,
     name: r.name,
@@ -47,6 +80,8 @@ function toDto(r: Row): CustomerDto {
     created_at: r.createdAt,
     updated_at: r.updatedAt,
     version: r.version,
+    issued_count: issued?.count ?? 0,
+    issued_total: issued?.total ?? 0,
   };
 }
 
@@ -62,7 +97,7 @@ export function isUniqueViolation(err: unknown): boolean {
 
 export async function getCustomer(db: Db, id: string): Promise<CustomerDto | null> {
   const rows = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
-  return rows[0] ? toDto(rows[0]) : null;
+  return rows[0] ? (await withIssued(db, [rows[0]]))[0]! : null;
 }
 
 /** Existing customer holding this phone_norm or tax_code (other than `excludeId`), for the 409 `existing_id`. */
@@ -82,7 +117,7 @@ export async function findDuplicate(
       and(or(...keys), input.excludeId !== undefined ? ne(customers.id, input.excludeId) : undefined),
     )
     .limit(1);
-  return rows[0] ? toDto(rows[0]) : null;
+  return rows[0] ? (await withIssued(db, [rows[0]]))[0]! : null;
 }
 
 /** Insert + `customer.created` audit row in one batch. Throws on UNIQUE violation (nothing is written). */
@@ -167,7 +202,7 @@ export async function updateCustomerCas(
     ),
   ]);
   const row = rows[0];
-  return row ? toDto(row) : null;
+  return row ? (await withIssued(db, [row]))[0]! : null;
 }
 
 interface CursorPos {
@@ -233,7 +268,7 @@ export async function listCustomers(
   const page = hasMore ? rows.slice(0, input.limit) : rows;
   const last = page[page.length - 1];
   return {
-    items: page.map(toDto),
+    items: await withIssued(db, page),
     next_cursor: hasMore && last ? encodeCursor({ name: last.name, id: last.id }) : null,
   };
 }

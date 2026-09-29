@@ -5,7 +5,7 @@
 import { and, asc, desc, eq, inArray, lt, gt, ne, notExists, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../db/client";
-import { approvalSteps, contracts, users } from "../db/schema";
+import { approvalSteps, contracts, templates, users } from "../db/schema";
 
 export type ContractRow = typeof contracts.$inferSelect;
 export type StepRow = typeof approvalSteps.$inferSelect;
@@ -14,6 +14,7 @@ export type ContractStatusValue = "draft" | "pending" | "approved" | "rejected" 
 export interface ContractFilters {
   customerId?: string;
   createdBy?: string;
+  templateId?: string;
 }
 
 export interface ListContractsInput extends ContractFilters {
@@ -27,6 +28,7 @@ export interface ContractListRow {
   number: string | null;
   status: ContractStatusValue;
   customerName: string;
+  templateName: string;
   total: number;
   createdBy: string;
   createdByName: string | null;
@@ -39,6 +41,7 @@ export async function listContracts(db: Db, input: ListContractsInput): Promise<
   if (input.status !== undefined) conds.push(eq(contracts.status, input.status));
   if (input.customerId !== undefined) conds.push(eq(contracts.customerId, input.customerId));
   if (input.createdBy !== undefined) conds.push(eq(contracts.createdBy, input.createdBy));
+  if (input.templateId !== undefined) conds.push(eq(contracts.templateId, input.templateId));
   if (input.after !== undefined) {
     const { updatedAt, id } = input.after;
     conds.push(or(lt(contracts.updatedAt, updatedAt), and(eq(contracts.updatedAt, updatedAt), lt(contracts.id, id)))!);
@@ -49,12 +52,14 @@ export async function listContracts(db: Db, input: ListContractsInput): Promise<
       number: contracts.number,
       status: contracts.status,
       customerName: contracts.customerName,
+      templateName: templates.name,
       total: contracts.total,
       createdBy: contracts.createdBy,
       createdByName: users.displayName,
       updatedAt: contracts.updatedAt,
     })
     .from(contracts)
+    .innerJoin(templates, eq(templates.id, contracts.templateId))
     .leftJoin(users, eq(users.id, contracts.createdBy))
     .where(conds.length > 0 ? and(...conds) : undefined)
     .orderBy(desc(contracts.updatedAt), desc(contracts.id))
@@ -67,6 +72,7 @@ export async function countByStatus(db: Db, filters: ContractFilters): Promise<R
   const conds: SQL[] = [];
   if (filters.customerId !== undefined) conds.push(eq(contracts.customerId, filters.customerId));
   if (filters.createdBy !== undefined) conds.push(eq(contracts.createdBy, filters.createdBy));
+  if (filters.templateId !== undefined) conds.push(eq(contracts.templateId, filters.templateId));
   const rows = await db
     .select({ status: contracts.status, n: sql<number>`count(*)` })
     .from(contracts)

@@ -1,9 +1,10 @@
+import { Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { roleLabels } from "../../app/me";
 import { client } from "../../lib/client";
 import { problemMessage } from "../../lib/problem-messages";
 import { EmptyState, ErrorState, Skeleton } from "../../ui";
-import { permissionLabel, sortRoles } from "./permission-labels";
+import { permissionGroup, permissionLabel, PERMISSION_GROUP_INFRA, sortRoles } from "./permission-labels";
 
 class RolesLoadError extends Error {
   constructor(public readonly userMessage: string) {
@@ -24,16 +25,14 @@ async function fetchRoles() {
 export function RolesScreen() {
   const query = useQuery({ queryKey: ["roles"], queryFn: fetchRoles });
   const roles = sortRoles(query.data ?? []);
-  const codes = [...new Set(roles.flatMap((r) => r.permissions))].sort((a, b) => {
-    const la = permissionLabel(a) === a ? 1 : 0;
-    const lb = permissionLabel(b) === b ? 1 : 0;
-    return la - lb;
-  });
+  const rank = (code: string) => (permissionGroup(code) === PERMISSION_GROUP_INFRA ? 1 : 0);
+  const codes = [...new Set(roles.flatMap((r) => r.permissions))].sort((a, b) => rank(a) - rank(b));
+  const firstInfra = codes.find((code) => rank(code) === 1);
 
   return (
     <section className="grid gap-s4">
       <div className="grid gap-s2">
-        <h2 className="text-2xl font-bold leading-head text-strong">Phân quyền</h2>
+        <h1 className="text-2xl font-bold leading-head text-strong">Phân quyền</h1>
         <p className="max-w-[720px] text-md text-muted text-wrap-pretty">
           Quyền đi theo vai, không theo người. Khóa tài khoản là mất sạch quyền. Bảng chỉ để xem.
         </p>
@@ -70,7 +69,15 @@ export function RolesScreen() {
             </thead>
             <tbody>
               {codes.map((code) => (
-                <tr key={code} className="border-b border-line last:border-b-0">
+                <Fragment key={code}>
+                {code === firstInfra ? (
+                  <tr>
+                    <th scope="colgroup" colSpan={roles.length + 1} className="border-b border-line bg-sunken px-s3 py-s2 text-left text-sm font-semibold text-muted">
+                      {PERMISSION_GROUP_INFRA}
+                    </th>
+                  </tr>
+                ) : null}
+                <tr className="border-b border-line last:border-b-0">
                   <th scope="row" className="px-s3 py-s3 text-left font-normal text-strong">
                     {permissionLabel(code) === code ? null : <span>{permissionLabel(code)}</span>}
                     <code className="ml-s1 break-all rounded-r1 bg-sunken px-s1 font-mono text-sm text-muted">{code}</code>
@@ -86,6 +93,7 @@ export function RolesScreen() {
                     );
                   })}
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

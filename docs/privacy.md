@@ -182,3 +182,10 @@ setup; the recommended retention for a GDPR-strict deployment is
 - Code: `apps/api/src/privacy/`, `apps/api/src/dao/user-exports-dao.ts`, `apps/api/src/dao/user-dao.ts` (lifecycle mutations), `apps/api/src/crons/expired-rows-pruner.ts` (sweeper), `apps/api/src/routes/me-export.routes.ts`, `apps/api/src/routes/me-delete.routes.ts`
 - Migrations: `0007_curly_human_torch.sql` (columns + user_exports), `0008_seed_privacy_settings.sql` (setting defaults)
 - Tests: `apps/api/test/integration/privacy-flow.test.ts`
+
+## Contracts (SPEC-04b §5)
+
+- `contracts.snapshot` (JSON) copies the customer's name, phone, email, tax code and address at creation time; `customer_name` and `total` are also plain columns. This is personal data of customers, not of app users.
+- Deleting a draft (`DELETE /contracts/{id}`, creator only) is a HARD delete: the `contracts` row and its `approval_steps` go, `replaced_by_id` references to it are cleared. Non-draft contracts are never deleted (issued numbers stay gap-free); they are voided instead.
+- Audit: `contract.deleted` metadata is `{"id": …}` only, target `contract:<id>`; no name, phone, email, tax code or amount. Other contract audit rows carry ids, statuses and numbers, no customer PII.
+- Tables referencing `contract_id`: `approval_steps` (`contract_id`) and `contracts.replaced_by_id` (verify: `grep contract_id apps/api/src/db/schema.ts`; `source_contract_id` sits on the copy itself and goes with it). Both are handled by the delete batch.

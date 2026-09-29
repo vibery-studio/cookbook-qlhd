@@ -1,5 +1,8 @@
 import type { Me } from "./me";
 import type { NavItem } from "./route-types";
+import { contractsNavItems } from "../features/contracts/nav";
+import { templatesNavItems } from "../features/templates/nav";
+import { approvalsNavItems } from "../features/approvals/nav";
 import { customersNavItems } from "../features/customers/nav";
 import { rolesNavItems } from "../features/roles/nav";
 import { auditNavItems } from "../features/audit/nav";
@@ -10,6 +13,9 @@ import { usersNavItems } from "../features/users/nav";
  * entries without needing to know how the sidebar is laid out.
  */
 export const navRegistry: readonly NavItem[] = [
+  ...contractsNavItems,
+  ...templatesNavItems,
+  ...approvalsNavItems,
   ...customersNavItems,
   ...rolesNavItems,
   ...auditNavItems,

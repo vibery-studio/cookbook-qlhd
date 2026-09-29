@@ -12,7 +12,7 @@ export type Me = {
 
 export const roleLabels: Record<string, string> = {
   admin: "Quản trị hệ thống",
-  member: "Thành viên",
+  member: "Thành viên (nền)",
   giam_doc: "Giám đốc",
   quan_ly: "Quản lý",
   nhan_vien: "Nhân viên",

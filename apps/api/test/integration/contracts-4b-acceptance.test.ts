@@ -44,6 +44,7 @@ interface Step {
   required_permission: string;
   required_role: string | null;
   decided_by: string | null;
+  decided_by_name: string | null;
   note: string | null;
   snapshot_hash_at_decision: string | null;
 }
@@ -498,6 +499,8 @@ describe("SPEC-04b API (acceptance)", () => {
     expect(still.status).toBe("pending");
     expect(still.steps).toHaveLength(2);
     expect(still.steps[0]!.status).toBe("approved");
+    expect(still.steps[0]!.decided_by_name).toBe("Tường Vi"); // C-04b-001a driver addition
+    expect(still.steps[1]!.decided_by_name).toBeNull();
     expect(await auditRows("contract.withdrawn", `contract:${d.id}`)).toHaveLength(0);
 
     // draft / issued → state-conflict

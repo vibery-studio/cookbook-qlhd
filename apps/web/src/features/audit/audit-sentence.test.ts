@@ -27,4 +27,9 @@ describe("auditSentence", () => {
       expect(AUDIT_ACTIONS[a]).toBeDefined();
     }
   });
+
+  it("covers withdraw and delete of a draft", () => {
+    expect(auditSentence({ action: "contract.withdrawn" }).text).toBe("rút hợp đồng về nháp");
+    expect(auditSentence({ action: "contract.deleted" }).text).toBe("xóa hợp đồng nháp");
+  });
 });

@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type IconName = "customers" | "shield" | "journal" | "users" | "menu" | "close" | "logout" | "arrow";
+export type IconName = "contracts" | "templates" | "approvals" | "customers" | "shield" | "journal" | "users" | "menu" | "close" | "logout" | "arrow";
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
   const sharedProps = {
@@ -18,6 +18,27 @@ export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGEle
   };
 
   switch (name) {
+    case "contracts":
+      return (
+        <svg {...sharedProps}>
+          <path d="M7 3h7l4 4v14H7z" />
+          <path d="M14 3v4h4M10 12h5M10 16h5" />
+        </svg>
+      );
+    case "templates":
+      return (
+        <svg {...sharedProps}>
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <path d="M4 9h16M9 9v11" />
+        </svg>
+      );
+    case "approvals":
+      return (
+        <svg {...sharedProps}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="m8.5 12.2 2.4 2.4 4.6-5" />
+        </svg>
+      );
     case "customers":
       return (
         <svg {...sharedProps}>

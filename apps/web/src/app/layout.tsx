@@ -1,17 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { NavLink, Outlet, useNavigate } from "react-router";
 import { client, queryClient } from "../lib/client";
 import { cn } from "../lib/cn";
 import { Icon } from "../ui";
 import { roleLabel, useCurrentUser } from "./me";
 import { navRegistry } from "./nav";
-
-const pageDescriptions: Record<string, string> = {
-  "/khach-hang": "Thông tin đối tác dùng chung cho các hợp đồng.",
-  "/phan-quyen": "Quyền được cấp theo vai, không theo từng người.",
-  "/nhat-ky": "Mọi thay đổi quan trọng đều được ghi lại.",
-  "/nguoi-dung": "Tài khoản và vai trò của đội ngũ nội bộ.",
-};
+import type { NavItem } from "./route-types";
 
 function initials(displayName: string | null, email: string): string {
   const source = displayName?.trim() || email.split("@")[0] || email;
@@ -33,12 +27,8 @@ function Brand({ mobile = false }: { mobile?: boolean }) {
 
 export function AppShell({ children }: { children?: ReactNode }) {
   const user = useCurrentUser();
-  const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const currentItem = navRegistry.find((item) => item.to === location.pathname);
-  const title = currentItem?.label ?? "Hợp đồng";
-  const description = pageDescriptions[location.pathname] ?? "Quản lý hợp đồng nội bộ của bạn.";
   const userLabel = user.display_name?.trim() || user.email;
 
   async function handleLogout() {
@@ -109,26 +99,17 @@ export function AppShell({ children }: { children?: ReactNode }) {
       </aside>
 
       <main className="min-h-0 min-w-0 overflow-y-auto bg-app shell-scroll">
-        <header className="sticky top-0 z-30 flex min-h-[var(--row-h)] items-center gap-s4 border-b border-line bg-surface px-s5 py-s4 max-mobile:px-s4">
+        <header className="sticky top-0 z-30 hidden min-h-[var(--row-h)] items-center gap-s3 border-b border-line bg-surface px-s4 py-s2 max-mobile:flex">
           <button
             type="button"
-            className="motion-colors hidden min-h-[var(--row-h)] min-w-[var(--row-h)] place-items-center rounded-r2 text-muted hover:bg-hover hover:text-strong max-mobile:grid"
+            className="motion-colors grid min-h-[var(--row-h)] min-w-[var(--row-h)] place-items-center rounded-r2 text-muted hover:bg-hover hover:text-strong"
             aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
             <Icon name={menuOpen ? "close" : "menu"} />
           </button>
-          <div className="min-w-0 max-mobile:hidden">
-            <Brand mobile />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold leading-head text-strong">{title}</h1>
-            <p className="truncate text-sm text-muted max-mobile:hidden">{description}</p>
-          </div>
-          <div className="ml-auto max-mobile:hidden">
-            <span className="font-mono text-sm text-faint">{roleLabel(user.roles)}</span>
-          </div>
+          <Brand mobile />
         </header>
         <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-s5 px-s5 py-s5 max-mobile:px-s4 max-mobile:py-s4">
           {children ?? <Outlet />}
@@ -138,11 +119,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
   );
 }
 
-function ShellNavLink({ item, onNavigate }: { item: (typeof navRegistry)[number]; onNavigate: () => void }) {
+function ShellNavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {
   return (
     <NavLink
       to={item.to}
-      end
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
@@ -152,7 +132,22 @@ function ShellNavLink({ item, onNavigate }: { item: (typeof navRegistry)[number]
       }
     >
       <Icon name={item.icon} />
-      <span>{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.badge ? <NavBadge item={item} useValue={item.badge} /> : null}
     </NavLink>
+  );
+}
+
+function NavBadge({ item, useValue }: { item: NavItem; useValue: () => number | string | undefined }) {
+  const value = useValue();
+  if (value === undefined || value === "" || value === 0) return null;
+  return (
+    <span
+      data-testid={`nav-badge-${item.id}`}
+      aria-label={item.badgeLabel ? item.badgeLabel(value) : String(value)}
+      className="shrink-0 rounded-full bg-accent px-s2 text-sm font-semibold leading-head text-surface"
+    >
+      {value}
+    </span>
   );
 }

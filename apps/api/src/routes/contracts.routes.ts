@@ -25,6 +25,7 @@ import { withIdempotency } from "../middleware/idempotency";
 import { requirePerm } from "../middleware/require-permission";
 import { copyContract } from "../services/contract/copy-service";
 import { createContract } from "../services/contract/create-service";
+import { deleteContract } from "../services/contract/delete-service";
 import { decideContract } from "../services/contract/decide-service";
 import { issueContract } from "../services/contract/issue-service";
 import { contractAudit, contractDetail, listContracts } from "../services/contract/read-service";
@@ -33,6 +34,7 @@ import { submitContract } from "../services/contract/submit-service";
 import type { BuildFailure, CommandCtx } from "../services/contract/types";
 import { updateContract } from "../services/contract/update-service";
 import { voidContract } from "../services/contract/void-service";
+import { withdrawContract } from "../services/contract/withdraw-service";
 
 type Env = { Bindings: Bindings; Variables: Variables };
 type Ctx = Context<Env>;
@@ -280,6 +282,38 @@ const renderRouteDef = createRoute({
   },
 });
 
+const withdrawRouteDef = createRoute({
+  method: "post",
+  path: "/contracts/{id}/withdraw",
+  tags: ["contracts"],
+  summary: "Withdraw a pending contract back to draft (creator only, no step decided yet)",
+  security,
+  request: { params: IdParam, body: { content: { "application/json": { schema: EmptyBody } }, required: false } },
+  responses: {
+    200: json(ContractSchema, "Contract back to draft (waiting steps removed, version + 1)"),
+    ...baseErrors,
+    403: problemResponse("Missing contract:submit permission, or not the creator (rule creator_only)"),
+    404: problemResponse("Contract not found"),
+    409: problemResponse("already-decided (a step was decided) | state-conflict (not pending)"),
+  },
+});
+
+const deleteRouteDef = createRoute({
+  method: "delete",
+  path: "/contracts/{id}",
+  tags: ["contracts"],
+  summary: "Hard-delete a draft (creator only); audit keeps the id only",
+  security,
+  request: { params: IdParam },
+  responses: {
+    204: { description: "Draft deleted" },
+    ...baseErrors,
+    403: problemResponse("Missing contract:write permission, or not the creator (rule creator_only)"),
+    404: problemResponse("Contract not found"),
+    409: problemResponse("state-conflict (current_status) — only drafts can be deleted"),
+  },
+});
+
 const auditRouteDef = createRoute({
   method: "get",
   path: "/contracts/{id}/audit",
@@ -299,10 +333,12 @@ const auditRouteDef = createRoute({
 export function contractsRoutes(app: OpenAPIHono<Env>): void {
   app.on("get", ["/contracts", "/contracts/:id", "/contracts/:id/render"], requireAuth(), requirePerm("contract:read"));
   app.on("post", "/contracts", requireAuth(), requirePerm("contract:write"), withIdempotency());
+  app.on("delete", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
   app.on("patch", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
   app.on("post", "/contracts/:id/submit", requireAuth(), requirePerm("contract:submit"), withIdempotency());
   app.on("post", ["/contracts/:id/approve", "/contracts/:id/reject"], requireAuth(), requirePerm("contract:approve"), withIdempotency());
   app.on("post", ["/contracts/:id/issue", "/contracts/:id/void"], requireAuth(), requirePerm("contract:issue"), withIdempotency());
+  app.on("post", "/contracts/:id/withdraw", requireAuth(), requirePerm("contract:submit"));
   app.on("post", "/contracts/:id/copy", requireAuth(), requirePerm("contract:write"), withIdempotency());
   app.on("get", "/contracts/:id/audit", requireAuth(), requirePerm("audit:read"));
 
@@ -447,6 +483,45 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
         return stateConflict(c, r.current);
       default:
         return buildFailure(c, r);
+    }
+  });
+
+  app.openapi(deleteRouteDef, async (c) => {
+    const r = await deleteContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
+    switch (r.kind) {
+      case "ok":
+        return c.body(null, 204);
+      case "not-found":
+        return notFound(c);
+      case "forbidden":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail: "Chỉ người tạo mới được xóa hợp đồng nháp.",
+          rule: "creator_only",
+        });
+      case "state-conflict":
+        return stateConflict(c, r.current);
+    }
+  });
+
+  app.openapi(withdrawRouteDef, async (c) => {
+    const r = await withdrawContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "forbidden":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail: "Chỉ người tạo mới được rút hợp đồng về nháp.",
+          rule: "creator_only",
+        });
+      case "already-decided":
+        return fail(c, 409, "A step was already decided", ProblemType.AlreadyDecided, {
+          detail: "Đã có người quyết một bước duyệt nên không rút về nháp được.",
+          current_status: "pending",
+        });
+      case "state-conflict":
+        return stateConflict(c, r.current);
     }
   });
 

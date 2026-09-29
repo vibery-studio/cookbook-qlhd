@@ -1653,6 +1653,7 @@ export interface paths {
                     status?: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
                     customer_id?: string;
                     created_by?: string;
+                    template_id?: string;
                     cursor?: string;
                     limit?: number;
                 };
@@ -1838,7 +1839,63 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
+        /** Hard-delete a draft (creator only); audit keeps the id only */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Draft deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing contract:write permission, or not the creator (rule creator_only) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Contract not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description state-conflict (current_status) — only drafts can be deleted */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         /** Edit a draft (creator only, optimistic lock) */
@@ -2407,6 +2464,84 @@ export interface paths {
                 };
                 /** @description missing-fields | validation (today's data) */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw a pending contract back to draft (creator only, no step decided yet) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["EmptyRequest"];
+                };
+            };
+            responses: {
+                /** @description Contract back to draft (waiting steps removed, version + 1) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Contract"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing contract:submit permission, or not the creator (rule creator_only) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Contract not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description already-decided (a step was decided) | state-conflict (not pending) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3313,6 +3448,8 @@ export interface components {
             created_at: number;
             updated_at: number;
             version: number;
+            issued_count: number;
+            issued_total: number;
         };
         CreateCustomerRequest: {
             name: string;
@@ -3519,6 +3656,7 @@ export interface components {
             required_permission: string;
             required_role: string | null;
             decided_by: string | null;
+            decided_by_name: string | null;
             decided_at: number | null;
             note: string | null;
             snapshot_hash_at_decision: string | null;
@@ -3536,6 +3674,8 @@ export interface components {
             issue: boolean;
             void: boolean;
             copy: boolean;
+            withdraw: boolean;
+            delete: boolean;
         };
         CreateContractRequest: {
             template_id: string;
@@ -3562,6 +3702,7 @@ export interface components {
             /** @enum {string} */
             status: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
             customer_name: string;
+            template_name: string;
             total: number;
             created_by: string;
             created_by_name: string | null;

@@ -77,6 +77,7 @@ export const ProblemType = {
   UnresolvedPlaceholder: "unresolved-placeholder",
   NoEligibleApprover: "no-eligible-approver",
   StateConflict: "state-conflict",
+  AlreadyDecided: "already-decided",
   ChangedAfterApproval: "changed-after-approval",
   WouldBlockLaterStep: "would-block-later-step",
 } as const;

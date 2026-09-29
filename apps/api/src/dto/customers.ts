@@ -14,6 +14,8 @@ export const CustomerSchema = z
     created_at: TimestampSchema,
     updated_at: TimestampSchema,
     version: z.number().int().min(1),
+    issued_count: z.number().int().min(0),
+    issued_total: z.number().int().min(0),
   })
   .openapi("Customer");
 

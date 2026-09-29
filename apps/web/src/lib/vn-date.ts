@@ -25,3 +25,9 @@ export function formatVietnamTimestamp(seconds: number, now = Date.now()): strin
   }
   return `${date.day}/${date.month}/${date.year}`;
 }
+
+/** "YYYY-MM-DD" -> "dd/mm/yyyy" by splitting the string (never via Date: no timezone drift). */
+export function formatIsoDate(iso: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";
+}
