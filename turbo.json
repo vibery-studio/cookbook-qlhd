@@ -6,6 +6,11 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": ["dist/**", ".wrangler/**"]
     },
+    "@runway/api#build": {
+      "dependsOn": ["^build", "@runway/web#build"],
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": ["dist/**", ".wrangler/**"]
+    },
     "test": {
       "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$"],

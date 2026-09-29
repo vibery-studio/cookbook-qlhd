@@ -26,6 +26,11 @@ type BindingSet = {
   kv: Set<string>;
   queueProducers: Set<string>;
   ratelimits: Set<string>;
+  assets: {
+    directory: string | null;
+    notFoundHandling: string | null;
+    runWorkerFirst: string[];
+  };
 };
 
 function emptyBindingSet(): BindingSet {
@@ -34,11 +39,26 @@ function emptyBindingSet(): BindingSet {
     kv: new Set(),
     queueProducers: new Set(),
     ratelimits: new Set(),
+    assets: { directory: null, notFoundHandling: null, runWorkerFirst: [] },
   };
 }
 
 function collectBindings(block: Record<string, unknown>): BindingSet {
   const set = emptyBindingSet();
+
+  const assets = block.assets;
+  if (assets && typeof assets === 'object') {
+    const assetConfig = assets as Record<string, unknown>;
+    set.assets.directory = typeof assetConfig.directory === 'string' ? assetConfig.directory : null;
+    set.assets.notFoundHandling =
+      typeof assetConfig.not_found_handling === 'string' ? assetConfig.not_found_handling : null;
+    const runWorkerFirst = assetConfig.run_worker_first;
+    if (Array.isArray(runWorkerFirst)) {
+      set.assets.runWorkerFirst = runWorkerFirst.map(String);
+    } else if (typeof runWorkerFirst === 'boolean') {
+      set.assets.runWorkerFirst = [String(runWorkerFirst)];
+    }
+  }
 
   const d1 = block.d1_databases;
   if (Array.isArray(d1)) {
@@ -91,8 +111,15 @@ function bindingSetsEqual(a: BindingSet, b: BindingSet): boolean {
     setsEqual(a.d1, b.d1) &&
     setsEqual(a.kv, b.kv) &&
     setsEqual(a.queueProducers, b.queueProducers) &&
-    setsEqual(a.ratelimits, b.ratelimits)
+    setsEqual(a.ratelimits, b.ratelimits) &&
+    a.assets.directory === b.assets.directory &&
+    a.assets.notFoundHandling === b.assets.notFoundHandling &&
+    arraysEqual(a.assets.runWorkerFirst, b.assets.runWorkerFirst)
   );
+}
+
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
@@ -118,6 +145,16 @@ function diffReport(nameA: string, a: BindingSet, nameB: string, b: BindingSet):
       lines.push(`    ${nameA}: ${formatSet(setA)}`);
       lines.push(`    ${nameB}: ${formatSet(setB)}`);
     }
+  }
+
+  if (
+    a.assets.directory !== b.assets.directory ||
+    a.assets.notFoundHandling !== b.assets.notFoundHandling ||
+    !arraysEqual(a.assets.runWorkerFirst, b.assets.runWorkerFirst)
+  ) {
+    lines.push('  [assets] mismatch:');
+    lines.push(`    ${nameA}: directory=${a.assets.directory ?? '(missing)'}, not_found_handling=${a.assets.notFoundHandling ?? '(missing)'}, run_worker_first=${JSON.stringify(a.assets.runWorkerFirst)}`);
+    lines.push(`    ${nameB}: directory=${b.assets.directory ?? '(missing)'}, not_found_handling=${b.assets.notFoundHandling ?? '(missing)'}, run_worker_first=${JSON.stringify(b.assets.runWorkerFirst)}`);
   }
 
   return lines;

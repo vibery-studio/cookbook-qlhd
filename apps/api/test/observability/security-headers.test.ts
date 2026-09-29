@@ -20,7 +20,8 @@ describe("security headers", () => {
   });
 
   it("security headers set on error responses (404)", async () => {
-    const res = await SELF.fetch("https://example.com/no-such-path");
+    // an unknown path inside run_worker_first (unknown non-API paths are the SPA's, served as index.html)
+    const res = await SELF.fetch("https://example.com/admin/no-such-path");
     expect(res.status).toBe(404);
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("DENY");

@@ -861,7 +861,7 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     console.log(`AC-18 tally after 5 on one: ${after?.n}|${after?.d}|${after?.lo}|${after?.hi}`);
     expect(after).toEqual({ n: 11, d: 11, lo: 1, hi: 11 });
     expect((await get(t.nv, one.id)).number).toBe("HD-2026-011");
-  });
+  }, 60_000); // heavy setup (4 users, 11 contracts, 15 concurrent issues) — timing only
 
   it("§4 two people: approve and reject at the same moment → one wins, the other 409; one audit row", async () => {
     const t = await team();

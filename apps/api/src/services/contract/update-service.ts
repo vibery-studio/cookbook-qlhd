@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars -- stub: body lands in its wave-2 card */
 import type { Db } from "../../db/client";
 import type { ContractDto, UpdateContractInput } from "../../dto/contracts";
-import { NotImplementedYet } from "./not-implemented";
+import type { Snapshot } from "../../domain/contract/types";
+import { getContractForWrite, updateDraftCas } from "../../dao/contract-write-dao";
+import { loadAndBuild } from "./snapshot-builder";
 import type { BuildFailure, CommandCtx } from "./types";
 
 export type UpdateResult =
@@ -13,10 +14,62 @@ export type UpdateResult =
   | BuildFailure;
 
 export async function updateContract(
-  _db: Db,
-  _ctx: CommandCtx,
-  _id: string,
-  _input: UpdateContractInput,
+  db: Db,
+  ctx: CommandCtx,
+  id: string,
+  input: UpdateContractInput,
 ): Promise<UpdateResult> {
-  throw new NotImplementedYet("updateContract");
+  const current = await getContractForWrite(db, id);
+  if (current === null) return { kind: "not-found" };
+  if (current.created_by !== ctx.actor.id) return { kind: "forbidden" };
+  if (current.status !== "draft") return { kind: "state-conflict", current: current.status };
+
+  const previous = current.snapshot as unknown as Snapshot;
+  const values = {
+    ...previous.inputs,
+    ...(input.values === undefined ? {} : { ...input.values }),
+  };
+  const suppliedStart = input.values !== undefined && Object.prototype.hasOwnProperty.call(input.values, "ngay_bat_dau");
+  const previousStartWasManual = previous.dates.start !== previous.dates.doc_date;
+  const built = await loadAndBuild(db, {
+    ...(input.use_latest_template === true
+      ? { templateId: current.template_id }
+      : { templateVersionId: current.template_version_id }),
+    customerId: input.customer_id ?? current.customer_id,
+    values,
+    now: ctx.now,
+    manualStart: suppliedStart || previousStartWasManual,
+  });
+  if (built.kind === "not-found") return { kind: "not-found" };
+  if (built.kind !== "ok") return built;
+
+  const fieldNames = input.values === undefined ? [] : Object.keys(input.values);
+  if (input.customer_id !== undefined) fieldNames.push("customer_id");
+  if (input.use_latest_template === true) fieldNames.push("template_version_id");
+  const now = Math.floor(ctx.now.getTime() / 1000);
+  const updated = await updateDraftCas(db, {
+    id,
+    expectedVersion: input.expected_version,
+    actor: ctx.actor.id,
+    ip: ctx.ip,
+    fieldNames,
+    patch: {
+      templateId: built.built.snapshot.template.id,
+      templateVersionId: built.built.snapshot.template.version_id,
+      customerId: built.built.snapshot.customer.id,
+      docDate: built.built.snapshot.dates.doc_date,
+      snapshot: built.built.snapshotJson,
+      snapshotHash: built.built.snapshotHash,
+      customerName: built.built.snapshot.customer.name,
+      total: built.built.snapshot.total,
+      now,
+    },
+  });
+  if (updated !== null) return { kind: "ok", contract: updated };
+
+  const after = await getContractForWrite(db, id);
+  if (after === null) return { kind: "not-found" };
+  if (after.created_by !== ctx.actor.id) return { kind: "forbidden" };
+  if (after.status !== "draft") return { kind: "state-conflict", current: after.status };
+  return { kind: "stale" };
 }

@@ -32,4 +32,4 @@ added here first.
 ## Space, shape, size
 - Spacing scale `--s1…s7`: 4 · 8 · 12 · 16 · 24 · 32 · 48 px — nothing off-scale.
 - Radius `--r1/r2/r3`: 4 / 6 / 10 px (pills and avatars: fully round).
-- Layout: sidebar `--sidebar-w` 240px · table row `--row-h` 44px · drawer `--drawer-w` 560px.
+- Layout: sidebar `--sidebar-w` 240px · table row `--row-h` 44px · drawer `--drawer-w` 560px · mobile breakpoint `--breakpoint-mobile` 768px.

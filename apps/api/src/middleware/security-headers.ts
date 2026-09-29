@@ -40,6 +40,10 @@ const DOCS_CSP =
   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; " +
   "frame-ancestors 'none'; base-uri 'self'";
 
+const RENDER_PATH = /^\/contracts\/[^/]+\/render$/;
+const RENDER_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
+
 export function securityHeaders(): MiddlewareHandler {
   return async (c, next) => {
     await next();
@@ -49,5 +53,8 @@ export function securityHeaders(): MiddlewareHandler {
       c.header(key, value);
     }
     if (c.req.path === "/docs") c.header("content-security-policy", DOCS_CSP);
+    // The printable contract (SPEC-03 AC-27) is customer-data HTML: no script, no fetch, inline print CSS
+    // only. Stricter than the default; frame-ancestors 'self' so the web app can preview it.
+    if (RENDER_PATH.test(c.req.path)) c.header("content-security-policy", RENDER_CSP);
   };
 }

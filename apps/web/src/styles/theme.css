@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@theme static {
+  --color-*: initial;
+  --color-app: #FBFBFC;
+  --color-surface: #FFFFFF;
+  --color-sidebar: #F4F5F7;
+  --color-sunken: #F7F8FA;
+  --color-hover: #EEF0F3;
+  --color-active: #E8EAEF;
+  --color-strong: #16181D;
+  --color-body: #2E3138;
+  --color-muted: #5C6270;
+  --color-faint: #616875;
+  --color-accent: #2C5FD6;
+  --color-accent-soft: #E8EEFC;
+  --color-accent-border: #B9CCF6;
+  --color-danger: #B3261E;
+  --color-danger-bg: #FCEAE8;
+  --color-danger-border: #F2C9C5;
+  --color-ok: #1B6E4B;
+  --color-ok-bg: #E3F3EB;
+  --color-ok-border: #BFE0CE;
+  --color-line: #E3E5EA;
+  --color-line-strong: #CDD1D9;
+  --color-st-draft: #4A5260;
+  --color-st-draft-bg: #EDEFF2;
+  --color-st-pending: #8A5A12;
+  --color-st-pending-bg: #FBF0DD;
+  --color-st-approved: #1B6E4B;
+  --color-st-approved-bg: #E3F3EB;
+  --color-st-issued: #1F5FA8;
+  --color-st-issued-bg: #E5EFFA;
+  --color-st-rejected: #A63A3A;
+  --color-st-rejected-bg: #FBE9E9;
+
+  --text-*: initial;
+  --text-micro: 12px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
+  --font-sans: "Be Vietnam Pro", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-*: initial;
+  --leading-head: 1.28;
+  --leading-body: 1.55;
+
+  --spacing-*: initial;
+  --spacing-s1: 4px;
+  --spacing-s2: 8px;
+  --spacing-s3: 12px;
+  --spacing-s4: 16px;
+  --spacing-s5: 24px;
+  --spacing-s6: 32px;
+  --spacing-s7: 48px;
+  --spacing-sidebar: 240px;
+  --spacing-row: 44px;
+  --spacing-drawer: 560px;
+
+  --radius-*: initial;
+  --radius-r1: 4px;
+  --radius-r2: 6px;
+  --radius-r3: 10px;
+  --radius-full: 9999px;
+  --shadow-*: initial;
+  --breakpoint-mobile: 768px;
+  --ease-feel: cubic-bezier(.22,.68,.24,1);
+}
+
+:root {
+  --bg-app: var(--color-app);
+  --bg-surface: var(--color-surface);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-sunken: var(--color-sunken);
+  --bg-hover: var(--color-hover);
+  --bg-active: var(--color-active);
+  --text-strong: var(--color-strong);
+  --text-body: var(--color-body);
+  --text-muted: var(--color-muted);
+  --text-faint: var(--color-faint);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --accent-border: var(--color-accent-border);
+  --danger: var(--color-danger);
+  --danger-bg: var(--color-danger-bg);
+  --danger-border: var(--color-danger-border);
+  --ok: var(--color-ok);
+  --ok-bg: var(--color-ok-bg);
+  --ok-border: var(--color-ok-border);
+  --border: var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --st-draft: var(--color-st-draft);
+  --st-draft-bg: var(--color-st-draft-bg);
+  --st-pending: var(--color-st-pending);
+  --st-pending-bg: var(--color-st-pending-bg);
+  --st-approved: var(--color-st-approved);
+  --st-approved-bg: var(--color-st-approved-bg);
+  --st-issued: var(--color-st-issued);
+  --st-issued-bg: var(--color-st-issued-bg);
+  --st-rejected: var(--color-st-rejected);
+  --st-rejected-bg: var(--color-st-rejected-bg);
+
+  --s1: var(--spacing-s1);
+  --s2: var(--spacing-s2);
+  --s3: var(--spacing-s3);
+  --s4: var(--spacing-s4);
+  --s5: var(--spacing-s5);
+  --s6: var(--spacing-s6);
+  --s7: var(--spacing-s7);
+  --sidebar-w: var(--spacing-sidebar);
+  --row-h: var(--spacing-row);
+  --drawer-w: var(--spacing-drawer);
+  --r1: var(--radius-r1);
+  --r2: var(--radius-r2);
+  --r3: var(--radius-r3);
+  --lh-head: var(--leading-head);
+  --lh-body: var(--leading-body);
+  --dur: 150ms;
+  --modal-offset: var(--spacing-s2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+  }
+}

@@ -26,7 +26,7 @@ RATE_LIMIT_AUTH_SIGNUP = "3"
 directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [[d1_databases]]
 binding = "DB"
@@ -111,7 +111,7 @@ name = "runway-api-preview-pr-PLACEHOLDER_PR"
 directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.preview.vars]
 APP_ENV = "preview"
@@ -191,7 +191,7 @@ name = "runway-api-prod"
 directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.production.vars]
 APP_ENV = "production"
