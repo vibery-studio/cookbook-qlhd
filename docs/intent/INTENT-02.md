@@ -1,6 +1,6 @@
 # INTENT-02: Mẫu hợp đồng có phiên bản
 
-Status: Draft
+Status: Approved 2026-09-29
 Serves: MAP M4 (nền cho M1 M2) · Roadmap: ROADMAP-01 row 2
 Asked by: bạn (chủ dự án) · Written: 2026-09-29
 
@@ -45,4 +45,4 @@ Asked by: bạn (chủ dự án) · Written: 2026-09-29
 - [Q-2] Ghi chú nội bộ về giảm >10% → answer: bỏ khỏi chữ hợp đồng, thành quy tắc duyệt: Quản lý duyệt luôn, giảm >10% thêm bước Giám đốc (IDEA).
 - [Q-3] `so_bao_gia` / `ngay_bao_gia` / `chuc_vu_nguoi_ky` → answer: 2 trường đầu tự nhập, không bắt buộc, trống thì bỏ dòng "Căn cứ"; `chuc_vu_nguoi_ky` bắt buộc, nhập tay (IDEA).
 - [Q-4] Ai sửa mẫu → answer: Giám đốc (`template:write`; MAP M4, mockup "🔒 only Giám đốc edits").
-- [Q-5] Còn mở (không chặn INTENT, hỏi ở SPEC-02 §6): định dạng chữ mẫu, cách hiển thị bản cũ, ngày bắt đầu hợp đồng, ngày hợp đồng.
+- [Q-5] → answer: đã chốt ở SPEC-02 §6 (2026-09-29): HTML tối giản + `{{#if}}`, bản cũ đọc được với `contract:read`, `ngay_bat_dau` mặc định = ngày lập (sửa được), `ngay_hop_dong` = ngày lập.

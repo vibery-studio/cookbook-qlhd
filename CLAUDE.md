@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A contract-management app ("quản lý hợp đồng") for a small Vietnamese team: staff create contracts from versioned
-templates, managers and the director approve them, the director issues them with a gap-free number, and every move is
+templates, managers and the director approve them (never their own; one person per step), a manager or the director issues them with a gap-free number, and every move is
 audited. Built on **RUNWAY** (a members-only Cloudflare Workers API base, already accepted) from the **Cookbook**
 (`docs/cookbook/`, the approved spec and design). Three roles: Nhân viên · Quản lý · Giám đốc.
 
