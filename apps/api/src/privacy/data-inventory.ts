@@ -128,4 +128,7 @@ export const INVENTORY_EXEMPT_TABLES: readonly string[] = [
   // business records, not the staff member's personal data (SPEC-01)
   "customers",
   "price_list",
+  // contract templates: business records, no personal data (SPEC-02)
+  "templates",
+  "template_versions",
 ];

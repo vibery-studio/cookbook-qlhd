@@ -78,6 +78,20 @@
       "when": 1790690232254,
       "tag": "0010_seed_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790694308426,
+      "tag": "0011_easy_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790694312054,
+      "tag": "0012_template_versions_append_only",
+      "breakpoints": true
     }
   ]
 }

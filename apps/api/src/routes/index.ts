@@ -12,6 +12,8 @@ import { adminUsersRoutes } from "./admin-users.routes";
 import { auditRoutes } from "./audit.routes";
 import { customersRoutes } from "./customers.routes";
 import { priceListRoutes } from "./price-list.routes";
+import { templatesRoutes } from "./templates.routes";
+import { templatesWriteRoutes } from "./templates-write.routes";
 import { rolesRoutes } from "./roles.routes";
 import { demoRoutes } from "./demo.routes";
 import { healthRoutes } from "./health.routes";
@@ -34,6 +36,8 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   auditRoutes(app);
   customersRoutes(app);
   priceListRoutes(app);
+  templatesRoutes(app);
+  templatesWriteRoutes(app);
   adminSettingsRoutes(app);
   adminFlagsRoutes(app);
   demoRoutes(app);

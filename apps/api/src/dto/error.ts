@@ -18,7 +18,18 @@ export const ProblemDto = z
     detail: z.string().optional(),
     instance: z.string().optional(),
     request_id: z.string().optional(),
-    errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+    errors: z
+      .array(
+        z.object({
+          path: z.string(),
+          message: z.string(),
+          /** `template-check-failed` items (SPEC-02 §3.8) */
+          code: z.string().optional(),
+          key: z.string().optional(),
+          source: z.string().optional(),
+        }),
+      )
+      .optional(),
     /** Extension on 409 `duplicate` (customers): id of the record that already exists. */
     existing_id: z.string().optional(),
   })
@@ -50,6 +61,7 @@ export const ProblemType = {
   Duplicate: "duplicate",
   AlreadyActive: "already-active",
   InvalidOrExpiredToken: "invalid-or-expired-token",
+  TemplateCheckFailed: "template-check-failed",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];

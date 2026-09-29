@@ -21,6 +21,7 @@ const MeResponse = z
   .object({
     id: UlidSchema,
     email: EmailSchema,
+    display_name: z.string().nullable(),
     roles: z.array(z.string()),
     permissions: z.array(z.string()),
   })
@@ -72,6 +73,7 @@ export function meRoutes(app: OpenAPIHono<Env>): void {
       {
         id: user.id,
         email: user.email,
+        display_name: user.displayName,
         roles: [...principal.roles],
         permissions: [...principal.permissions],
       },

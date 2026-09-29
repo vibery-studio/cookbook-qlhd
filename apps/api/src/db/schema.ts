@@ -339,6 +339,53 @@ export const priceList = sqliteTable(
 );
 
 /**
+ * Contract templates (SPEC-02 §3.1). `name_norm` = trimmed/lower-cased name, UNIQUE. `current_version_id`
+ * is a plain TEXT pointer (no FK: templates <-> template_versions would be circular) moved only by a CAS
+ * in the same batch as the version INSERT. `created_by` NULL = seeded by a migration (system).
+ */
+export const templates = sqliteTable(
+  "templates",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(), // contract
+    name: text("name").notNull(),
+    nameNorm: text("name_norm").notNull(),
+    subjectType: text("subject_type").notNull(), // customer
+    currentVersionId: text("current_version_id"),
+    active: integer("active").notNull().default(1),
+    createdBy: text("created_by"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("uq_templates_name_norm").on(table.nameNorm)],
+);
+
+/**
+ * Template versions — APPEND-ONLY (no `updated_*`; a DB trigger refuses UPDATE/DELETE, SPEC-02 DEC-6).
+ * JSON columns hold the fixed shapes of SPEC-02 §3.3/§3.4/§3.6.
+ */
+export const templateVersions = sqliteTable(
+  "template_versions",
+  {
+    id: text("id").primaryKey(),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => templates.id),
+    versionNo: integer("version_no").notNull(),
+    body: text("body").notNull(),
+    fields: text("fields").notNull(),
+    defaultLineItems: text("default_line_items").notNull(),
+    defaultClauses: text("default_clauses").notNull(),
+    approvalPolicy: text("approval_policy").notNull(),
+    fieldRules: text("field_rules").notNull(),
+    note: text("note"),
+    createdBy: text("created_by"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [uniqueIndex("uq_template_versions_tpl_no").on(table.templateId, table.versionNo)],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -360,4 +407,6 @@ export const schema = {
   auditEvents,
   customers,
   priceList,
+  templates,
+  templateVersions,
 };
