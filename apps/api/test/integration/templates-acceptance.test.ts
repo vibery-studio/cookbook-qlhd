@@ -317,8 +317,10 @@ describe("SPEC-02 templates (acceptance)", () => {
     const { gd, nv } = await team();
     const seed = await getSeed(gd.session);
     // compare the v1 VERSION object only — the detail's `versions[]` list legitimately gains v2
-    const v1Of = async (s: RunwaySession) =>
-      JSON.stringify(((await (await s.fetch(`/templates/${seed.id}?version_no=1`)).json()) as TemplateDetail).version);
+    const v1Of = async (s: RunwaySession): Promise<string> => {
+      const d: TemplateDetail = await (await s.fetch(`/templates/${seed.id}?version_no=1`)).json();
+      return JSON.stringify(d.version);
+    };
     const v1Before = await v1Of(gd.session);
 
     const edited = seed.version.body.replace("Hôm nay, ngày", "Hôm nay là ngày");
