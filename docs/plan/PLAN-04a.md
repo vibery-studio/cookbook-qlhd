@@ -93,3 +93,13 @@ Human checklist (dev :5173 or real :8787; do → must see):
 - AC-14: admin invites Nhân viên → link once; close, "Tạo lại link" → new link · last admin self-lock → Vietnamese last-admin message · Giám đốc demotes Quản lý → after reload they lose Nhật ký.
 Attack (access/personal data): call each screen's URL logged out → `/login`; Nhân viên direct `/nguoi-dung` + direct API `GET /admin/users` → 403 + audit row; `next=//evil.com`, `next=https://evil.com`, `next=javascript:…` → ignored; token not in URL/Referer/console after activate.
 Result: [pass | what failed] · visual nits → list for next row, no polish loop · human approval: [ ]
+
+### PROOF log (C-04a-006, run 2026-09-29)
+Driver checks at a4f4ac6 (not re-run by 006): typecheck 7/7 · lint 2/2 · web build ok · `CI=true pnpm test` -> api 247 passed | 2 skipped, web 35 passed.
+e2e wiring: `@playwright/test` 1.63.0 (npm view = 1.63.0) devDependency of apps/web, script `e2e`; `playwright.config.ts` (port 8791, own D1 at `apps/api/.wrangler/e2e`), `e2e/global-setup.ts` (admin inserted into the e2e D1 like `dev:seed-admin`; Giám đốc/Quản lý/Nhân viên via real API `POST /admin/users` -> `POST /auth/activate`; one saved login each), `e2e/fixtures.ts` (sidebar labels Khách hàng/Phân quyền/Nhật ký/Người dùng).
+Run 1 (the only run so far; `PROOF_SHOTS=1 CI=true pnpm --filter @runway/web e2e`): world seeded and logins OK (global-setup green, /khach-hang renders for Giám đốc, screenshot `e2e/shots/khach-hang.png` taken), then RED:
+`locator.click: strict mode violation: getByRole('button', { name: '+ Thêm khách' }) resolved to 2 elements` (smoke spec line 29).
+Root cause = product, not wiring: `apps/web/src/features/customers/customers-screen.tsx` L48/L67 toolbar button + L82-84 EmptyState action both render "+ Thêm khách" when the list is empty (SPEC wants one action per empty state). Outside 006 `touches` -> STOPPED, needs fix in card 003's file (e.g. hide toolbar button while empty, or EmptyState without action), then the ONE PROOF run.
+Result: [pending - red on the one product bug above] · visual nits (from khach-hang.png, 1440x900): top bar repeats the "Hợp đồng · nội bộ · của bạn" brand next to the sidebar brand; role badge "Giám đốc" overflows the sidebar's right edge (x~247 > 240); duplicate CTA as above.
+Human checklist: (as listed above, unchanged) · Attack pass to run in the PROOF run: logged-out URL -> `/login?next=`; Nhân viên `/nguoi-dung` -> 403 UI (no `GET /admin/users` data); no token in localStorage/sessionStorage/console (asserted by the spec).
+Human approval: [ ]

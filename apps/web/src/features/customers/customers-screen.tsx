@@ -42,6 +42,8 @@ export function CustomersScreen() {
     setModal({ mode: "edit", customer, onClose: () => setModal(null), onSaved: (message) => { setModal(null); setNotice(message); } });
   }
 
+  // an empty list carries its own single action (EmptyState); the toolbar would repeat it
+  const emptyList = !customers.isPending && !customers.isError && items.length === 0 && !debouncedSearch;
   const emptyAction = debouncedSearch ? (
     <Button type="button" variant="secondary" onClick={() => setSearch("")}>Xóa tìm kiếm</Button>
   ) : canWrite ? (
@@ -63,7 +65,7 @@ export function CustomersScreen() {
           onChange={(event) => setSearch(event.target.value)}
           autoComplete="off"
         />
-        {canWrite ? (
+        {emptyList ? null : canWrite ? (
           <Button type="button" className="max-mobile:w-full" onClick={openCreate}>+ Thêm khách</Button>
         ) : (
           <LockedNote>Bạn không có quyền thêm hoặc sửa khách hàng.</LockedNote>

@@ -86,7 +86,7 @@ importers:
         version: 8.19.1(eslint@9.37.0(jiti@2.7.0))(typescript@5.6.3)
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
       wrangler:
         specifier: ^4.135.0
         version: 4.135.0(@cloudflare/workers-types@5.20260918.1)(@types/node@22.10.5)
@@ -115,6 +115,9 @@ importers:
         specifier: 7.18.4
         version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
       '@runway/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -162,7 +165,7 @@ importers:
         version: 6.4.3(@types/node@22.10.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/auth:
     dependencies:
@@ -178,13 +181,13 @@ importers:
         version: link:../config
       '@vitest/coverage-v8':
         specifier: 3.2.6
-        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
+        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
       typescript:
         specifier: 5.6.3
         version: 5.6.3
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/client:
     dependencies:
@@ -206,7 +209,7 @@ importers:
         version: 5.6.3
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/config:
     devDependencies:
@@ -221,7 +224,7 @@ importers:
         version: 8.19.1(eslint@9.37.0(jiti@2.7.0))(typescript@5.6.3)
       '@vitest/coverage-v8':
         specifier: 3.2.6
-        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
+        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
       eslint:
         specifier: 9.37.0
         version: 9.37.0(jiti@2.7.0)
@@ -233,7 +236,7 @@ importers:
         version: 8.19.1(eslint@9.37.0(jiti@2.7.0))(typescript@5.6.3)
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/contracts:
     devDependencies:
@@ -264,13 +267,13 @@ importers:
         version: 19.3.0
       '@vitest/coverage-v8':
         specifier: 3.2.6
-        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
+        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
       typescript:
         specifier: 5.6.3
         version: 5.6.3
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/rbac:
     devDependencies:
@@ -279,7 +282,7 @@ importers:
         version: link:../config
       '@vitest/coverage-v8':
         specifier: 3.2.6
-        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
+        version: 3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))
       hono:
         specifier: 4.13.8
         version: 4.13.8
@@ -288,7 +291,7 @@ importers:
         version: 5.6.3
       vitest:
         specifier: 3.2.6
-        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+        version: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   packages/test-fixtures:
     devDependencies:
@@ -1593,6 +1596,11 @@ packages:
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
+
+  '@playwright/test@1.63.0':
+    resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
@@ -3175,6 +3183,16 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.63.0:
+    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
@@ -3866,7 +3884,7 @@ snapshots:
       devalue: 5.9.4
       miniflare: 4.20251001.0(@types/node@22.10.5)
       semver: 7.8.5
-      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
       wrangler: 4.135.0(@cloudflare/workers-types@5.20260918.1)(@types/node@22.10.5)
       zod: 3.24.1
     transitivePeerDependencies:
@@ -4570,6 +4588,10 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
+  '@playwright/test@1.63.0':
+    dependencies:
+      playwright: 1.63.0
+
   '@poppinss/colors@4.1.6':
     dependencies:
       kleur: 4.1.5
@@ -4920,7 +4942,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
 
   '@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
@@ -5071,7 +5093,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))':
+  '@vitest/coverage-v8@3.2.6(vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 1.0.2
@@ -5086,7 +5108,7 @@ snapshots:
       std-env: 3.10.0
       test-exclude: 7.0.2
       tinyrainbow: 2.0.0
-      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
+      vitest: 3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -6080,6 +6102,12 @@ snapshots:
 
   picomatch@4.0.7: {}
 
+  playwright-core@1.63.0: {}
+
+  playwright@1.63.0:
+    dependencies:
+      playwright-core: 1.63.0
+
   pluralize@8.0.0: {}
 
   postcss@8.5.28:
@@ -6445,7 +6473,7 @@ snapshots:
       tsx: 4.19.2
       yaml: 2.9.1
 
-  vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1)(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1):
+  vitest@3.2.6(@types/node@22.10.5)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@1.7.0))(lightningcss@1.32.0)(tsx@4.19.2)(yaml@2.9.1):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.6

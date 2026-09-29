@@ -98,10 +98,13 @@ export function createClient(options: CreateClientOptions): RunwayClient {
   const typed = createOpenAPIClient<paths>({
     baseUrl: options.baseUrl,
     fetch: async (request: Request) => {
+      // Buffer the body: a ReadableStream needs `duplex` in browsers (fetch throws before any I/O)
+      // and could not be re-sent on the post-refresh retry anyway.
+      const body = request.body === null ? undefined : await request.arrayBuffer();
       const init: RequestInit = {
         method: request.method,
         headers: request.headers,
-        body: request.body,
+        body,
         credentials: request.credentials,
       };
       return withAutoRefresh(() => augmentedFetch(request.url, init));

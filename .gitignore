@@ -33,3 +33,10 @@ packages/contracts/dist/
 # Local session/tooling state (agent-specific; not part of the blueprint)
 .claude/
 .agentkit/
+
+# e2e (C-04a-006)
+apps/web/e2e/.auth/
+apps/web/e2e/shots/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/api/.wrangler/e2e/

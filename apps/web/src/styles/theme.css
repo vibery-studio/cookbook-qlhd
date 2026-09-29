@@ -55,6 +55,7 @@
   --leading-body: 1.55;
 
   --spacing-*: initial;
+  --spacing-0: 0px; /* inset-0 · top-0 · translate-*-0 need a named 0 once the numeric scale is reset */
   --spacing-s1: 4px;
   --spacing-s2: 8px;
   --spacing-s3: 12px;

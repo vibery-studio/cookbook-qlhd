@@ -101,7 +101,7 @@ export function AuditScreen() {
                     denied ? "border-danger-border bg-st-rejected-bg text-danger" : "border-line bg-surface",
                   )}
                 >
-                  <span aria-hidden="true" className={cn("grid size-7 flex-none place-items-center rounded-r2 text-md", iconTone[s.tone])}>
+                  <span aria-hidden="true" className={cn("grid size-s6 flex-none place-items-center rounded-r2 text-md", iconTone[s.tone])}>
                     {s.icon}
                   </span>
                   <div className="min-w-0 flex-1">
