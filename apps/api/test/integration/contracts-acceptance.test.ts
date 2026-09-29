@@ -1059,6 +1059,13 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     });
     expect(patch.status).toBe(403);
     expect((await post(t.ql, `/contracts/${d.id}/submit`, {})).status).toBe(403);
+    // SPEC-03 §3.5: a non-creator PATCH and submit each leave a permission.denied row on the contract
+    const creatorOnly = await env.DB.prepare(
+      "SELECT json_extract(metadata, '$.permission') AS p FROM audit_events WHERE action = 'permission.denied' AND actor = ? AND target = ? ORDER BY p",
+    )
+      .bind(t.ql.userId, `contract:${d.id}`)
+      .all<{ p: string }>();
+    expect(creatorOnly.results.map((r) => r.p)).toEqual(["contract:submit", "contract:write"]);
     expect((await get(t.nv, d.id)).status).toBe("draft");
     // the technical admin has no contract:* at all
     expect((await t.admin.fetch("/contracts")).status).toBe(403);

@@ -7,7 +7,6 @@ import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
 import { requirePerm } from "../middleware/require-permission";
-import { NotImplementedYet } from "../services/contract/not-implemented";
 import { approvalQueue } from "../services/contract/read-service";
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -25,7 +24,6 @@ const mineRoute = createRoute({
     401: problemResponse("Not authenticated"),
     403: problemResponse("Missing contract:approve permission"),
     422: problemResponse("Validation failed"),
-    501: problemResponse("Not implemented"),
   },
 });
 
@@ -33,21 +31,14 @@ export function approvalsRoutes(app: OpenAPIHono<Env>): void {
   app.use("/approvals/mine", requireAuth(), requirePerm("contract:approve"));
   app.openapi(mineRoute, async (c) => {
     const base = { instance: c.req.path, request_id: c.get("requestId") };
-    try {
-      const r = await approvalQueue(getDb(c.env), c.get("principal")!, c.req.valid("query"));
-      if (r.kind === "invalid") {
-        return c.json(
-          problem(422, "Validation failed", ProblemType.Validation, { ...base, errors: r.errors }),
-          422,
-          PROBLEM_HEADERS,
-        );
-      }
-      return c.json({ items: r.items, next_cursor: r.next_cursor }, 200);
-    } catch (e) {
-      if (e instanceof NotImplementedYet) {
-        return c.json(problem(501, "Not Implemented", ProblemType.NotImplemented, base), 501, PROBLEM_HEADERS);
-      }
-      throw e;
+    const r = await approvalQueue(getDb(c.env), c.get("principal")!, c.req.valid("query"));
+    if (r.kind === "invalid") {
+      return c.json(
+        problem(422, "Validation failed", ProblemType.Validation, { ...base, errors: r.errors }),
+        422,
+        PROBLEM_HEADERS,
+      );
     }
+    return c.json({ items: r.items, next_cursor: r.next_cursor }, 200);
   });
 }

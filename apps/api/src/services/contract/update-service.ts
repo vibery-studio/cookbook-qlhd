@@ -1,6 +1,7 @@
 import type { Db } from "../../db/client";
 import type { ContractDto, UpdateContractInput } from "../../dto/contracts";
 import type { Snapshot } from "../../domain/contract/types";
+import { writeAuditEvent } from "../../dao/audit-dao";
 import { getContractForWrite, updateDraftCas } from "../../dao/contract-write-dao";
 import { loadAndBuild } from "./snapshot-builder";
 import type { BuildFailure, CommandCtx } from "./types";
@@ -21,7 +22,16 @@ export async function updateContract(
 ): Promise<UpdateResult> {
   const current = await getContractForWrite(db, id);
   if (current === null) return { kind: "not-found" };
-  if (current.created_by !== ctx.actor.id) return { kind: "forbidden" };
+  if (current.created_by !== ctx.actor.id) {
+    await writeAuditEvent(db, {
+      actor: ctx.actor.id,
+      action: "permission.denied",
+      target: `contract:${id}`,
+      metadata: { rule: "creator_only", permission: "contract:write" },
+      ip: ctx.ip,
+    });
+    return { kind: "forbidden" };
+  }
   if (current.status !== "draft") return { kind: "state-conflict", current: current.status };
 
   const previous = current.snapshot as unknown as Snapshot;

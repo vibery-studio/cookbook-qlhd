@@ -27,7 +27,6 @@ import { copyContract } from "../services/contract/copy-service";
 import { createContract } from "../services/contract/create-service";
 import { decideContract } from "../services/contract/decide-service";
 import { issueContract } from "../services/contract/issue-service";
-import { NotImplementedYet } from "../services/contract/not-implemented";
 import { contractAudit, contractDetail, listContracts } from "../services/contract/read-service";
 import { renderContract } from "../services/contract/render-service";
 import { submitContract } from "../services/contract/submit-service";
@@ -49,7 +48,7 @@ const json = (schema: z.ZodTypeAny, description: string) => ({
 });
 
 /** Problem+JSON response with the request's instance + id filled in. */
-function fail<S extends 401 | 403 | 404 | 409 | 422 | 501>(
+function fail<S extends 401 | 403 | 404 | 409 | 422>(
   c: Ctx,
   status: S,
   title: string,
@@ -64,7 +63,6 @@ function fail<S extends 401 | 403 | 404 | 409 | 422 | 501>(
 }
 
 const notFound = (c: Ctx, what = "Contract") => fail(c, 404, `${what} not found`, ProblemType.NotFound);
-const notImplemented = (c: Ctx) => fail(c, 501, "Not Implemented", ProblemType.NotImplemented);
 const stateConflict = (c: Ctx, current: string) =>
   fail(c, 409, "Contract is not in a state that allows this", ProblemType.StateConflict, {
     detail: `Hợp đồng đang ở trạng thái "${current}", không thực hiện được thao tác này.`,
@@ -93,7 +91,6 @@ function cmdCtx(c: Ctx): CommandCtx {
 
 const baseErrors = {
   401: problemResponse("Not authenticated"),
-  501: problemResponse("Not implemented"),
 };
 
 const createRouteDef = createRoute({
@@ -310,126 +307,96 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
   app.on("get", "/contracts/:id/audit", requireAuth(), requirePerm("audit:read"));
 
   app.openapi(createRouteDef, async (c) => {
-    try {
-      const r = await createContract(getDb(c.env), cmdCtx(c), c.req.valid("json"));
-      if (r.kind === "ok") return c.json(r.contract, 201);
-      if (r.kind === "not-found") return notFound(c, r.what === "customer" ? "Customer" : "Template");
-      return buildFailure(c, r);
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
-    }
+    const r = await createContract(getDb(c.env), cmdCtx(c), c.req.valid("json"));
+    if (r.kind === "ok") return c.json(r.contract, 201);
+    if (r.kind === "not-found") return notFound(c, r.what === "customer" ? "Customer" : "Template");
+    return buildFailure(c, r);
   });
 
   app.openapi(listRouteDef, async (c) => {
-    try {
-      const r = await listContracts(getDb(c.env), c.get("principal")!, c.req.valid("query"));
-      if (r.kind === "invalid") return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
-      return c.json({ items: r.items, next_cursor: r.next_cursor, counts: r.counts }, 200);
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
-    }
+    const r = await listContracts(getDb(c.env), c.get("principal")!, c.req.valid("query"));
+    if (r.kind === "invalid") return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
+    return c.json({ items: r.items, next_cursor: r.next_cursor, counts: r.counts }, 200);
   });
 
   app.openapi(getRouteDef, async (c) => {
-    try {
-      const d = await contractDetail(getDb(c.env), c.get("principal")!, c.req.valid("param").id);
-      return d === null ? notFound(c) : c.json(d, 200);
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
-    }
+    const d = await contractDetail(getDb(c.env), c.get("principal")!, c.req.valid("param").id);
+    return d === null ? notFound(c) : c.json(d, 200);
   });
 
   app.openapi(patchRouteDef, async (c) => {
-    try {
-      const r = await updateContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id, c.req.valid("json"));
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 200);
-        case "not-found":
-          return notFound(c);
-        case "forbidden":
-          return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
-            detail: "Chỉ người tạo mới được sửa hợp đồng nháp.",
-            rule: "creator_only",
-          });
-        case "state-conflict":
-          return stateConflict(c, r.current);
-        case "stale":
-          return fail(c, 409, "Contract was changed by someone else", ProblemType.Stale, {
-            detail: "expected_version is out of date; reload the contract and retry.",
-          });
-        default:
-          return buildFailure(c, r);
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await updateContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id, c.req.valid("json"));
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "forbidden":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail: "Chỉ người tạo mới được sửa hợp đồng nháp.",
+          rule: "creator_only",
+        });
+      case "state-conflict":
+        return stateConflict(c, r.current);
+      case "stale":
+        return fail(c, 409, "Contract was changed by someone else", ProblemType.Stale, {
+          detail: "expected_version is out of date; reload the contract and retry.",
+        });
+      default:
+        return buildFailure(c, r);
     }
   });
 
   app.openapi(submitRouteDef, async (c) => {
-    try {
-      const r = await submitContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 200);
-        case "not-found":
-          return notFound(c);
-        case "forbidden":
-          return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
-            detail: "Chỉ người tạo mới được gửi duyệt hợp đồng này.",
-            rule: "creator_only",
-          });
-        case "state-conflict":
-          return stateConflict(c, r.current);
-        case "no-eligible-approver":
-          return fail(c, 409, "No eligible approver", ProblemType.NoEligibleApprover, {
-            detail: `Chưa có người đủ điều kiện cho bước "${r.step.label}"; hãy thêm người có vai trò đó rồi gửi lại.`,
-            step_no: r.step.step_no,
-            label: r.step.label,
-          });
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await submitContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "forbidden":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail: "Chỉ người tạo mới được gửi duyệt hợp đồng này.",
+          rule: "creator_only",
+        });
+      case "state-conflict":
+        return stateConflict(c, r.current);
+      case "no-eligible-approver":
+        return fail(c, 409, "No eligible approver", ProblemType.NoEligibleApprover, {
+          detail: `Chưa có người đủ điều kiện cho bước "${r.step.label}"; hãy thêm người có vai trò đó rồi gửi lại.`,
+          step_no: r.step.step_no,
+          label: r.step.label,
+        });
     }
   });
 
   const decide = (action: "approve" | "reject") => async (c: Ctx, id: string, note: string | undefined) => {
-    try {
-      const r = await decideContract(getDb(c.env), cmdCtx(c), id, { action, note });
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 200);
-        case "not-found":
-          return notFound(c);
-        case "forbidden-permission":
-          return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
-            detail: `Bạn không có quyền hoặc vai trò cho bước này (${r.permission}).`,
-          });
-        case "sod":
-          return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
-            detail:
-              r.rule === "creator_cannot_approve"
-                ? "Người tạo hợp đồng không được tự duyệt."
-                : "Mỗi người chỉ được quyết một bước của cùng một hợp đồng.",
-            rule: r.rule,
-          });
-        case "would-block-later-step":
-          return fail(c, 409, "Would block a later step", ProblemType.WouldBlockLaterStep, {
-            detail: `Nếu bạn quyết bước này, bước "${r.step.label}" sẽ không còn ai duyệt được.`,
-            step_no: r.step.step_no,
-            label: r.step.label,
-          });
-        case "state-conflict":
-          return stateConflict(c, r.current);
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await decideContract(getDb(c.env), cmdCtx(c), id, { action, note });
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "forbidden-permission":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail: `Bạn không có quyền hoặc vai trò cho bước này (${r.permission}).`,
+        });
+      case "sod":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+          detail:
+            r.rule === "creator_cannot_approve"
+              ? "Người tạo hợp đồng không được tự duyệt."
+              : "Mỗi người chỉ được quyết một bước của cùng một hợp đồng.",
+          rule: r.rule,
+        });
+      case "would-block-later-step":
+        return fail(c, 409, "Would block a later step", ProblemType.WouldBlockLaterStep, {
+          detail: `Nếu bạn quyết bước này, bước "${r.step.label}" sẽ không còn ai duyệt được.`,
+          step_no: r.step.step_no,
+          label: r.step.label,
+        });
+      case "state-conflict":
+        return stateConflict(c, r.current);
     }
   };
   const approve = decide("approve");
@@ -442,87 +409,62 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
   app.openapi(rejectRouteDef, async (c) => reject(c, c.req.valid("param").id, c.req.valid("json").note));
 
   app.openapi(issueRouteDef, async (c) => {
-    try {
-      const r = await issueContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 200);
-        case "not-found":
-          return notFound(c);
-        case "state-conflict":
-          return stateConflict(c, r.current);
-        case "changed-after-approval":
-          return fail(c, 409, "Contract changed after approval", ProblemType.ChangedAfterApproval, {
-            detail: "Nội dung hợp đồng đã đổi sau khi được duyệt; cần gửi duyệt lại.",
-          });
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await issueContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "state-conflict":
+        return stateConflict(c, r.current);
+      case "changed-after-approval":
+        return fail(c, 409, "Contract changed after approval", ProblemType.ChangedAfterApproval, {
+          detail: "Nội dung hợp đồng đã đổi sau khi được duyệt; cần gửi duyệt lại.",
+        });
     }
   });
 
   app.openapi(voidRouteDef, async (c) => {
-    try {
-      const r = await voidContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id, c.req.valid("json").reason);
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 200);
-        case "not-found":
-          return notFound(c);
-        case "state-conflict":
-          return stateConflict(c, r.current);
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await voidContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id, c.req.valid("json").reason);
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 200);
+      case "not-found":
+        return notFound(c);
+      case "state-conflict":
+        return stateConflict(c, r.current);
     }
   });
 
   app.openapi(copyRouteDef, async (c) => {
-    try {
-      const r = await copyContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
-      switch (r.kind) {
-        case "ok":
-          return c.json(r.contract, 201);
-        case "not-found":
-          return notFound(c);
-        case "state-conflict":
-          return stateConflict(c, r.current);
-        default:
-          return buildFailure(c, r);
-      }
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
+    const r = await copyContract(getDb(c.env), cmdCtx(c), c.req.valid("param").id);
+    switch (r.kind) {
+      case "ok":
+        return c.json(r.contract, 201);
+      case "not-found":
+        return notFound(c);
+      case "state-conflict":
+        return stateConflict(c, r.current);
+      default:
+        return buildFailure(c, r);
     }
   });
 
   app.openapi(renderRouteDef, async (c) => {
-    try {
-      const r = await renderContract(getDb(c.env), c.req.valid("param").id);
-      if (r.kind === "not-found") return notFound(c);
-      const headers: Record<string, string> = {
-        "content-type": "text/html; charset=utf-8",
-        "content-security-policy": RENDER_CSP,
-      };
-      if (r.etag !== null) headers.etag = `"${r.etag}"`;
-      return c.body(r.html, 200, headers) as never;
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
-    }
+    const r = await renderContract(getDb(c.env), c.req.valid("param").id);
+    if (r.kind === "not-found") return notFound(c);
+    const headers: Record<string, string> = {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": RENDER_CSP,
+    };
+    if (r.etag !== null) headers.etag = `"${r.etag}"`;
+    return c.body(r.html, 200, headers) as never;
   });
 
   app.openapi(auditRouteDef, async (c) => {
-    try {
-      const r = await contractAudit(getDb(c.env), c.req.valid("param").id, c.req.valid("query"));
-      if (r === null) return notFound(c);
-      if (r.kind === "invalid") return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
-      return c.json({ items: r.items, next_cursor: r.next_cursor }, 200);
-    } catch (e) {
-      if (e instanceof NotImplementedYet) return notImplemented(c);
-      throw e;
-    }
+    const r = await contractAudit(getDb(c.env), c.req.valid("param").id, c.req.valid("query"));
+    if (r === null) return notFound(c);
+    if (r.kind === "invalid") return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
+    return c.json({ items: r.items, next_cursor: r.next_cursor }, 200);
   });
 }
