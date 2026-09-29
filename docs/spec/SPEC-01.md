@@ -18,7 +18,7 @@ Intent: docs/intent/INTENT-01.md
 - [FR-2] Đổi vai trò / khóa người dùng có hiệu lực ngay từ request kế tiếp (xóa cache quyền; khi khóa thì thu hồi phiên) → OUT-1
 - [FR-3] Tự đăng ký bị tắt; tài khoản đầu tiên (`admin`) được tạo bằng script seed; `admin` (hoặc Giám đốc) thêm người (email, tên, vai trò)
   → nhận link kích hoạt dùng 1 lần; người được mời mở link, đặt mật khẩu → đăng nhập được → OUT-5
-- [FR-4] Bảng `audit_events`: mọi sự kiện audit hiện có + `permission.denied` (người, quyền, đường dẫn, IP) được ghi vào; người có
+- [FR-4] Bảng `audit_events`: mọi sự kiện audit hiện có + `auth.login` (mới) + `permission.denied` (người, quyền, đường dẫn, IP) được ghi vào; người có
   `audit:read` đọc, mới nhất trước, phân trang, lọc theo action / actor / target → OUT-2
 - [FR-5] Khách hàng: thêm / sửa / xem / tìm (tên, SĐT, MST); không xóa; mỗi lần thêm/sửa có dòng nhật ký trong cùng batch → OUT-3
 - [FR-6] Bảng giá seed từ `09_Bang_Gia.xlsx`; tra theo ngày (múi giờ Asia/Ho_Chi_Minh) trả về giá đang áp dụng → OUT-4
@@ -33,7 +33,7 @@ Intent: docs/intent/INTENT-01.md
   - `verification_tokens.purpose` thêm giá trị `invite` (hạn 72h, dùng 1 lần, lưu hash).
   - `audit_events(id, ts, actor, action, target, metadata, ip)` + index như recipe.
   - `customers(id ULID, name, contact_person, tax_code, phone, phone_norm, email, address, created_by, created_at,
-    updated_at)`; UNIQUE `phone_norm` (khi có giá trị), UNIQUE `tax_code` (khi có giá trị); không có cột xóa.
+    updated_at, version INTEGER)`; UNIQUE `phone_norm` (khi có giá trị), UNIQUE `tax_code` (khi có giá trị); không có cột xóa.
   - `price_list(id, code, name, duration_value, duration_unit (day|month), unit_price INTEGER đồng, effective_from DATE,
     effective_to DATE NULL, note)`; seed 7 dòng của file xlsx.
 - Screens / flow: row này không có giao diện (row 4); kiểm tra qua `/docs` (Swagger). Luồng mời người: admin/Giám đốc `POST /admin/users` → nhận
@@ -52,7 +52,7 @@ Intent: docs/intent/INTENT-01.md
   | `GET /customers?q&cursor&limit≤50` | `contract:read` | `{items, next_cursor}` | 401 403 |
   | `GET /customers/{id}` | `contract:read` | customer | 404 |
   | `POST /customers` | `contract:write` | `{name, contact_person?, tax_code?, phone?, email?, address?}` → 201 | 409 duplicate (kèm `existing_id`) · 422 |
-  | `PATCH /customers/{id}` | `contract:write` | các trường trên + `expected_updated_at` → 200 | 404 · 409 stale · 409 duplicate · 422 |
+  | `PATCH /customers/{id}` | `contract:write` | các trường trên + `expected_version` → 200 (version +1) | 404 · 409 stale · 409 duplicate · 422 |
   | `GET /price-list?date=YYYY-MM-DD` | `contract:read` | các gói đang áp dụng ngày đó (mặc định: hôm nay theo giờ VN) | 422 ngày sai |
 
 ## 4. Edge cases — the human marks each: now · later (why) · n/a
@@ -60,7 +60,7 @@ Intent: docs/intent/INTENT-01.md
 |---|---|---|
 | Input | email hoa/thường, khoảng trắng → chuẩn hóa · tên có dấu giữ nguyên · SĐT `0901 234 567` / `+84901234567` / `0901.234.567` → cùng `phone_norm` · MST chỉ chữ số và `-` | now |
 | Duplicates & identity | mời email đã có → 409 · khách trùng SĐT hoặc MST → 409 kèm `existing_id` · trùng tên thì không chặn (nhiều cửa hàng trùng tên) | now |
-| Two people at once | 2 người cùng sửa 1 khách → người sau nhận 409 stale (CAS theo `updated_at`) · 2 lần bấm tạo → `Idempotency-Key` | now |
+| Two people at once | 2 người cùng sửa 1 khách → người sau nhận 409 stale (CAS theo `version`) · 2 lần bấm tạo → `Idempotency-Key` | now |
 | Failure & retry | email lỗi không làm hỏng việc mời (vẫn trả link) · ghi nhật ký cho `permission.denied` / đăng nhập mà lỗi thì không làm hỏng request · thay đổi khách + dòng nhật ký: chung 1 batch | now |
 | Permissions / not logged in | chưa đăng nhập → 401 · Nhân viên đọc nhật ký → 403 + `permission.denied` · `member`/tài khoản chưa có vai trò → không có quyền nghiệp vụ | now |
 | Lifecycle | khóa người dùng thay cho xóa · không được khóa / đổi vai trò `admin` đang hoạt động cuối cùng → 409 `last_admin` · link mời hết hạn / đã dùng → 400 · khách không xóa được | now |
@@ -93,7 +93,7 @@ Intent: docs/intent/INTENT-01.md
 - [AC-4] admin cuối cùng tự khóa / tự đổi vai trò → 409 `last_admin` — proves §4 Lifecycle
 - [AC-5] Nhân viên gọi `GET /audit` → 403 Problem+JSON; Giám đốc gọi `GET /audit?action=permission.denied` → thấy đúng dòng đó (actor, quyền
   `audit:read`, IP), mới nhất trước — proves FR-4, DEC-3
-- [AC-6] Tạo khách với SĐT `0901 234 567` rồi `+84901234567` → 409 kèm `existing_id`; 2 PATCH cùng `expected_updated_at` → 1 thành công,
+- [AC-6] Tạo khách với SĐT `0901 234 567` rồi `+84901234567` → 409 kèm `existing_id`; 2 PATCH cùng `expected_version` → 1 thành công,
   1 bị 409 stale; mỗi lần thêm/sửa có đúng 1 dòng `customer.created/updated`, trong đó không có SĐT/email — proves FR-5, DEC-4, §4 Duplicates, Two people
 - [AC-7] `GET /price-list?date=2026-06-30` → G6 2.400.000; `date=2026-07-01` → G6 2.700.000; không truyền ngày → giá theo ngày hiện tại
   ở giờ VN — proves FR-6, §4 Time
