@@ -92,6 +92,20 @@
       "when": 1790694312054,
       "tag": "0012_template_versions_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790695385398,
+      "tag": "0013_seed_software_contract_template",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790695478504,
+      "tag": "0014_wooden_gauntlet",
+      "breakpoints": true
     }
   ]
 }

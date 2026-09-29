@@ -30,6 +30,16 @@ const HEADERS: Record<string, string> = {
   "cross-origin-opener-policy": "same-origin",
 };
 
+/**
+ * `/docs` (Swagger UI, mounted only outside production) loads swagger-ui-dist from jsDelivr and
+ * boots it with an inline script, which `default-src 'self'` blocks (FIX-01). Only that one
+ * dev-only HTML page gets this wider policy; every API response keeps the strict one above.
+ */
+const DOCS_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; " +
+  "frame-ancestors 'none'; base-uri 'self'";
+
 export function securityHeaders(): MiddlewareHandler {
   return async (c, next) => {
     await next();
@@ -38,5 +48,6 @@ export function securityHeaders(): MiddlewareHandler {
       // (which would allow route handlers to weaken policies).
       c.header(key, value);
     }
+    if (c.req.path === "/docs") c.header("content-security-policy", DOCS_CSP);
   };
 }

@@ -9,7 +9,9 @@ export const FIELD_TYPES = ["text", "paragraph", "money", "number", "percent", "
 /** `manual` | `<kind>:<ref>`; which kinds/refs exist is a template-check (FR-6), not a shape rule. */
 const SourceString = z
   .string()
-  .regex(/^[a-z_]+(:[a-z_]+)?$/, "source must be 'kind' or 'kind:ref' (lowercase, underscore)")
+  // "" is allowed through the shape layer: a required field with no source is reported by checkTemplate
+  // as `required_field_without_source` (SPEC-02 FR-6), alongside every other problem in one 422.
+  .regex(/^$|^[a-z_]+(:[a-z_]+)?$/, "source must be 'kind' or 'kind:ref' (lowercase, underscore)")
   .max(64);
 
 export const TemplateFieldSchema = z

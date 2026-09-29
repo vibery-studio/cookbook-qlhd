@@ -13,7 +13,7 @@
  * no native TIMESTAMP type).
  */
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Sentinel table used by the post-deploy `/readyz` check (Phase 10) to
@@ -386,6 +386,90 @@ export const templateVersions = sqliteTable(
 );
 
 /**
+ * Contracts (SPEC-03 §3.1). Never hard-deleted. `snapshot`/`snapshot_hash` never overwritten after draft;
+ * `seq`/`number`/`rendered_*` never overwritten once set. Number allocation = one CAS UPDATE (no counter table):
+ * UNIQUE(type, series_year, seq) is the gap-free guard, partial so drafts (seq NULL) never collide.
+ */
+export const contracts = sqliteTable(
+  "contracts",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(), // contract (number prefix HD)
+    templateId: text("template_id").notNull(),
+    templateVersionId: text("template_version_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    sourceContractId: text("source_contract_id"),
+    status: text("status").notNull(), // draft | pending | approved | rejected | issued | voided
+    createdBy: text("created_by").notNull(),
+    docDate: text("doc_date").notNull(), // YYYY-MM-DD (business zone)
+    snapshot: text("snapshot").notNull(), // JSON
+    snapshotHash: text("snapshot_hash").notNull(),
+    customerName: text("customer_name").notNull(), // copied from snapshot for the list
+    total: integer("total").notNull(), // whole dong, copied from snapshot
+    version: integer("version").notNull().default(1), // CAS for draft edits
+    seriesYear: integer("series_year"),
+    seq: integer("seq"),
+    number: text("number"),
+    issueToken: text("issue_token"),
+    issuedBy: text("issued_by"),
+    issuedAt: integer("issued_at"),
+    renderedHtml: text("rendered_html"),
+    renderedHash: text("rendered_hash"),
+    submittedAt: integer("submitted_at"),
+    decidedAt: integer("decided_at"),
+    voidedBy: text("voided_by"),
+    voidedAt: integer("voided_at"),
+    voidReason: text("void_reason"),
+    replacedById: text("replaced_by_id"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    check("ck_contracts_type", sql`${table.type} = 'contract'`),
+    check(
+      "ck_contracts_status",
+      sql`${table.status} IN ('draft','pending','approved','rejected','issued','voided')`,
+    ),
+    check("ck_contracts_seq_iff_issued", sql`(${table.status} IN ('issued','voided')) = (${table.seq} IS NOT NULL)`),
+    check("ck_contracts_void_reason", sql`${table.status} <> 'voided' OR ${table.voidReason} IS NOT NULL`),
+    uniqueIndex("uq_contracts_series_seq")
+      .on(table.type, table.seriesYear, table.seq)
+      .where(sql`seq IS NOT NULL`),
+    uniqueIndex("uq_contracts_number").on(table.number).where(sql`number IS NOT NULL`),
+    index("idx_contracts_type_status_updated").on(table.type, table.status, table.updatedAt),
+    index("idx_contracts_customer").on(table.customerId),
+    index("idx_contracts_created_by").on(table.createdBy),
+  ],
+);
+
+/**
+ * Approval steps (SPEC-03 §3.1) — one row per required step, created at submit. `decided_by` is staff
+ * decision history (kept on erasure, like audit_events).
+ */
+export const approvalSteps = sqliteTable(
+  "approval_steps",
+  {
+    id: text("id").primaryKey(),
+    contractId: text("contract_id").notNull(),
+    stepNo: integer("step_no").notNull(),
+    label: text("label").notNull(),
+    requiredPermission: text("required_permission").notNull(),
+    requiredRole: text("required_role"),
+    status: text("status").notNull(), // waiting | approved | rejected
+    decidedBy: text("decided_by"),
+    decidedAt: integer("decided_at"),
+    note: text("note"),
+    snapshotHashAtDecision: text("snapshot_hash_at_decision"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    check("ck_approval_steps_status", sql`${table.status} IN ('waiting','approved','rejected')`),
+    uniqueIndex("uq_approval_steps_contract_step").on(table.contractId, table.stepNo),
+    index("idx_approval_steps_status_perm").on(table.status, table.requiredPermission),
+  ],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -409,4 +493,6 @@ export const schema = {
   priceList,
   templates,
   templateVersions,
+  contracts,
+  approvalSteps,
 };

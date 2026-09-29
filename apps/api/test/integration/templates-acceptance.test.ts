@@ -316,7 +316,10 @@ describe("SPEC-02 templates (acceptance)", () => {
   it("AC-3: Giám đốc posts v2 (expected_version_no 1) → 201; v2 becomes current; v1 is byte-for-byte unchanged", async () => {
     const { gd, nv } = await team();
     const seed = await getSeed(gd.session);
-    const v1Before = await (await gd.session.fetch(`/templates/${seed.id}?version_no=1`)).text();
+    // compare the v1 VERSION object only — the detail's `versions[]` list legitimately gains v2
+    const v1Of = async (s: RunwaySession) =>
+      JSON.stringify(((await (await s.fetch(`/templates/${seed.id}?version_no=1`)).json()) as TemplateDetail).version);
+    const v1Before = await v1Of(gd.session);
 
     const edited = seed.version.body.replace("Hôm nay, ngày", "Hôm nay là ngày");
     expect(edited).not.toBe(seed.version.body);
@@ -332,7 +335,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     const list: TemplateList = await (await nv.session.fetch("/templates")).json();
     expect(list.items[0]?.current_version.version_no).toBe(2);
 
-    const v1After = await (await nv.session.fetch(`/templates/${seed.id}?version_no=1`)).text();
+    const v1After = await v1Of(nv.session);
     expect(v1After).toBe(v1Before);
     expect((await nv.session.fetch(`/templates/${seed.id}?version_no=9`)).status).toBe(404);
     expect((await nv.session.fetch("/templates/01ARZ3NDEKTSV4RRFFQ69G5FAV")).status).toBe(404);

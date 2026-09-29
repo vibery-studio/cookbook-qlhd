@@ -103,6 +103,14 @@ export const DATA_INVENTORY: readonly DataInventoryEntry[] = [
     onDelete: "skip",
   },
   {
+    // Staff approval decisions (SPEC-03): kept on erasure like audit_events — the decision history must stay signed.
+    table: "approval_steps",
+    ownerColumn: "decided_by",
+    personal: true,
+    exportable: true,
+    onDelete: "skip",
+  },
+  {
     table: "users",
     ownerColumn: null,
     personal: true,
@@ -131,4 +139,6 @@ export const INVENTORY_EXEMPT_TABLES: readonly string[] = [
   // contract templates: business records, no personal data (SPEC-02)
   "templates",
   "template_versions",
+  // contracts: business records (created_by/issued_by are staff ids, kept like customers) (SPEC-03)
+  "contracts",
 ];

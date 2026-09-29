@@ -1,18 +1,19 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type { Context } from "hono";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { UlidSchema } from "../dto/common";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { problem, ProblemType, problemResponse } from "../dto/error";
 import {
   TemplateDetailQuery,
   TemplateDetailSchema,
   TemplateListQuery,
   TemplateListResponse,
 } from "../dto/templates";
+import { getDb } from "../db/client";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
 import { requirePerm } from "../middleware/require-permission";
+import { listTemplatePage, readTemplate } from "../services/template-read-service";
 
 type Env = { Bindings: Bindings; Variables: Variables };
 
@@ -32,7 +33,6 @@ const listRoute = createRoute({
     401: problemResponse("Not authenticated"),
     403: problemResponse("Missing contract:read permission"),
     422: problemResponse("Validation failed"),
-    501: problemResponse("Not implemented"),
   },
 });
 
@@ -49,16 +49,40 @@ const getRoute = createRoute({
     403: problemResponse("Missing contract:read permission"),
     404: problemResponse("Template or version_no not found"),
     422: problemResponse("Validation failed"),
-    501: problemResponse("Not implemented"),
   },
 });
 
-function notImplemented(c: Context<Env>) {
-  return c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, PROBLEM_HEADERS);
-}
-
 export function templatesRoutes(app: OpenAPIHono<Env>): void {
   app.on("get", ["/templates", "/templates/:id"], requireAuth(), requirePerm("contract:read"));
-  app.openapi(listRoute, notImplemented);
-  app.openapi(getRoute, notImplemented);
+
+  app.openapi(listRoute, async (c) => {
+    const res = await listTemplatePage(getDb(c.env), c.req.valid("query"));
+    if (res.kind === "invalid") {
+      return c.json(
+        problem(422, "Validation failed", ProblemType.Validation, {
+          errors: res.errors,
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        422,
+        PROBLEM_HEADERS,
+      );
+    }
+    return c.json({ items: res.items, next_cursor: res.next_cursor }, 200);
+  });
+
+  app.openapi(getRoute, async (c) => {
+    const res = await readTemplate(getDb(c.env), c.req.valid("param").id, c.req.valid("query").version_no);
+    if (res.kind === "not_found") {
+      return c.json(
+        problem(404, "Template or version not found", ProblemType.NotFound, {
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+        }),
+        404,
+        PROBLEM_HEADERS,
+      );
+    }
+    return c.json(res.template, 200);
+  });
 }

@@ -25,4 +25,17 @@ describe("security headers", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
+
+  it("/docs (dev only) lets Swagger UI load its CDN assets; every other route keeps default-src 'self' only", async () => {
+    // FIX-01: the strict API CSP blocked swagger-ui.css/js from cdn.jsdelivr.net → blank /docs page
+    const docs = await SELF.fetch("https://example.com/docs");
+    expect(docs.status).toBe(200);
+    const csp = docs.headers.get("content-security-policy") ?? "";
+    expect(csp).toMatch(/style-src[^;]*https:\/\/cdn\.jsdelivr\.net/);
+    expect(csp).toMatch(/script-src[^;]*https:\/\/cdn\.jsdelivr\.net/);
+    expect(csp).toContain("frame-ancestors 'none'");
+
+    const api = await SELF.fetch("https://example.com/healthz");
+    expect(api.headers.get("content-security-policy")).not.toContain("jsdelivr");
+  });
 });
