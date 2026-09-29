@@ -94,6 +94,11 @@ describe("buildValues", () => {
     }
     for (const so_cua_hang of ["0", "1000", "1,5", "x"]) expect(buildValues({ ...filled, so_cua_hang }, fields).ok).toBe(false);
   });
+  it("ngay_bat_dau / giam_gia left blank are valid (server defaults it to Ngày lập) and is not sent", () => {
+    const withStart: FieldSpec[] = [...fields.map((f) => (f.key === "giam_gia" ? { ...f, required: true } : f)), { key: "ngay_bat_dau", required: true, source: "manual" }];
+    const r = buildValues(filled, withStart);
+    expect(r).toEqual({ ok: true, values: { ma_goi: "G6", so_cua_hang: 1, chuc_vu_nguoi_ky: "Chủ hộ" } });
+  });
   it("names the missing required fields in Vietnamese", () => {
     const r = buildValues({ ...filled, chuc_vu_nguoi_ky: "   " }, fields);
     expect(r).toMatchObject({ ok: false, message: "Thiếu: Chức vụ người ký. Điền rồi tạo lại." });

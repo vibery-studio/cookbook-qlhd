@@ -146,7 +146,7 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await ql.goto("/hop-dong");
   const pill = ql.getByTestId("nav-badge-approvals");
   await expect(pill).toHaveText("1");
-  await ql.getByTestId("sidebar").getByRole("link", { name: "Chờ tôi duyệt", exact: true }).click();
+  await ql.getByTestId("sidebar").getByRole("link", { name: /^Chờ tôi duyệt/ }).click();
   await expect(ql.getByRole("heading", { level: 1, name: "Chờ tôi duyệt" })).toBeVisible();
   await ql.getByText(CUSTOMER.name).first().click();
   const qDrawer = ql.getByRole("dialog", { name: "Chi tiết hợp đồng" });

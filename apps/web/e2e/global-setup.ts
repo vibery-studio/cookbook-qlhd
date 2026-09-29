@@ -59,5 +59,26 @@ export default async function globalSetup(): Promise<void> {
     await ctx.dispose();
   }
   await Promise.all([admin.dispose(), anon.dispose()]);
+  await seedContracts();
   writeFileSync("e2e/.auth/ready", new Date().toISOString());
+}
+
+/** One customer + exactly ONE draft contract (G6 · 1 · 5%), created by the Nhân viên through the real API. Never issued/submitted. */
+async function seedContracts(): Promise<void> {
+  const nv = await request.newContext({ baseURL: BASE, extraHTTPHeaders: HEADERS, storageState: stateFile("staff") });
+  const tpls = await nv.get("/templates");
+  if (tpls.status() !== 200) throw new Error(`templates: ${tpls.status()} ${await tpls.text()}`);
+  const tpl = ((await tpls.json()) as { items: Array<{ id: string; name: string }> }).items.find((t) => t.name === "Hợp đồng cung cấp dịch vụ phần mềm");
+  if (!tpl) throw new Error("seed: template not found");
+  const cu = await nv.post("/customers", {
+    data: { name: "Cửa hàng Seed", contact_person: "Nguyễn Văn Seed", phone: "0901 000 001", email: "seed@example.com", address: "1 Lê Lợi, Q.1, TP.HCM" },
+  });
+  if (cu.status() !== 201) throw new Error(`seed customer: ${cu.status()} ${await cu.text()}`);
+  const customerId = ((await cu.json()) as { id: string }).id;
+  const c = await nv.post("/contracts", {
+    headers: { "Idempotency-Key": generateUlid() },
+    data: { template_id: tpl.id, customer_id: customerId, values: { ma_goi: "G6", so_cua_hang: 1, giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" } },
+  });
+  if (c.status() !== 201) throw new Error(`seed contract: ${c.status()} ${await c.text()}`);
+  await nv.dispose();
 }

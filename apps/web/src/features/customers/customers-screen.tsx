@@ -55,6 +55,7 @@ export function CustomersScreen() {
 
   return (
     <section className="grid gap-s5" aria-label="Danh sách khách hàng">
+      <h1 className="text-2xl font-bold leading-head text-strong">Khách hàng</h1>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-s4 max-mobile:grid-cols-1">
         <Field
           id="customer-search"

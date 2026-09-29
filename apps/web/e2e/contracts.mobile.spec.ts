@@ -1,8 +1,8 @@
 /**
  * SPEC-04b mobile e2e (390px) — the ONE mobile spec of row 4b (PLAN-04b §1). Runs once at PROOF (C-04b-007).
  * Relies on C-04b-007's global-setup `seedContracts()`: customer "Cửa hàng Seed" with ONE draft contract (drafts only, so the
- * desktop spec still issues HD-YYYY-001 and sees exactly one item in Chờ tôi duyệt). Playwright runs this file BEFORE
- * contracts.spec.ts (alphabetical), which is why the data comes from the seed and not from the desktop flow.
+ * desktop spec still issues HD-YYYY-001 and sees exactly one item in Chờ tôi duyệt). Projects run desktop THEN mobile
+ * (playwright.config order), so the desktop flow's contracts also exist: the card is picked by its customer, the seed draft is untouched.
  * UI contract (same testids as the desktop spec): top bar button "Menu" opens the sidebar; contracts as cards
  * `data-testid="contract-card"` (no `<table>` on screen); drawer `role=dialog` "Chi tiết hợp đồng" full-screen; paper overlay
  * "Văn bản hợp đồng"; touch targets >= 44px.
@@ -29,7 +29,7 @@ test("4b mobile: menu opens, contracts are cards, drawer is full-screen, paper o
   await nv.keyboard.press("Escape");
 
   // list = cards, not a table
-  const card = nv.getByTestId("contract-card").first();
+  const card = nv.getByTestId("contract-card").filter({ hasText: "Cửa hàng Seed" });
   await expect(card).toBeVisible();
   await expect(card).toContainText("Cửa hàng Seed");
   await expect(nv.getByRole("table")).toHaveCount(0);
@@ -52,6 +52,7 @@ test("4b mobile: menu opens, contracts are cards, drawer is full-screen, paper o
   await expect(paper.frameLocator("iframe[title='Văn bản hợp đồng']").getByText("NHÁP").first()).toBeVisible();
   await noHScroll();
   await paper.getByRole("button", { name: "Đóng" }).click();
+  await expect(paper).toBeHidden(); // Escape below must reach the drawer, not the closing paper
   await nv.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
   await nv.context().close();

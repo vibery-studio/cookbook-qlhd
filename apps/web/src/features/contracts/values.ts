@@ -32,9 +32,12 @@ export function activeKeys(fields: readonly FieldSpec[]): ValueKey[] {
   return VALUE_KEYS.filter((k) => k === "ma_goi" || k === "so_cua_hang" || manual.has(k));
 }
 
+const SERVER_DEFAULTED: ReadonlySet<ValueKey> = new Set<ValueKey>(["ngay_bat_dau", "giam_gia"]);
+
 export function requiredKeys(fields: readonly FieldSpec[]): Set<ValueKey> {
   const req = new Set<ValueKey>(["ma_goi", "so_cua_hang"]);
-  for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key)) req.add(f.key);
+  // Fields the template gives a default (ngay_bat_dau = Ngày lập, giam_gia = 0): blank is valid, the server fills it.
+  for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key) && !SERVER_DEFAULTED.has(f.key)) req.add(f.key);
   return req;
 }
 

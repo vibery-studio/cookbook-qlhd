@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { client, queryClient } from "../lib/client";
 import { cn } from "../lib/cn";
@@ -29,6 +29,14 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   const userLabel = user.display_name?.trim() || user.email;
 
   async function handleLogout() {

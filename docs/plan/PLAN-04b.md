@@ -1,6 +1,6 @@
 # PLAN-04b: Giao diện hợp đồng — Hợp đồng · Mẫu hợp đồng · Chờ tôi duyệt · bản in (+ API additive: khách issued_*, template_name/template_id, withdraw, delete, render SAMEORIGIN)
 
-Status: Approved 2026-09-30 (driver chốt — bạn ủy quyền "you decide … just finish it")
+Status: Done 2026-09-30 (driver chốt — bạn ủy quyền "you decide … just finish it")
 Spec: docs/spec/SPEC-04b.md (Approved 2026-09-30)
 Roadmap row: 4b. Không migration, không schema; `run_worker_first` không đổi. Mọi card = subagent Claude (Codex đã nghỉ).
 
@@ -131,7 +131,28 @@ Human checklist (dev :5173 hoặc :8787; làm → phải thấy):
 Attack (dữ liệu cá nhân / quyền): mọi URL 4b khi chưa đăng nhập → `/login`; Nhân viên đổi id, gọi tay `DELETE`/`withdraw` hợp đồng người khác (403 + denied, còn nguyên); Quản lý/Giám đốc xóa/rút hợp đồng người khác (403); gửi `total`/`unit_price` (422); tên/SĐT không xuất hiện ở URL, storage, console, `contract.deleted.metadata`; tên khách `<img onerror>`/`<script>` hiện thành chữ ở mọi nơi; `next=//evil.com` (4a) vẫn bị bỏ; iframe chỉ nhận `id` ULID từ `params`.
 Kết quả: [pass | lỗi nào → quay lại plan] · nit thị giác → danh sách cho row sau (không vòng chỉnh ảnh) · duyệt của bạn: [ ]
 
+### PROOF log (C-04b-007, run 2026-09-30) — DONE (run 5 by driver green)
+Driver checks at 38309ba (not re-run by 007): typecheck 7/7 · lint 2/2 · web build ok · api 261 passed | 2 skipped · web 129 · client 11. After 007's fixes: web typecheck ok, lint ok, `CI=true pnpm --filter @runway/web test` → 130 passed (+1 unit).
+Seed: `seedContracts()` in `e2e/global-setup.ts` (staff session, real API): customer "Cửa hàng Seed" + ONE draft (G6 · 1 · 5%, "Chủ hộ kinh doanh"); not submitted/issued. No fixtures.ts change needed.
+Runs (each red = root cause, fixed at the cause):
+- Run 1 (setup RED, no test executed): `POST /contracts` 422 `Invalid Idempotency-Key header` (must be ULID/UUID) → seed uses `generateUlid()`.
+- Run 2 (setup RED, no test executed): my `sed` failed (BSD) so the fix was not applied and the chained e2e still ran = same 422; wasted run, counted.
+- Run 3 (3 red, seed ok): (a) 4a smoke `getByRole('heading',{level:1,name:'Khách hàng'})` not found → product bug: the customers screen never had its own h1 (4a relied on the top-bar title that 4b FR-13 removed) → added `<h1>Khách hàng</h1>` in customers-screen. (b) desktop: create form blocked client-side "Thiếu: Ngày bắt đầu" → product bug: `requiredKeys` treated template fields that carry a default (`ngay_bat_dau` = Ngày lập, `giam_gia` = 0) as required although the server fills them (SPEC time row) → `SERVER_DEFAULTED` in values.ts + unit test. (c) mobile: sidebar stayed open after Escape and covered the card ("subtree intercepts pointer events") → product bug: AppShell menu had no Escape handler → keydown Escape closes the menu (layout.tsx).
+- Run 4 (PROOF_SHOTS=1; 1 passed, 2 failed; shots produced: hop-dong, ngan-chi-tiet, ban-in, hop-dong-mobile, khach-hang, phan-quyen, nhat-ky .png): the 4a smoke passes; desktop got through logged-out redirects, create with missing field → filled → paper iframe (sandbox attr, NHÁP, chức vụ) → drawer → submit → self-approve 🔒 + forced 403 → withdraw → resubmit → second draft deleted, then RED at spec L149 `getByRole('link',{name:'Chờ tôi duyệt',exact:true})` timeout: the link's accessible name is "Chờ tôi duyệt 1 hợp đồng chờ bạn duyệt" (pill title) — app correct (pill "1" visible in snapshot), locator too strict → spec: `/^Chờ tôi duyệt/`. Mobile: menu, cards, drawer 390px, paper iframe NHÁP all passed; RED at L56 `drawer toBeHidden` after Escape: Escape pressed while the paper was still unmounting (topmost dialog = paper) → race in the spec → `await expect(paper).toBeHidden()` before Escape.
+- Run 5: NOT DONE (budget). Needed: rebuild SPA, `PROOF_SHOTS=1 CI=true pnpm --filter @runway/web e2e` → expect `3 passed` (desktop contracts, smoke, mobile). Desktop part after L149 (approve, issue HD-YYYY-001, void, customer card, Nhật ký) is still unproven.
+AC-25 (curl on the driver's :8787 dev server, unauthenticated, any id): `x-frame-options: SAMEORIGIN` + `content-security-policy: … frame-ancestors 'self'` present on `/contracts/{id}/render` (401 body, headers set); iframe renders the paper in a real browser (run 4 desktop + mobile: NHÁP visible inside iframe). `/hop-dong` → 200, `/contracts` → 401.
+Attack pass so far: logged-out `/hop-dong`, `/hop-dong/<id>`, `/…/van-ban`, `/mau-hop-dong`, `/cho-toi-duyet` → `/login?next=` (run 4 spec passed this step). Still to be shown by run 5/human: NV `/cho-toi-duyet` → 403 UI with no `GET /approvals/mine` (spec asserts `approvalCalls == []` at the end), admin has no contract nav, storage/console free of customer data (spec collects console).
+Visual nits (list only): customers screen h1 was missing until now (top-bar dedupe) · issue/void/paper stages unseen until run 5 · Escape did not close the mobile menu (fixed) · link accessible name includes the pill text (fine, noted for tests).
+Result: NOT pass yet · human approval: [ ]
+
 
 ## Driver decisions at approval (2026-09-30)
 - R-2 resolved up front: C-04b-001a adds `decided_by_name` (nullable, from users.display_name) to `ContractStep` — additive; card 003 need not stop.
 - R-8: keep 1 GĐ/1 QL/1 NV in e2e seed; AC-7 stays owned by the API suite.
+
+### Run 5 (driver, PROOF_SHOTS=1) — GREEN
+`✓ 1 [desktop] › e2e/contracts.spec.ts:27:1 › 4b lifecycle: logged out → /login; Nhân viên creates (missing field, then fill) and submits, self-approve is 🔒; Quản lý approves + issues; void; paper (3.3s)` · `✓ 2 [desktop] › e2e/shell.smoke.spec.ts:18:1 › 4a smoke … (1.1s)` · `✓ 3 [mobile] › e2e/contracts.mobile.spec.ts:14:1 › 4b mobile … (622ms)` · `3 passed (16.4s)`. Shots: hop-dong, ngan-chi-tiet, ban-in (paper in the sandboxed iframe, NHÁP watermark, 2.565.000 đồng + bằng chữ), hop-dong-mobile, khach-hang, phan-quyen, nhat-ky.
+Attack (driver probe on :8787): `logged-out /hop-dong -> /login?next=%2Fhop-dong` · admin nav `Phân quyền | Nhật ký | Người dùng` (no contract screens) · admin direct `/hop-dong` → 🔒 403 UI, zero /contracts|/approvals|/templates requests · storage `{}{}` · `curl -sI …/contracts/<id>/render` → `x-frame-options: SAMEORIGIN` + `frame-ancestors 'self'`.
+Checks after run 5: typecheck 7/7 · lint 2/2 · `CI=true pnpm test` → api 261 passed | 2 skipped, web 130, client 11 (`Tasks: 9 successful`).
+Result: pass. Human approval: [x] 2026-09-30 driver (bạn ủy quyền "just finish it") — bạn xem lại khi rảnh.
+Visual nits (not polished): admin logging in with next=/hop-dong lands on the 403 screen instead of its first allowed screen; long creator names truncate in the table.
