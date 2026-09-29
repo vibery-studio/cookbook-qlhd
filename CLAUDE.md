@@ -11,7 +11,9 @@ audited. Built on **RUNWAY** (a members-only Cloudflare Workers API base, alread
 
 Stack: Cloudflare Workers · Hono + `@hono/zod-openapi` · D1 via drizzle-orm · KV · Queues. pnpm + turbo monorepo,
 Node 22, pnpm 10.28. `apps/api` is the Worker; `packages/*` = auth, rbac, client (generated), contracts (OpenAPI),
-test-fixtures, config, email-templates.
+test-fixtures, config, email-templates. `apps/web` (roadmap row 4) = React + Vite SPA calling `packages/client`.
+Owner = Công ty TNHH Phần mềm Nhật Minh; facts (template, Bên A, price list) from
+`~/Documents/ship-with-claude/modules/M5/01-tu-lieu-khach-gui/owner-box/` (07_Mau_Tai_Lieu, 09_Bang_Gia.xlsx).
 
 ## Commands
 
