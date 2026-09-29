@@ -17,3 +17,9 @@ Needs: `@playwright/test` (1.63.0) as a devDependency of `apps/web`, script `"e2
 - Design law is checked by eye on 3 screenshots (list · contract drawer · paper), not by pixel assertions.
 - Run the e2e ONCE at PROOF (serial API tests first, then e2e; never both at once).
 - No screenshot-review polish loop: visual nits go into the PROOF log as a list for the next row.
+
+## Where row 4 lost its time (measured 2026-09-29) → rules
+- **Waiting on ports** (one `lsof` poll loop = 6.7 min): never poll. Run `bash docs/cookbook/e2e-kit/free-ports.sh [ports]` once; a port still busy belongs to another project → use another port.
+- **Slow red runs** (140 s each: failing tests waited the 60 s timeout): the config fails fast (expect/action 5 s, test 30 s). Watch it fail ONCE.
+- **Repeat runs** (13 green runs + 3 stability + 4 screenshot re-runs): screenshots are taken INSIDE the one PROOF run (`PROOF_SHOTS=1`); no stability re-runs.
+- **Contention** (API suite + e2e together = one 10-min block, port exhaustion): serial — API suite, then e2e.

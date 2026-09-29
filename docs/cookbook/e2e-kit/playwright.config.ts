@@ -16,7 +16,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 60_000,
+  // Fail fast: a red run (UI not built yet) must not wait 60 s per missing element (measured: 140 s red runs vs 29 s green).
+  timeout: 30_000,
+  expect: { timeout: 5_000 },
   reporter: [["list"]],
   globalSetup: "./e2e/global-setup.ts",
   use: {
@@ -24,6 +26,8 @@ export default defineConfig({
     locale: "vi-VN",
     timezoneId: "Asia/Ho_Chi_Minh",
     trace: "retain-on-failure",
+    actionTimeout: 5_000,
+    navigationTimeout: 15_000,
     screenshot: "only-on-failure",
   },
   projects: [
