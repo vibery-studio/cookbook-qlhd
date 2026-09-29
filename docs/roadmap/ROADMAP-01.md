@@ -18,4 +18,5 @@ Drafted from: MAP M1–M7 · `docs/cookbook/documents.workbook.md` · owner-box 
 - Báo giá (`BG`) + Đề nghị thanh toán (`DNTT`) — mẫu có trong owner-box — 2026-09-29 — why not now: app chỉ có loại `contract`; thêm loại sau khi lõi chạy
 - Nhập 01_DS_Khach.xlsx / CRM pipeline khách (04_Quy_Trinh) — 2026-09-29 — why not now: workbook `crm` riêng, dữ liệu cá nhân cần spec riêng
 - Gửi hợp đồng qua email khi phát hành — why not now: workbook `email`, nghe `contract.issued`
+- Trình sửa mẫu hợp đồng trên web (Giám đốc tạo phiên bản mới) — 2026-09-30 — why not now: màn lớn, dễ sai quy tắc duyệt; API có sẵn, sửa qua `/docs`
 - Kết nối Claude qua MCP (`mcp-codemode.workbook.md`) — why not now: DRAFT, chỉ khi bạn yêu cầu
