@@ -1,6 +1,6 @@
 # PLAN-01: Nền — vai trò, người dùng (mời vào), nhật ký, khách hàng, bảng giá
 
-Status: Approved 2026-09-29
+Status: Done 2026-09-29
 Spec: docs/spec/SPEC-01.md
 
 ## 1. Acceptance tests — written first, seen failing
@@ -58,7 +58,79 @@ File: `apps/api/test/integration/foundation-acceptance.test.ts` (10 tests). Red 
 - [x] every FR has at least one AC · every AC has a row in §1 · every AC is served by a card · every "now" edge case has an AC
 
 ## 6. PROOF log (step 5)
-- Checks: [command] → [real output]
-- Human checklist: [do → must see]
-- Attack (personal data / access): [what was tried → result]
-- Result: [ ]
+Checks (2026-09-29, after merge, commit 6e45268): `pnpm typecheck` → `Tasks: 6 successful, 6 total` · `pnpm lint` → green ·
+`pnpm build` → green · `CI=true pnpm test` → client 10 · rbac 17 · config 3 · email-templates 27 · auth 37 ·
+api `158 passed | 2 skipped (160)` (foundation-acceptance 10/10) → `Tasks: 7 successful, 7 total`.
+Run 2026-09-29 on the real app: fresh local D1 (`apps/api/.wrangler/state` moved to /tmp), `pnpm db:migrate:local` (0001..0010 ✅), `pnpm dev` (:8787), `RUNWAY_LOCAL=1 pnpm dev:seed-admin` → `login: 200 ✓`. curl + cookie jar per user, headers `Origin: http://localhost:8787` + `X-Requested-With: fetch`. No vitest run here; lint/typecheck/build/test (C-01-007 step 1) NOT run by this pass.
+- `GET /openapi.json | jq '.paths|keys'` → lists `/admin/users`, `/admin/users/{id}`, `/admin/users/{id}/invite`, `/audit`, `/auth/activate`, `/customers`, `/customers/{id}`, `/price-list`, `/roles` (+ existing) → visible in /docs.
+
+### AC-1 roles + invite + activate
+- admin `POST /auth/login` → 200; `GET /me` → roles `[admin]`, perms flags/audit:read/notes/users:read+write/settings — no `contract:*`, no `template:write` ✓
+- admin `POST /admin/users` gd / ql / nv (names "Nguyễn Văn Giám Đốc" · "Trần Thị Quản Lý" · "Lê Văn Nhân Viên") → 201 `{user{status:pending,roles:[..]}, activation_url:".../activate?token=<43 chars>", expires_at}`; expires_at − now = 259193 s ≈ 72 h ✓
+- email `" GD@Example.vn "` → stored `gd@example.vn` (trim+lowercase) ✓; same email again → 409 `Email already registered`; role `boss` → 422 (expected one of giam_doc, quan_ly, nhan_vien)
+- `PATCH /admin/users/{gd} {display_name}` → 200 renamed ✓
+- `POST /admin/users/{gd}/invite` twice → 200 new url each; first link and 1st re-issued link → 400 invalid_or_expired_token (old link dies) ✓
+- `POST /auth/activate` weak password `short` → 422; valid → 204 ×3; each `POST /auth/login` → 200
+- `GET /me` giam_doc → contract:read/issue/write/submit/approve, template:write, audit:read, users:read/write; quan_ly → contract:read/issue/write/submit/approve, audit:read; nhan_vien → contract:read/write/submit ✓ (matches workbook matrix: QL all but template:write/users)
+- `GET /roles` (admin) → 200, 5 roles (admin, giam_doc, member, nhan_vien, quan_ly) with permission lists ✓ (matrix equals the /me results above)
+- `POST /admin/users/{active user}/invite` → 409 `already-active`; unknown id → 404
+
+### AC-2 signup off / token reuse
+- `POST /auth/signup` → 503 `Signups are temporarily disabled` ✓
+- reuse of used activation link → 400 `invalid-or-expired-token` ✓ (expired path: not waited 72 h; covered by superseded-link 400 + unit tests)
+
+### AC-3 demote / disable take effect next request
+- ql `GET /audit` → 200; gd `PATCH {role:nhan_vien}` → 200; ql next `GET /audit` → **403**; ql `/me` → roles `[nhan_vien]` ✓
+- gd `PATCH {status:disabled}` → 200; ql next `GET /me` → **401**; `POST /auth/refresh` → 401 `session revoked`; re-login → 403 `Account disabled` ✓ (re-enabled after: 200)
+
+### AC-4 last admin
+- admin `PATCH self {status:disabled}` → 409 `last-admin`; `{role:giam_doc}` → 409 `last-admin`; giam_doc `PATCH admin {status:disabled}` → 409 `last-admin`; admin still `GET /me` → 200 ✓
+
+### AC-5 audit
+- nv `GET /audit` → 403 Problem+JSON `Missing required permission`
+- gd `GET /audit?action=permission.denied` → 4 rows, newest first, e.g. `{action:permission.denied, actor_name:"Lê Văn Nhân Viên", target:"/audit", metadata:{permission:"audit:read",method:"GET",path:"/audit"}, ip:"::1"}` ✓ (also users:read/users:write rows for the nv attack calls)
+- `GET /audit?limit=50` → 21 rows incl. `auth.login`, `user.invited`, `user.activated`, `user.renamed`, `customer.*`; `limit=5` → 5 items + `next_cursor` ✓
+
+### AC-6 customers
+- nv `POST /customers` `{name:"Cửa hàng Hoa Mai", phone:"0901 234 567", tax_code:"0312345678", ...}` → 201 version 1
+- phone `+84901234567` / `0901.234.567` / `0901234567` → 409 `duplicate` + `existing_id` = the first customer ✓; same tax_code → 409 + existing_id ✓; same name, other phone → 201 (allowed) ✓; tax_code `abc` → 422
+- 2× `PATCH` with `expected_version:1` (nv then ql) → 200 version 2, then **409 stale** ✓
+- search `q=Hoa` → 2 names; `q=0901234567` / `q=+84901234567` / `q=0312345678` → the customer ✓; `limit=51` → 422; no DELETE route (`DELETE /customers/{id}` → 404) ✓
+- audit `customer.created` metadata `{fields:[name,tax_code,email,address,phone]}`, `customer.updated` metadata `{fields:[contact_person]}` — one row per change, names only, no values ✓; grep of full audit dump for `0901|hoamai|Lê Lợi|0312345678|0987654321` → 0 hits
+
+### AC-7 price list
+- `GET /price-list?date=2026-06-30` → G6 unit_price **2400000** (effective_to 2026-06-30), DT14 0, G3 1500000, G12 4800000
+- `?date=2026-07-01` → G6 **2700000** (effective_from 2026-07-01, note "tăng giá từ 01/07/2026")
+- no date → `date:"2026-09-29"`, G6 2700000 ✓; `date=2026-13-45` → 422 `not a real calendar date`; `date=abc` → 422 ✓
+- (00:30 VN boundary needs a clock trick; not exercisable by curl — covered by the unit test of `todayInVN`)
+
+### AC-8 not logged in / wrong role
+- no cookie: `GET /customers`, `GET /customers/{id}`, `POST /customers`, `PATCH /customers/{id}`, `GET /price-list`, `GET /roles`, `GET /audit`, `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/{id}`, `POST /admin/users/{id}/invite` → all **401**, body has no data ✓
+- nv `POST /admin/users` → 403 + `permission.denied` row (users:write, ip ::1) ✓
+
+### Attack pass
+- nv `PATCH /admin/users/{ql} {role}` → 403; nv `PATCH self {role:giam_doc}` (self-escalation) → 403; nv `GET /admin/users` → 403; all logged as permission.denied ✓
+- admin (technical account) `GET /customers` → 403 (no contract perms, DEC-1) ✓
+- non-existent customer id: `GET` → 404 `Customer not found`, `PATCH` → 404 (no data leak, same body for both) ✓
+- activation token: `""`/`x`/`' OR 1=1 --` → 422; 43-char tampered (last char changed) → 400; 43×`A` → 400; malformed JSON → 400 ✓
+- unknown extra field on `POST /customers` (`is_admin`, `created_by`) → 422 `unrecognized key(s)` ✓
+- CSRF: write without Origin/X-Requested-With → 403; `Origin: https://evil.example` → 403 ✓
+- `q=' OR 1=1 --` → 200 `items:[]` (parametrized) ✓; garbage `cursor` → 422 on /customers and /audit ✓
+- full audit dump grep `password|correct-horse|activation|token=` → 0 hits (no token/secret in audit) ✓
+- customer phone/email/address/tax_code in audit metadata → none (see AC-6) ✓
+
+### Human checklist (open http://localhost:8787/docs; Authorize is cookie based, so login via `POST /auth/login` in Swagger first; write calls in Swagger may need the two headers — curl is easier)
+- AC-1: login admin@runway.local → `GET /me` no `contract:*` · `POST /admin/users` (giam_doc, quan_ly, nhan_vien) → copy `activation_url` token → `POST /auth/activate` → 204 → login each → `/me` shows the role matrix, `GET /roles` same.
+- AC-2: `POST /auth/signup` → 503; activate the same token again → 400.
+- AC-3: as Giám đốc `PATCH /admin/users/{ql} {"role":"nhan_vien"}` → Quản lý's next `GET /audit` → 403; `{"status":"disabled"}` → their next call 401.
+- AC-4: as admin `PATCH /admin/users/{admin id} {"status":"disabled"}` → 409 last-admin.
+- AC-5: Nhân viên `GET /audit` → 403; Giám đốc `GET /audit?action=permission.denied` → the row with actor, `audit:read`, ip.
+- AC-6: `POST /customers` phone `0901 234 567` then `+84901234567` → 409 with `existing_id`; two `PATCH` with the same `expected_version` → 200 then 409; `GET /audit?action=customer.updated` → field names only.
+- AC-7: `GET /price-list?date=2026-06-30` → G6 2.400.000; `2026-07-01` → 2.700.000; no date → today's.
+- AC-8: logout / no cookie → `/customers`, `/audit`, `/price-list`, `/admin/users` → 401; Nhân viên `POST /admin/users` → 403.
+
+### Result
+- AC-1..AC-8 PASS against the running app; no deviation from SPEC-01 found.
+- Not done here: lint/typecheck/build/full test suite (C-01-007 step 1); expired-link (72 h) and 00:30-VN-boundary cases not reproducible from curl.
+- Observations (not failures): (a) `updated_at` after a PATCH equalled `created_at` in the response (same second, cannot tell; check if it is bumped); (b) `giam_doc` (not only admin) is also refused by last-admin when disabling the admin — consistent with the SPEC rule; (c) `GET /price-list` returns 6 active rows on any date (7 seed rows, G6 has two versions); (d) 401 body has empty `detail`.
+- Human approval: [ ]
