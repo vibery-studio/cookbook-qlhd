@@ -52,7 +52,8 @@ export const FLAG_REGISTRY = {
   },
   "signup.enabled": {
     kind: "boolean",
-    default: true,
+    // Invite-only app (SPEC-01 FR-3): off by default; migration 0010 flips the seed row.
+    default: false,
     description: "When false, /auth/signup returns 503; existing users unaffected",
   },
 } as const satisfies Record<string, FlagDef>;

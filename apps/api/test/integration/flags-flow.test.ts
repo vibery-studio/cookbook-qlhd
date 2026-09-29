@@ -50,6 +50,8 @@ async function truncate(): Promise<void> {
   await db.delete(userRoles);
   await db.delete(users);
   await db.delete(featureFlags);
+  // invite-only app: signup defaults off (SPEC-01); these suites create users through signup
+  await db.insert(featureFlags).values({ key: "signup.enabled", enabled: 1, updatedAt: 0, updatedBy: "test-setup" });
 }
 
 async function resetFlagsKvCache(): Promise<void> {
@@ -184,6 +186,7 @@ describe("FlagsService (unit)", () => {
   });
 
   it("list returns all four registered flags with defaults when unset", async () => {
+    await getDb(env).delete(featureFlags);
     const service = new FlagsService({ db: getDb(env), kv: env.SETTINGS });
     const snap = await service.list();
     expect(snap.map((s) => s.key).sort()).toEqual(
@@ -196,9 +199,9 @@ describe("FlagsService (unit)", () => {
     );
     // No D1 rows yet → defaults, no updated_by.
     expect(snap.every((s) => s.updatedBy === null)).toBe(true);
-    // Kill switches default TRUE (email + signup enabled), gates default FALSE.
+    // email kill switch defaults TRUE; signup defaults FALSE (invite-only, SPEC-01 FR-3); gates FALSE.
     expect(snap.find((s) => s.key === "email.enabled")?.enabled).toBe(true);
-    expect(snap.find((s) => s.key === "signup.enabled")?.enabled).toBe(true);
+    expect(snap.find((s) => s.key === "signup.enabled")?.enabled).toBe(false);
     expect(snap.find((s) => s.key === "system.maintenance_mode")?.enabled).toBe(
       false,
     );

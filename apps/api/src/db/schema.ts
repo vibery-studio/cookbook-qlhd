@@ -12,7 +12,8 @@
  * All IDs are ULID `TEXT`. All timestamps are `INTEGER` unix seconds (D1 has
  * no native TIMESTAMP type).
  */
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Sentinel table used by the post-deploy `/readyz` check (Phase 10) to
@@ -60,6 +61,8 @@ export const users = sqliteTable(
      * per grace window (default 24h, see docs/privacy.md).
      */
     lastExportAt: integer("last_export_at"),
+    /** Name shown in lists and the audit log (SPEC-01). Required for invited users; NULL on legacy rows. */
+    displayName: text("display_name"),
   },
   (table) => [index("idx_users_email").on(table.email)],
 );
@@ -266,6 +269,76 @@ export const notes = sqliteTable(
 );
 
 /**
+ * In-app audit store (SPEC-01 FR-4, docs/recipes/add-audit-store.md). Append-only; `metadata` is
+ * deep-scrubbed JSON and never carries customer PII. Status moves write their row in the same batch.
+ */
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: text("id").primaryKey(),
+    ts: integer("ts").notNull(),
+    actor: text("actor"),
+    action: text("action").notNull(),
+    target: text("target"),
+    metadata: text("metadata"),
+    ip: text("ip"),
+  },
+  (table) => [
+    index("idx_audit_ts").on(table.ts),
+    index("idx_audit_target").on(table.target, table.ts),
+    index("idx_audit_actor").on(table.actor, table.ts),
+    index("idx_audit_action").on(table.action, table.ts),
+  ],
+);
+
+/**
+ * Customers (SPEC-01 FR-5) — the subject a contract is made for. Never deleted (contracts point here).
+ * `phone_norm` = digits-only local form used for duplicate detection; `version` guards concurrent edits.
+ */
+export const customers = sqliteTable(
+  "customers",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    contactPerson: text("contact_person"),
+    taxCode: text("tax_code"),
+    phone: text("phone"),
+    phoneNorm: text("phone_norm"),
+    email: text("email"),
+    address: text("address"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    version: integer("version").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("uq_customers_phone_norm").on(table.phoneNorm).where(sql`phone_norm IS NOT NULL`),
+    uniqueIndex("uq_customers_tax_code").on(table.taxCode).where(sql`tax_code IS NOT NULL`),
+    index("idx_customers_name").on(table.name),
+  ],
+);
+
+/**
+ * Price list (SPEC-01 FR-6), seeded from the owner's 09_Bang_Gia.xlsx. Read-only in the app; a price
+ * change is a new migration. Prices are whole đồng, VAT included. Dates are ISO `YYYY-MM-DD` (business zone).
+ */
+export const priceList = sqliteTable(
+  "price_list",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    durationValue: integer("duration_value").notNull(),
+    durationUnit: text("duration_unit").notNull(), // day | month
+    unitPrice: integer("unit_price").notNull(),
+    effectiveFrom: text("effective_from").notNull(),
+    effectiveTo: text("effective_to"),
+    note: text("note"),
+  },
+  (table) => [uniqueIndex("uq_price_list_code_from").on(table.code, table.effectiveFrom)],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -284,4 +357,7 @@ export const schema = {
   idempotencyKeys,
   notes,
   userExports,
+  auditEvents,
+  customers,
+  priceList,
 };

@@ -9,24 +9,30 @@
  * not use nested colons — Set membership and OpenAPI docs assume a
  * single-level namespace.
  *
- * NOTE: `audit:read` intentionally absent — audit is a Logpush stream,
- * not an in-app query surface (see Red Team F14). Add it only if we
- * ship an audit-log D1 table later, which requires storage-cost review.
+ * `audit:read` reads the in-app `audit_events` table (SPEC-01 FR-4). `contract:*` and
+ * `template:write` are the contract app's permissions (documents.workbook §3, the mockup's matrix).
  */
 export const PERMISSIONS = [
+  "audit:read",
+  "contract:approve",
+  "contract:issue",
+  "contract:read",
+  "contract:submit",
+  "contract:write",
   "flags:read",
   "flags:write",
   "notes:read",
   "notes:write",
   "settings:read",
   "settings:write",
+  "template:write",
   "users:read",
   "users:write",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
-export const ROLE_NAMES = ["admin", "member"] as const;
+export const ROLE_NAMES = ["admin", "member", "giam_doc", "quan_ly", "nhan_vien"] as const;
 export type RoleName = (typeof ROLE_NAMES)[number];
 
 export function isPermission(value: string): value is Permission {

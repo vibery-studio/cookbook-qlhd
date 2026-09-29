@@ -163,7 +163,8 @@ describe("SPEC-01 foundation (acceptance)", () => {
     expect((await activate(token)).status).toBe(400);
 
     const res2 = await inviteRaw(admin, { email: "b@nhatminh.vn", display_name: "B", role: "nhan_vien" });
-    const token2 = new URL(((await res2.json()) as { activation_url: string }).activation_url).searchParams.get("token")!;
+    const body2: { activation_url: string } = await res2.json();
+    const token2 = new URL(body2.activation_url).searchParams.get("token")!;
     await env.DB.prepare("UPDATE verification_tokens SET expires_at = 1 WHERE purpose = 'invite' AND used_at IS NULL").run();
     expect((await activate(token2)).status).toBe(400);
   });
@@ -192,7 +193,7 @@ describe("SPEC-01 foundation (acceptance)", () => {
     const { id }: { id: string } = await (await admin.fetch("/me")).json();
     const off = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) });
     expect(off.status).toBe(409);
-    expect(((await off.json()) as { type: string }).type).toContain("last_admin");
+    expect(((await off.json())).type).toContain("last_admin");
     const rerole = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ role: "giam_doc" }) });
     expect(rerole.status).toBe(409);
   });
@@ -238,7 +239,7 @@ describe("SPEC-01 foundation (acceptance)", () => {
       body: JSON.stringify({ name: "Cô Ba (chi nhánh)", phone: "+84901234567" }),
     });
     expect(dup.status).toBe(409);
-    expect(((await dup.json()) as { existing_id: string }).existing_id).toBe(c.id);
+    expect(((await dup.json())).existing_id).toBe(c.id);
 
     const edit = (address: string) =>
       nv.session.fetch(`/customers/${c.id}`, {

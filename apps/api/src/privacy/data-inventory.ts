@@ -94,6 +94,15 @@ export const DATA_INVENTORY: readonly DataInventoryEntry[] = [
     onDelete: "delete",
   },
   {
+    // In-app audit trail (SPEC-01 FR-4). Kept on erasure: every move must stay signed for
+    // (documents.workbook I7); the actor id then points at the anonymized users row.
+    table: "audit_events",
+    ownerColumn: "actor",
+    personal: true, // ip
+    exportable: true,
+    onDelete: "skip",
+  },
+  {
     table: "users",
     ownerColumn: null,
     personal: true,
@@ -116,4 +125,7 @@ export const INVENTORY_EXEMPT_TABLES: readonly string[] = [
   "role_permissions",
   "schema_versions",
   "idempotency_keys",
+  // business records, not the staff member's personal data (SPEC-01)
+  "customers",
+  "price_list",
 ];

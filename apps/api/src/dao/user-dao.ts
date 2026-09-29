@@ -168,6 +168,7 @@ export async function anonymizeUser(
       .set({
         email: input.anonEmail,
         passwordHash: input.anonPasswordHash,
+        displayName: null,
         status: "disabled",
         deletedAt: input.deletedAt,
         deletionRequestedAt: null,

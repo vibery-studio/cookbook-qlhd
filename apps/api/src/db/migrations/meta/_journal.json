@@ -64,6 +64,20 @@
       "when": 1789958200000,
       "tag": "0008_seed_privacy_settings",
       "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790690189935,
+      "tag": "0009_cooing_spirit",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790690232254,
+      "tag": "0010_seed_foundation",
+      "breakpoints": true
     }
   ]
 }
