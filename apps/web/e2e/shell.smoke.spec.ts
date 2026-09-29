@@ -45,7 +45,8 @@ test("4a smoke: Giám đốc adds a customer, sees the duplicate warning, finds 
   await expect(dialog2.getByLabel("Tên khách hàng")).toHaveValue("Hoa Mai chi nhánh 2");
   await expect(dialog2.getByRole("alert")).not.toContainText(/duplicate|Conflict|409/i);
   await dialog2.getByRole("button", { name: "Xem khách đó" }).click();
-  await expect(gd.getByRole("dialog").getByText("Cửa hàng Hoa Mai")).toBeVisible();
+  // the name is in the alert AND the loaded card: assert the loaded card, not an ambiguous text
+  await expect(gd.getByRole("dialog").getByRole("heading", { name: "Cửa hàng Hoa Mai" })).toBeVisible();
   await gd.keyboard.press("Escape");
 
   // Phân quyền (readable by every role) — screenshot only

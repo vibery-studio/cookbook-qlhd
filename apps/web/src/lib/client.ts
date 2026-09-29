@@ -25,10 +25,17 @@ const apiOrigin = import.meta.env.DEV ? "http://localhost:8787" : browserBaseUrl
 export const client = createClient({
   baseUrl: browserBaseUrl,
   origin: apiOrigin,
-  onUnauthorized: () => {
-    queryClient.removeQueries({ queryKey: ["me"], exact: true });
-  },
+  onUnauthorized: () => onSessionLost(queryClient),
 });
+
+/**
+ * Session gone (refresh failed): re-check /me so the guard sees its 401 and sends the user to /login.
+ * Never remove the query — when /me itself triggered this, removing it mid-fetch left the guard
+ * pending forever ("Đang kiểm tra phiên"). `cancelRefetch: false` lets that in-flight /me settle.
+ */
+export function onSessionLost(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: ["me"], exact: true }, { cancelRefetch: false });
+}
 
 export const apiClient = client;
 
