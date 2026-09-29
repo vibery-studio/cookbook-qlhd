@@ -31,6 +31,7 @@
     "db:schema-head": "tsx scripts/get-schema-head.ts",
     "db:seed:admin": "tsx scripts/seed-admin.ts",
     "dev:reset": "tsx scripts/dev-reset.ts",
+    "dev:seed-admin": "tsx scripts/dev-seed-admin.ts",
     "deploy:preflight": "tsx scripts/deploy-preflight.ts",
     "deploy:verify": "tsx scripts/deploy-verify.ts",
     "deploy:rollback": "tsx scripts/deploy-rollback.ts",

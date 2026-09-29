@@ -22,6 +22,7 @@ CI=true pnpm --filter @runway/api exec vitest run test/integration/<file>.test.t
 pnpm lint && pnpm typecheck && pnpm build
 pnpm db:generate                           # drizzle-kit, generate only — never push/migrate
 pnpm db:migrate:local                      # apply migrations to local D1
+RUNWAY_LOCAL=1 pnpm dev:seed-admin         # with pnpm dev up: admin@runway.local / correct-horse-battery-staple (local D1)
 pnpm client:generate                       # after any API change (CI fails on drift)
 ```
 
