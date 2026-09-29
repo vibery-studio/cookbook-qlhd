@@ -59,3 +59,15 @@ Extending: follow `docs/recipes/add-resource.md`; permissions → `docs/rbac.md`
 ## Deploy
 
 Local-only from the operator's terminal with wrangler OAuth; no Cloudflare API token in CI (CI runs code-quality checks only). Prod: `READYZ_TOKEN=… pnpm deploy:prod` → `scripts/deploy-prod.sh` gate (preflight → D1 time-travel recovery point → migrate → deploy → verify, auto-rollback). Rollback: `pnpm deploy:rollback`. Details: `docs/deploy.md`.
+
+## How we work (the Ship with Claude workflow)
+
+@docs/WORKFLOW.md
+
+- This project starts late in the course workflow, because two parts arrive already approved:
+  - **ENGINEERING + skeleton = RUNWAY** (this repo): don't rewrite the base, extend it the way `docs/recipes/add-resource.md` says.
+  - **INTENT + SPEC = the Cookbook** (`docs/cookbook/`): `documents.workbook.md` is the approved spec of the contract app,
+    `design/` (FEEL, MOTION, DESIGN) is the approved design law, `mockup/index.html` the approved picture. Build from them.
+- So each feature runs PLAN → BUILD → PROOF; its INTENT/SPEC are the workbook sections its roadmap row names.
+- The roadmap (`docs/roadmap/ROADMAP-NN.md`, one Active) comes first; each row points to the workbook sections it builds.
+- Replies and docs in Vietnamese. Address the human as "bạn", yourself as "mình".
