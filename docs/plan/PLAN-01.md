@@ -132,5 +132,5 @@ Run 2026-09-29 on the real app: fresh local D1 (`apps/api/.wrangler/state` moved
 ### Result
 - AC-1..AC-8 PASS against the running app; no deviation from SPEC-01 found.
 - Not done here: lint/typecheck/build/full test suite (C-01-007 step 1); expired-link (72 h) and 00:30-VN-boundary cases not reproducible from curl.
-- Observations (not failures): (a) `updated_at` after a PATCH equalled `created_at` in the response (same second, cannot tell; check if it is bumped); (b) `giam_doc` (not only admin) is also refused by last-admin when disabling the admin — consistent with the SPEC rule; (c) `GET /price-list` returns 6 active rows on any date (7 seed rows, G6 has two versions); (d) 401 body has empty `detail`.
+- Observations (not failures): (a) `updated_at` after a PATCH equalled `created_at` in the response (same second, cannot tell; check if it is bumped); (b) `giam_doc` (not only admin) is also refused by last-admin when disabling the admin — consistent with the SPEC rule; (c) [corrected by the driver: the DAO filter returns 4 rows on 2026-06-30 — DT14, G3, G6, G12 — verified by direct SQL]; (d) 401 body has empty `detail`.
 - Human approval: [ ]
