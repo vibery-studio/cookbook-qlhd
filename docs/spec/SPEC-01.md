@@ -44,7 +44,7 @@ Intent: docs/intent/INTENT-01.md
   |---|---|---|---|
   | `GET /admin/users` (có sẵn) | `users:read` | + `display_name`, `roles`, `status` | 401 403 |
   | `POST /admin/users` | `users:write` | `{email, display_name, role}` → 201 `{user, activation_url, expires_at}` | 409 email trùng · 422 |
-  | `PATCH /admin/users/{id}` | `users:write` | `{role?, status?: active\|disabled, display_name?}` → 200 user | 404 · 409 last_admin · 422 |
+  | `PATCH /admin/users/{id}` | `users:write` | `{role?, status?: active\|disabled, display_name?}` → 200 user | 404 · 409 last-admin · 422 |
   | `POST /admin/users/{id}/invite` | `users:write` | tạo lại link cho người chưa kích hoạt (link cũ hết hiệu lực) → 200 `{activation_url, expires_at}` | 404 · 409 already_active |
   | `POST /auth/activate` | công khai (có token) | `{token, password}` → 204 | 400 invalid_or_expired_token · 422 password yếu |
   | `GET /roles` | đã đăng nhập | ma trận vai trò × quyền (trang Phân quyền) | 401 |
@@ -63,7 +63,7 @@ Intent: docs/intent/INTENT-01.md
 | Two people at once | 2 người cùng sửa 1 khách → người sau nhận 409 stale (CAS theo `version`) · 2 lần bấm tạo → `Idempotency-Key` | now |
 | Failure & retry | email lỗi không làm hỏng việc mời (vẫn trả link) · ghi nhật ký cho `permission.denied` / đăng nhập mà lỗi thì không làm hỏng request · thay đổi khách + dòng nhật ký: chung 1 batch | now |
 | Permissions / not logged in | chưa đăng nhập → 401 · Nhân viên đọc nhật ký → 403 + `permission.denied` · `member`/tài khoản chưa có vai trò → không có quyền nghiệp vụ | now |
-| Lifecycle | khóa người dùng thay cho xóa · không được khóa / đổi vai trò `admin` đang hoạt động cuối cùng → 409 `last_admin` · link mời hết hạn / đã dùng → 400 · khách không xóa được | now |
+| Lifecycle | khóa người dùng thay cho xóa · không được khóa / đổi vai trò `admin` đang hoạt động cuối cùng → 409 `last-admin` · link mời hết hạn / đã dùng → 400 · khách không xóa được | now |
 | Money | giá là số nguyên đồng, đã gồm VAT · DT14 = 0đ | now |
 | Time / dates | tra giá theo ngày ở múi giờ VN (00:30 ngày 01/07 VN vẫn ra giá mới) · 30/06/2026 → G6 2.400.000, 01/07/2026 → 2.700.000 · `ts` nhật ký lưu unix giây | now |
 | Retention | nhật ký lưu mãi, không có job xóa | later — xem lại khi dữ liệu lớn |
@@ -90,7 +90,7 @@ Intent: docs/intent/INTENT-01.md
 - [AC-2] `POST /auth/signup` → 503; kích hoạt lại bằng link đã dùng / hết hạn → 400 — proves FR-3, §4 Lifecycle
 - [AC-3] Giám đốc hạ Quản lý xuống Nhân viên → request kế tiếp của người đó tới `GET /audit` → 403; khóa người đó → request kế tiếp 401 —
   proves FR-2
-- [AC-4] admin cuối cùng tự khóa / tự đổi vai trò → 409 `last_admin` — proves §4 Lifecycle
+- [AC-4] admin cuối cùng tự khóa / tự đổi vai trò → 409 `last-admin` — proves §4 Lifecycle
 - [AC-5] Nhân viên gọi `GET /audit` → 403 Problem+JSON; Giám đốc gọi `GET /audit?action=permission.denied` → thấy đúng dòng đó (actor, quyền
   `audit:read`, IP), mới nhất trước — proves FR-4, DEC-3
 - [AC-6] Tạo khách với SĐT `0901 234 567` rồi `+84901234567` → 409 kèm `existing_id`; 2 PATCH cùng `expected_version` → 1 thành công,

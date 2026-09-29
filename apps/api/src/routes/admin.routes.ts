@@ -23,6 +23,7 @@ const AdminUserItem = z
   .object({
     id: UlidSchema,
     email: EmailSchema,
+    display_name: z.string().nullable(),
     status: z.enum(["pending", "active", "disabled"]),
     roles: z.array(z.string()),
   })
@@ -61,6 +62,10 @@ export function adminRoutes(app: OpenAPIHono<Env>): void {
       { db, kv: c.env.SESSIONS, env: c.env },
       { cursor: query.cursor, limit: query.limit },
     );
-    return c.json(page, 200);
+    // TODO(C-01-004): read display_name from the DAO; the service does not carry it yet.
+    return c.json(
+      { ...page, items: page.items.map((u) => ({ ...u, display_name: null })) },
+      200,
+    );
   });
 }

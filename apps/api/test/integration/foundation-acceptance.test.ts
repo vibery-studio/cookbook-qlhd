@@ -193,7 +193,8 @@ describe("SPEC-01 foundation (acceptance)", () => {
     const { id }: { id: string } = await (await admin.fetch("/me")).json();
     const off = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) });
     expect(off.status).toBe(409);
-    expect(((await off.json())).type).toContain("last_admin");
+    const offBody: { type: string } = await off.json();
+    expect(offBody.type).toContain("last-admin");
     const rerole = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ role: "giam_doc" }) });
     expect(rerole.status).toBe(409);
   });
@@ -239,7 +240,8 @@ describe("SPEC-01 foundation (acceptance)", () => {
       body: JSON.stringify({ name: "Cô Ba (chi nhánh)", phone: "+84901234567" }),
     });
     expect(dup.status).toBe(409);
-    expect(((await dup.json())).existing_id).toBe(c.id);
+    const dupBody: { existing_id: string } = await dup.json();
+    expect(dupBody.existing_id).toBe(c.id);
 
     const edit = (address: string) =>
       nv.session.fetch(`/customers/${c.id}`, {

@@ -3,7 +3,8 @@ import type { OpenAPIHono } from "@hono/zod-openapi";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { EmailSchema } from "../dto/common";
-import { problem, ProblemDto, ProblemType } from "../dto/error";
+import { notImplementedProblem, problem, ProblemDto, ProblemType } from "../dto/error";
+import { ActivateBody } from "../dto/users";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
@@ -143,6 +144,29 @@ const verifyRoute = createRoute({
   },
 });
 
+const activateRoute = createRoute({
+  method: "post",
+  path: "/auth/activate",
+  tags: ["auth"],
+  summary: "Activate an invited account with the link token and a password",
+  request: { body: { content: { "application/json": { schema: ActivateBody } } } },
+  responses: {
+    204: { description: "Activated" },
+    400: {
+      description: "invalid_or_expired_token: unknown, used or expired link",
+      content: { "application/problem+json": { schema: ProblemDto } },
+    },
+    422: {
+      description: "Validation failed / weak password",
+      content: { "application/problem+json": { schema: ProblemDto } },
+    },
+    501: {
+      description: "Not implemented",
+      content: { "application/problem+json": { schema: ProblemDto } },
+    },
+  },
+});
+
 const loginRoute = createRoute({
   method: "post",
   path: "/auth/login",
@@ -224,6 +248,15 @@ const authRoutesModule = {
       rateLimit({
         binding: "RL_AUTH_VERIFY",
         keyFn: (c) => `verify:${clientIp(c)}`,
+      }),
+    );
+
+    app.on(
+      "post",
+      "/auth/activate",
+      rateLimit({
+        binding: "RL_AUTH_VERIFY",
+        keyFn: (c) => `activate:${clientIp(c)}`,
       }),
     );
 
@@ -357,6 +390,12 @@ const authRoutesModule = {
       }
       return c.json({ verified: true as const }, 200);
     });
+
+    app.openapi(activateRoute, (c) =>
+      c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, {
+        "content-type": "application/problem+json",
+      }),
+    );
 
     app.openapi(loginRoute, async (c) => {
       const body = c.req.valid("json");

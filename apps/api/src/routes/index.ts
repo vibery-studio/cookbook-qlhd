@@ -8,6 +8,11 @@ import { meExportRoutes } from "./me-export.routes";
 import { adminRoutes } from "./admin.routes";
 import { adminFlagsRoutes } from "./admin-flags.routes";
 import { adminSettingsRoutes } from "./admin-settings.routes";
+import { adminUsersRoutes } from "./admin-users.routes";
+import { auditRoutes } from "./audit.routes";
+import { customersRoutes } from "./customers.routes";
+import { priceListRoutes } from "./price-list.routes";
+import { rolesRoutes } from "./roles.routes";
 import { demoRoutes } from "./demo.routes";
 import { healthRoutes } from "./health.routes";
 
@@ -24,6 +29,11 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   meExportRoutes(app);
   meDeleteRoutes(app);
   adminRoutes(app);
+  adminUsersRoutes(app);
+  rolesRoutes(app);
+  auditRoutes(app);
+  customersRoutes(app);
+  priceListRoutes(app);
   adminSettingsRoutes(app);
   adminFlagsRoutes(app);
   demoRoutes(app);

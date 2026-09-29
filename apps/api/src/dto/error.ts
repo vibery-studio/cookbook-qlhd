@@ -19,6 +19,8 @@ export const ProblemDto = z
     instance: z.string().optional(),
     request_id: z.string().optional(),
     errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+    /** Extension on 409 `duplicate` (customers): id of the record that already exists. */
+    existing_id: z.string().optional(),
   })
   .openapi("Problem");
 
@@ -43,6 +45,11 @@ export const ProblemType = {
   RateLimited: "rate-limited",
   Internal: "internal",
   ServiceUnavailable: "service-unavailable",
+  LastAdmin: "last-admin",
+  Stale: "stale",
+  Duplicate: "duplicate",
+  AlreadyActive: "already-active",
+  InvalidOrExpiredToken: "invalid-or-expired-token",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -54,6 +61,7 @@ export interface ProblemOptions {
   instance?: string;
   request_id?: string;
   errors?: Problem["errors"];
+  existing_id?: string;
 }
 
 /**
@@ -79,9 +87,26 @@ export function problem(
     ...(options.instance !== undefined && { instance: options.instance }),
     ...(options.request_id !== undefined && { request_id: options.request_id }),
     ...(options.errors !== undefined && { errors: options.errors }),
+    ...(options.existing_id !== undefined && { existing_id: options.existing_id }),
   };
+}
+
+/** Shared 501 body for contract-only stubs (handlers land in later cards). */
+export function notImplementedProblem(instance: string, requestId?: string): Problem {
+  return problem(501, "Not Implemented", ProblemType.NotImplemented, {
+    instance,
+    request_id: requestId,
+  });
 }
 
 // `ProblemDto` self-registers as `#/components/schemas/Problem` via the
 // `.openapi("Problem")` chained call above. No separate registration
 // function needed with @hono/zod-openapi v1.x.
+
+/** OpenAPI response entry for a Problem+JSON error. */
+export function problemResponse(description: string) {
+  return {
+    description,
+    content: { "application/problem+json": { schema: ProblemDto } },
+  };
+}
