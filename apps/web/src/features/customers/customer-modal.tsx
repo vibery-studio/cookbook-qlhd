@@ -19,6 +19,8 @@ type CreateModalProps = {
   idempotencyKey: string;
   onClose: () => void;
   onSaved: (message: string) => void;
+  /** Called with the customer to use: the new one, or the existing one on a duplicate ("Dùng khách này"). */
+  onCreated?: (customer: Customer) => void;
 };
 
 type EditModalProps = {
@@ -100,7 +102,8 @@ export function CustomerModal(props: CustomerModalProps) {
     try {
       const payload = toCustomerPayload(form);
       if (mode === "create") {
-        await createCustomer.mutateAsync({ body: payload, idempotencyKey: props.idempotencyKey });
+        const created = await createCustomer.mutateAsync({ body: payload, idempotencyKey: props.idempotencyKey });
+        props.onCreated?.(created);
         onSaved("Đã thêm khách");
       } else {
         await updateCustomer.mutateAsync({
@@ -133,6 +136,8 @@ export function CustomerModal(props: CustomerModalProps) {
   }
 
   const existingName = existingCustomer.data?.name;
+  const onUseExisting = mode === "create" ? props.onCreated : undefined;
+  const existingData = existingCustomer.data;
   const title = mode === "create" ? "Thêm khách" : "Sửa khách";
 
   return (
@@ -156,24 +161,16 @@ export function CustomerModal(props: CustomerModalProps) {
         }}
       >
         {duplicateId ? (
-          <Alert tone="danger">
-            <div className="grid gap-s3">
-              <p>
-                Đã có khách dùng SĐT/MST này{existingName ? `: ${existingName}` : ""}
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                className="justify-self-start"
-                onClick={() => {
-                  setShowExisting(true);
-                  void existingCustomer.refetch();
-                }}
-              >
-                Xem khách đó
-              </Button>
-            </div>
-          </Alert>
+          <DuplicateNotice
+            existingName={existingName}
+            onView={() => {
+              setShowExisting(true);
+              void existingCustomer.refetch();
+            }}
+            {...(onUseExisting && existingData
+              ? { onUse: () => { onUseExisting(existingData); onSaved("Đã chọn khách"); } }
+              : {})}
+          />
         ) : null}
 
         {stale ? (
@@ -257,6 +254,22 @@ export function CustomerModal(props: CustomerModalProps) {
         ) : null}
       </form>
     </Modal>
+  );
+}
+
+export function DuplicateNotice({ existingName, onView, onUse }: { existingName: string | undefined; onView: () => void; onUse?: () => void }) {
+  return (
+    <Alert tone="danger">
+      <div className="grid gap-s3">
+        <p>
+          Đã có khách dùng SĐT/MST này{existingName ? `: ${existingName}` : ""}
+        </p>
+        <div className="flex flex-wrap gap-s3">
+          <Button type="button" variant="secondary" onClick={onView}>Xem khách đó</Button>
+          {onUse ? <Button type="button" onClick={onUse}>Dùng khách này</Button> : null}
+        </div>
+      </div>
+    </Alert>
   );
 }
 

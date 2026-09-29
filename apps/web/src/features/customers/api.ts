@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components, Problem } from "@runway/client";
+import { useDebouncedValue } from "./use-debounced-value";
 import { ApiProblemError, client } from "../../lib/client";
 
 export type Customer = components["schemas"]["Customer"];
@@ -136,4 +137,21 @@ export function useUpdateCustomer() {
       ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["customers"] }),
   });
+}
+
+/** Picker search for the contract modal: debounced 300ms, first page + "Xem thêm". */
+export function useCustomerSearch(q: string) {
+  const debounced = useDebouncedValue(q.trim(), 300);
+  const query = useCustomers(debounced);
+  const items = query.data?.pages.flatMap((page) => page.items) ?? [];
+  return {
+    items,
+    isPending: query.isPending,
+    isError: query.isError,
+    error: query.error,
+    hasMore: Boolean(query.hasNextPage),
+    loadMore: () => void query.fetchNextPage(),
+    isLoadingMore: query.isFetchingNextPage,
+    refetch: () => void query.refetch(),
+  };
 }

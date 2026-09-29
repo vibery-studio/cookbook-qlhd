@@ -5,6 +5,7 @@ import { Button, EmptyState, ErrorState, Field, LockedNote, Skeleton, Toast } fr
 import { customerError, withoutLockPrefix } from "./errors";
 import { CustomerModal, type CustomerModalProps } from "./customer-modal";
 import { useCustomers, type Customer } from "./api";
+import { formatIssuedLine } from "./issued-line";
 import { useDebouncedValue } from "./use-debounced-value";
 
 type ModalState = CustomerModalProps;
@@ -122,6 +123,7 @@ function CustomerCard({ customer, canWrite, onEdit }: { customer: Customer; canW
           <p className="truncate" title={customer.tax_code ?? undefined}>{customer.tax_code ? `MST ${customer.tax_code}` : "Chưa có mã số thuế"}</p>
           <p className="truncate" title={customer.phone ?? undefined}>{customer.phone || "Chưa có số điện thoại"}</p>
         </div>
+        <p className="text-sm font-medium text-body" data-testid="customer-issued">{formatIssuedLine(customer.issued_count, customer.issued_total)}</p>
         {canWrite ? <Button type="button" variant="secondary" className="w-full" onClick={() => onEdit(customer)}>Sửa thông tin</Button> : null}
       </article>
     </li>

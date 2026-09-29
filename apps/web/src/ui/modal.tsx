@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../lib/cn";
 import { Icon } from "./icon";
@@ -16,6 +16,7 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [entered, setEntered] = useState(false);
+  const titleId = useId(); // unique per dialog: stacked modals must each be named by their own title
 
   useEffect(() => {
     if (!open) {
@@ -69,7 +70,7 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
         className={cn(
           "motion-panel flex max-h-[calc(100dvh-2*var(--spacing-s4))] w-full max-w-[var(--drawer-w)] translate-y-[var(--modal-offset)] flex-col overflow-hidden rounded-r3 border border-line bg-surface opacity-0",
           entered && "translate-y-0 opacity-100",
@@ -78,7 +79,7 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-s4 border-b border-line px-s5 py-s4">
-          <h2 id="modal-title" className="text-lg font-bold leading-head text-strong">
+          <h2 id={titleId} className="text-lg font-bold leading-head text-strong">
             {title}
           </h2>
           <button
