@@ -1,6 +1,6 @@
 # PLAN-04a: Giao diện nền `apps/web` (khung, đăng nhập/kích hoạt, Khách hàng, Phân quyền, Nhật ký, Người dùng)
 
-Status: Approved 2026-09-29
+Status: Done 2026-09-30
 Spec: docs/spec/SPEC-04a.md
 
 ## 1. Acceptance tests — written first, seen failing
@@ -108,4 +108,4 @@ Attack pass (driver, one-off Playwright probe on :8787 after run 5) found a 4th 
 Checks after all fixes: typecheck 7/7 · lint 2/2 · web build ok · `CI=true pnpm test` → api 247 passed | 2 skipped, client 11, web 36.
 Result: pass (smoke + attack pass). Visual nits (next row, no polish loop): top bar repeats the brand next to the sidebar brand and repeats the screen title (h1 in top bar + h1 in page) · role badge overflows the sidebar at long names (now truncated name, badge fits) · Phân quyền lists RUNWAY base perms (flags/notes/settings) without Vietnamese labels + base role "Thành viên" · Khách hàng nav item keeps a light highlight after leaving it · IP "—" on events written without a request IP.
 Gap noted: the smoke spec never visits the app logged out — 4b's e2e should include one logged-out → /login step.
-Human approval: [ ]
+Human approval: [x] 2026-09-30

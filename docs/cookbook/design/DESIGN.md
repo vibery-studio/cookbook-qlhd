@@ -11,6 +11,7 @@ Status: Approved — extracted 2026-09-29 from the approved mockup (`docs/cookbo
 | **Khách hàng** | customer cards: contact, MST, phone, number of contracts, total value | everyone |
 | **Phân quyền** | role × permission matrix (`contract:approve`, `contract:issue`, `audit:read`…) — read-only proof of the RBAC | everyone |
 | **Nhật ký** | audit log, newest first, incl. refused actions (`permission.denied`) in the danger colour | audit readers |
+| **Người dùng** (`/nguoi-dung`, row 4a · DEC-2) | accounts table (name · email · role chip · Chờ kích hoạt/Đang dùng/Đã khóa); "+ Mời người dùng" modal (email, tên hiển thị, vai trò) → activation link shown once + copy; pending rows "Tạo lại link"; role change/lock inline; last active admin can't be locked (Vietnamese reason); mobile = cards | `users:read` (admin, Giám đốc) |
 
 ## Components
 - **Sidebar** 240px: app name + "nội bộ · của bạn", nav, section "HỆ THỐNG", user chip with role badge + Đăng xuất at the bottom.

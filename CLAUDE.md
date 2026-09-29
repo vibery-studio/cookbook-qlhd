@@ -31,6 +31,7 @@ pnpm openapi:export && pnpm client:generate   # after any API change (CI fails o
 Reset local data: `mv apps/api/.wrangler/state /tmp/state-$(date +%H%M%S)` then migrate. **Not** `pnpm dev:reset`:
 it wipes `<repo>/.wrangler/state`, but the dev D1 lives in `apps/api/.wrangler/state`.
 Ports: 8788 belongs to another project on this machine — never stop it. Stop only your own processes, by PID.
+`docs/cookbook/e2e-kit/free-ports.sh` kills EVERY wrangler/workerd of this repo (incl. `pnpm dev` on 8787) — restart dev after e2e.
 
 ## Project files — the source of truth
 
