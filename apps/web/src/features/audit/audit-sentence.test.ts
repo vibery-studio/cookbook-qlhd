@@ -47,6 +47,16 @@ describe("auditSentence", () => {
     expect(auditSentence({ action: "role.created" }).text).toBe("tạo vai trò");
   });
 
+  it("C-11-001: two-layer toggle with its reason; a direct permission change says so", () => {
+    expect(auditSentence({ action: "security.two_layer_changed", metadata: { enabled: false, reason: "Đội nhỏ" } }).text).toBe(
+      "tắt cơ chế duyệt 2 lớp khi đổi quyền — lý do: Đội nhỏ",
+    );
+    expect(auditSentence({ action: "security.two_layer_changed", metadata: { enabled: true } }).text).toBe("bật cơ chế duyệt 2 lớp khi đổi quyền");
+    expect(
+      auditSentence({ action: "role.permissions_changed", metadata: { label: "Quản lý", added: [], removed: ["c:d"], direct: true } }).text,
+    ).toBe("tắt 1 quyền của «Quản lý» trực tiếp (cơ chế duyệt 2 lớp đang tắt)");
+  });
+
   it("sod.* names both permissions by label", () => {
     const m = { perm_a: "contract:issue", perm_b: "contract:approve" };
     expect(auditSentence({ action: "sod.pair_added", metadata: m }).text).toBe("khai cặp quyền xung đột «Phát hành & hủy» ⟷ «Duyệt / từ chối»");

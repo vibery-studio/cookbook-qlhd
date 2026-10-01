@@ -8,8 +8,13 @@ const me = (permissions: string[]): Me => ({ id: "u", email: "a@b.c", display_na
 describe("nav registry", () => {
   it("orders items as the design says", () => {
     expect(navRegistry.map((i) => i.to)).toEqual([
-      "/hop-dong", "/mau-hop-dong", "/cho-toi-duyet", "/khach-hang", "/san-pham", "/phan-quyen", "/ra-soat-quyen", "/nhat-ky", "/nguoi-dung",
+      "/hop-dong", "/mau-hop-dong", "/cho-toi-duyet", "/khach-hang", "/san-pham", "/phan-quyen", "/ra-soat-quyen", "/nhat-ky", "/nguoi-dung", "/bao-mat",
     ]);
+  });
+
+  it("C-11-001: Bảo mật only with security:write (root), never for admin", () => {
+    expect(visibleNavItems(me(["security:write", "audit:read"])).map((i) => i.to)).toContain("/bao-mat");
+    expect(visibleNavItems(me(["roles:write", "users:write", "settings:write"])).map((i) => i.to)).not.toContain("/bao-mat");
   });
 
   it("the /hop-dong sidebar entry is called Tài liệu (route unchanged)", () => {

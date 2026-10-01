@@ -7,7 +7,7 @@ const ALL_CODES = [
   "audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write",
   "flags:read", "flags:write", "notes:read", "notes:write", "roles:write", "settings:read", "settings:write",
   "quote:write", "payment_request:write", "delivery_note:write",
-  "template:write", "users:read", "users:write", "jit:grant", "reviews:write", "product:write", "price:write",
+  "template:write", "users:read", "users:write", "jit:grant", "reviews:write", "product:write", "price:write", "security:write",
 ];
 
 describe("permission labels", () => {
@@ -37,8 +37,14 @@ describe("permission labels", () => {
     expect(permissionLabel("roles:write")).toBe("Quản lý vai trò");
     const groups = groupCatalog(ALL_CODES);
     expect(groups.map((g) => g.group)).toEqual(["Hợp đồng", "Quản trị", "Hạ tầng (nền hệ thống)"]);
-    expect(groups[1]?.codes).toEqual(["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write"]);
+    expect(groups[1]?.codes).toEqual(["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write", "security:write"]);
     expect(groups[0]?.codes).toContain("template:write");
+  });
+
+  it("C-11-001: labels security:write (Quản trị group) and the root role", () => {
+    expect(permissionLabel("security:write")).toBe("Cấu hình bảo mật");
+    expect(permissionGroup("security:write")).toBe("Quản trị");
+    expect(roleLabels["root"]).toBe("Root admin");
   });
 
   it("labels the 2b permissions (Quản trị group)", () => {

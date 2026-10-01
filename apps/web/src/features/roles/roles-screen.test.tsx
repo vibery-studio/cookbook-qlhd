@@ -9,6 +9,7 @@ const get = vi.fn<(path: string) => Promise<unknown>>();
 const patch = vi.fn<(...a: unknown[]) => Promise<unknown>>();
 const post = vi.fn<(...a: unknown[]) => Promise<unknown>>();
 const del = vi.fn<(...a: unknown[]) => Promise<unknown>>();
+const put = vi.fn<(...a: unknown[]) => Promise<unknown>>();
 vi.mock("../../lib/client", () => ({
   client: {
     typed: {
@@ -16,6 +17,7 @@ vi.mock("../../lib/client", () => ({
       PATCH: (...a: unknown[]) => patch(...a),
       POST: (...a: unknown[]) => post(...a),
       DELETE: (...a: unknown[]) => del(...a),
+      PUT: (...a: unknown[]) => put(...a),
     },
   },
   queryClient: {},
@@ -82,6 +84,7 @@ beforeEach(() => {
   patch.mockReset();
   post.mockReset();
   del.mockReset();
+  put.mockReset();
   requests = [];
   pairs = [];
   serve();
@@ -294,6 +297,40 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     expect((within(drawer).getAllByRole("checkbox")[0] as HTMLInputElement).disabled).toBe(true);
     expect(within(drawer).queryByRole("button", { name: /^Lưu/ })).toBeNull();
     expect(within(drawer).queryByRole("button", { name: /Gửi yêu cầu/ })).toBeNull();
+  });
+
+  it("C-11-001 two-layer OFF: one line on the screen; the drawer button reads \"Lưu (−1)\" and PUTs the full new set at once (no request)", async () => {
+    const off = {
+      ...roles,
+      two_layer: false,
+      items: [roles.items[0], role("quan_ly", "Quản lý", ["contract:read", "audit:read"], { can: { edit: true, delete: false, request: true, direct: true } })],
+    };
+    serve(off);
+    put.mockImplementation(() => ok(role("quan_ly", "Quản lý", ["contract:read"], { version: 2 })));
+    renderScreen(director);
+    expect((await screen.findByTestId("two-layer-off")).textContent).toBe("Cơ chế duyệt 2 lớp đang tắt — thay đổi quyền có hiệu lực ngay");
+    await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
+    const drawer = await screen.findByRole("dialog", { name: "Vai trò · Quản lý" });
+    expect(within(drawer).getByRole("button", { name: "Lưu quyền" })).toHaveProperty("disabled", true);
+    expect(within(drawer).queryByRole("button", { name: /Gửi yêu cầu/ })).toBeNull();
+    await userEvent.click(within(drawer).getByRole("checkbox", { name: /Xem nhật ký/ }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "Lưu (−1)" }));
+    expect(put).toHaveBeenCalledWith("/roles/{id}/permissions", {
+      params: { path: { id: "id_quan_ly" } },
+      body: { expected_version: 1, permissions: ["contract:read"] },
+    });
+    expect(post).not.toHaveBeenCalled();
+    expect(await within(drawer).findByText("Đã lưu — có hiệu lực ngay.")).toBeTruthy();
+  });
+
+  it("C-11-001 two-layer ON (default): no off-line, the drawer still sends a request", async () => {
+    renderScreen(director);
+    await screen.findAllByTestId("role-col");
+    expect(screen.queryByTestId("two-layer-off")).toBeNull();
+    await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
+    const drawer = await screen.findByRole("dialog", { name: "Vai trò · Quản lý" });
+    expect(within(drawer).queryByTestId("direct-save")).toBeNull();
+    expect(within(drawer).getByRole("button", { name: "Gửi yêu cầu" })).toBeTruthy();
   });
 
   it("clone opens \"Thêm vai trò\" prefilled with \"Bản sao của …\" and the source permissions", async () => {

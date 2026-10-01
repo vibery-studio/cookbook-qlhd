@@ -5,12 +5,13 @@ import { generateUlid } from "../../apps/api/src/utils/id.ts";
 
 export const LOCAL_DB_NAME = "runway_dev";
 export const DEFAULT_PASSWORD = "correct-horse-battery-staple";
-// migrations/0001_seed_rbac.sql, 0010_seed_foundation.sql
+// migrations/0001_seed_rbac.sql, 0010_seed_foundation.sql, 0027_seed_root_security.sql (root: seeder-only, C-11-001)
 export const ROLE_IDS = {
   admin: "01ROLE0000000000000ADMIN00",
   giam_doc: "01ROLE00000000000GIAMDOC00",
   quan_ly: "01ROLE000000000000QUANLY00",
   nhan_vien: "01ROLE0000000000NHANVIEN00",
+  root: "01ROLE00000000000000ROOT00",
 } as const;
 export type RoleName = keyof typeof ROLE_IDS;
 

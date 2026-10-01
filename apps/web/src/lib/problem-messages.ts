@@ -57,6 +57,7 @@ export const KNOWN_PROBLEM_SLUGS = [
   "docx-invalid",
   "payload-too-large",
   "unsupported-media-type",
+  "two-layer-on",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -196,6 +197,9 @@ const RULE_MESSAGES: Record<string, string> = {
   jit_actor: "🔒 Bạn đang có quyền quản trị tạm thời nên không làm được việc này.",
   self_grant: "🔒 Không tự cấp quản trị tạm thời cho mình.",
   self_review: "🔒 Không tự rà soát chính mình — người quản trị xác nhận.",
+  // C-11-001: Root admin is seeder-only; direct permission changes (two-layer approval off)
+  root_role: "🔒 Vai trò Root admin chỉ tạo bằng công cụ cài đặt — không gán, gỡ hay sửa trong ứng dụng.",
+  admin_or_owner: "🔒 Chỉ Quản trị hệ thống hoặc Giám đốc (thường trực) đổi quyền trực tiếp được.",
 };
 
 const SOD_ROLES_PREFIX = "Đang có vai trò chứa cả hai quyền: ";
@@ -373,6 +377,8 @@ function baseMessage(slug: string, status: number): string {
       return "Vai trò này không còn nữa. Tải lại danh sách rồi chọn lại.";
     case "request-pending":
       return "Vai trò này đang có yêu cầu đổi quyền chờ duyệt. Duyệt, từ chối hoặc rút yêu cầu đó trước.";
+    case "two-layer-on":
+      return "Cơ chế duyệt 2 lớp vừa được bật lại — đổi quyền phải gửi yêu cầu để người khác duyệt. Đã tải lại.";
     case "not-pending":
       return "Yêu cầu này không còn chờ duyệt nữa. Đã tải lại.";
     case "expired":

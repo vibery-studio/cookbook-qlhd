@@ -19,6 +19,7 @@ export const roleLabels: Record<string, string> = {
   giam_doc: "Giám đốc",
   quan_ly: "Quản lý",
   nhan_vien: "Nhân viên",
+  root: "Root admin",
 };
 
 async function fetchMe(): Promise<Me> {

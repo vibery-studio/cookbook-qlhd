@@ -23,6 +23,8 @@ export function RolesScreen() {
   const [tab, setTab] = useState<Tab>("matrix");
 
   const canWrite = me.permissions.includes("roles:write");
+  // C-11-001: only an explicit `false` means off (older payloads / fixtures without the field = on).
+  const twoLayerOff = query.data?.two_layer === false;
   // Hint only (the API checks again): the admin role is exempt from "only grant what you hold".
   const holds = (code: string) => me.roles.includes("admin") || me.permissions.includes(code);
 
@@ -48,6 +50,11 @@ export function RolesScreen() {
             Quyền đi theo vai, không theo người. Khóa tài khoản là mất sạch quyền.{" "}
             {canWrite ? "Bấm tên vai trò để sửa." : "Bảng chỉ để xem."}
           </p>
+          {twoLayerOff ? (
+            <p data-testid="two-layer-off" className="text-md font-semibold text-st-pending">
+              Cơ chế duyệt 2 lớp đang tắt — thay đổi quyền có hiệu lực ngay
+            </p>
+          ) : null}
         </div>
         {canWrite ? (
           <Button
@@ -130,12 +137,20 @@ export function RolesScreen() {
                 </th>
                 {roles.map((r) => {
                   // FIX-05: the admin role is no longer fully locked — its permissions change by request (Giám đốc approves).
-                  const lock = r.locked_reason === "own_role" || (r.locked_reason === "admin" && !r.can.request);
+                  const lock =
+                    r.locked_reason === "own_role" || r.locked_reason === "root" || (r.locked_reason === "admin" && !r.can.request && !r.can.direct);
                   const content = (
                     <>
                       {r.label}
                       {lock ? (
-                        <span aria-hidden="true" title={r.locked_reason === "admin" ? "Đổi quyền vai trò này cần một Giám đốc khác duyệt" : "Bạn đang mang vai trò này"}>
+                        <span aria-hidden="true" title={
+                            r.locked_reason === "admin"
+                              ? "Đổi quyền vai trò này cần một Giám đốc khác duyệt"
+                              : r.locked_reason === "root"
+                                ? "Root admin chỉ tạo bằng công cụ cài đặt"
+                                : "Bạn đang mang vai trò này"
+                          }
+                        >
                           {" "}
                           🔒
                         </span>
@@ -204,6 +219,7 @@ export function RolesScreen() {
           role={selected}
           catalog={catalog}
           holds={holds}
+          twoLayerOff={twoLayerOff}
           onClose={() => setSelectedId(null)}
           onClone={(role) => {
             setSelectedId(null);

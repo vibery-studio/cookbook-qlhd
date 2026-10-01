@@ -661,7 +661,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission, or rule owner_only (only a giam_doc holder assigns a role carrying roles:write — admin, giam_doc, custom) */
+                /** @description Missing users:write permission, or rule owner_only (only a giam_doc holder assigns a role carrying roles:write — admin, giam_doc, custom) | root_role (root is seeder-only) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -743,7 +743,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) */
+                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) | root_role (root is never given or taken through the app) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -929,7 +929,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule root_role (root never changes through the app) | own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1013,7 +1013,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule root_role (root never changes through the app) | own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1096,7 +1096,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule root_role (root never changes through the app) | own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1188,7 +1188,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule own_role (not for the admin role: admin proposes, Giám đốc approves) | grant_not_held (+ `permissions`). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule root_role (the root role never changes through the app) | own_role (not for the admin role: admin proposes, Giám đốc approves) | grant_not_held (+ `permissions`). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1235,6 +1235,93 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/roles/{id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Two-layer approval OFF (PUT /security/two-layer): change the role's permission set at once (full new set; CAS on the version; holders' cache purged) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DirectPermissionsRequest"];
+                };
+            };
+            responses: {
+                /** @description Applied (version + 1); audit role.permissions_changed {direct:true} */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Role"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing roles:write, or `forbidden` with rule root_role | jit_actor | admin_or_owner (needs a permanent admin / giam_doc) | owner_only (the admin role: Giám đốc only) | own_role | grant_not_held (+ `permissions`). One permission.denied row each. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Role not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description two-layer-on (two-layer approval is on — send a change request) | sod-conflict (+ `pairs`) | request-pending (the role has a pending request) | stale */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Validation failed (unknown or repeated code, nothing changes → errors[{path:'permissions'}]) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1789,6 +1876,111 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/security/two-layer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Two-layer approval of role permission changes: on (default) or off */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TwoLayerSetting"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Needs roles:write or security:write (one permission.denied row) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        /** Turn two-layer approval on/off (reason required). Off: admin / Giám đốc change role permissions directly via PUT /roles/{id}/permissions */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["TwoLayerUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description State after the write (same value → nothing written, no audit row) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TwoLayerSetting"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing security:write */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Validation failed (reason 10–500) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5629,6 +5821,7 @@ export interface components {
         RolesResponse: {
             items: components["schemas"]["Role"][];
             catalog: string[];
+            two_layer: boolean;
         };
         Role: {
             /** @example 01ROLE000000000000QUANLY00 */
@@ -5644,9 +5837,10 @@ export interface components {
                 edit: boolean;
                 delete: boolean;
                 request: boolean;
+                direct: boolean;
             };
             /** @enum {string|null} */
-            locked_reason: "system" | "own_role" | "admin" | null;
+            locked_reason: "root" | "system" | "own_role" | "admin" | null;
             /** @enum {string|null} */
             request_locked_reason: "request_pending" | "no_approver" | null;
             pending_request: components["schemas"]["PendingRequestSummary"];
@@ -5661,7 +5855,7 @@ export interface components {
         CreateRoleRequest: {
             label: string;
             description?: string;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "security:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
         };
         PatchRoleRequest: {
             expected_version: number;
@@ -5698,8 +5892,12 @@ export interface components {
         };
         CreateChangeRequest: {
             expected_version: number;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "security:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
             note?: string;
+        };
+        DirectPermissionsRequest: {
+            expected_version: number;
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "security:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
         };
         ChangeRequestList: {
             items: components["schemas"]["ChangeRequest"][];
@@ -5727,10 +5925,19 @@ export interface components {
         };
         CreateSodPair: {
             /** @enum {string} */
-            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "security:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             /** @enum {string} */
-            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "security:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             reason?: string;
+        };
+        TwoLayerSetting: {
+            enabled: boolean;
+            updated_at: number | null;
+            updated_by_name: string | null;
+        };
+        TwoLayerUpdateRequest: {
+            enabled: boolean;
+            reason: string;
         };
         JitGrantList: {
             items: components["schemas"]["JitGrant"][];

@@ -133,6 +133,20 @@ Owner = holder of `giam_doc` (`OWNER_ROLE`, `dao/role-dao.ts`; read from `user_r
   (create guard, `GET /roles`), `approveRoleGuard` (approve batch marker), `ownerMayAssignSql` /
   `ownerMayReassignSql` (WHERE of the first write of invite / role change).
 
+## Root admin + cơ chế duyệt 2 lớp on/off (C-11-001)
+
+- `root` (`01ROLE00000000000000ROOT00`, system) = `security:write` (`01PERM00000SECURITYWRITE00`, "Cấu hình bảo mật") +
+  `audit:read`; nothing else. Seeder-only (`dev:seed-team` → `root@runway.local`). Rule `root_role` (403 + denied row):
+  invite/assign `root`, change the role of a root holder, change request / direct change / PATCH / DELETE of `root`.
+- Setting `security.two_layer_role_change` in D1 `settings` (no row = ON). Not in `SETTINGS_REGISTRY`, never via
+  `SettingsService`/KV (300s cache) → read straight from D1, repeated as `twoLayerOffSql()` in the direct batch.
+  `GET /security/two-layer` (roles:write | security:write), `PUT` (security:write, reason 10–500) → audit
+  `security.two_layer_changed {enabled, reason}`; same value → no write.
+- OFF: `PUT /roles/{id}/permissions` (permanent `admin`/`giam_doc` + roles:write, no JIT) applies at once → audit
+  `role.permissions_changed {…, direct:true}`. Order: 404 → root_role → 409 two-layer-on → jit_actor → admin_or_owner →
+  admin role owner_only | own_role → 422 → sod-conflict → grant_not_held → request-pending → stale. Pending requests stay.
+  `GET /roles`: `two_layer`, `Role.can.direct`. User role assignment unchanged (R3 always on).
+
 ## Products & prices (SPEC-08, row 3)
 
 Codes `product:write` (`01PERM000000PRODUCTWRITE00`, "Sửa sản phẩm"), `price:write` (`01PERM00000000PRICEWRITE00`,

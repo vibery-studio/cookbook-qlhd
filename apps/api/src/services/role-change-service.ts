@@ -20,7 +20,17 @@ import { writeAuditEvent } from "../dao/audit-dao";
 import { isUniqueViolation } from "../dao/customer-dao";
 import { findActiveJit, jitActiveSql } from "../dao/jit-dao";
 import { listPermissionKeysForUser } from "../dao/permission-dao";
-import { findRoleDetail, listRoleIdsForUser, listRoleNamesForUser, OWNER_ROLE, userIsOwnerSql } from "../dao/role-dao";
+import {
+  DIRECT_EDITOR_ROLES,
+  findRoleDetail,
+  listRoleIdsForUser,
+  listRoleNamesForUser,
+  OWNER_ROLE,
+  ROOT_ROLE,
+  userIsDirectEditorSql,
+  userIsOwnerSql,
+} from "../dao/role-dao";
+import { findTwoLayer, twoLayerOffSql } from "../dao/security-dao";
 import {
   approverScope,
   auditRowExistsSql,
@@ -63,8 +73,12 @@ export interface RoleChangeDeps {
 export const REQUEST_TTL_SECONDS = 7 * 24 * 60 * 60;
 const EXPIRE_BATCH = 100;
 
-/** `owner_only` (FIX-05 R2): only a holder of the owner role (`giam_doc`) approves a change to the `admin` role. */
-export type ChangeRule = "owner_only" | "own_role" | "grant_not_held" | "self_approve" | "jit_actor";
+/**
+ * `owner_only` (FIX-05 R2): only a holder of the owner role (`giam_doc`) approves a change to the `admin` role.
+ * C-11-001: `root_role` — the seeder-only `root` role never changes through the app; `admin_or_owner` — a direct change
+ * (two-layer approval off) needs a permanent `admin` / `giam_doc` carrier.
+ */
+export type ChangeRule = "owner_only" | "own_role" | "grant_not_held" | "self_approve" | "jit_actor" | "root_role" | "admin_or_owner";
 export type Forbidden = { kind: "forbidden"; rule?: ChangeRule; permissions?: string[] };
 
 export type EffectiveStatus = StoredStatus;
@@ -99,6 +113,8 @@ interface Caller {
   jit: boolean;
   /** Carries the owner role (`giam_doc`) permanently — FIX-05. */
   owner: boolean;
+  /** Carries `admin` or `giam_doc` permanently — may change permissions directly while two-layer approval is off (C-11-001). */
+  directEditor: boolean;
 }
 
 async function loadCaller(db: Db, id: string, now: number): Promise<Caller> {
@@ -108,7 +124,14 @@ async function loadCaller(db: Db, id: string, now: number): Promise<Caller> {
     listPermissionKeysForUser(db, id),
     findActiveJit(db, id, now),
   ]);
-  return { id, roleIds: new Set(roleIds), permissions: new Set(perms), jit: jit !== null, owner: roleNames.includes(OWNER_ROLE) };
+  return {
+    id,
+    roleIds: new Set(roleIds),
+    permissions: new Set(perms),
+    jit: jit !== null,
+    owner: roleNames.includes(OWNER_ROLE),
+    directEditor: roleNames.some((n) => (DIRECT_EDITOR_ROLES as readonly string[]).includes(n)),
+  };
 }
 
 const effectiveStatus = (r: ChangeRequestRowDto, now: number): EffectiveStatus =>
@@ -260,6 +283,7 @@ async function classifyCreate(
   const role = await findRoleDetail(db, input.roleId);
   if (role === null) return { kind: "not-found" };
   const actor = await loadCaller(db, input.actorId, now);
+  if (role.name === ROOT_ROLE) return deny(db, { actorId: actor.id, target, rule: "root_role", ip: input.ip });
   if (role.name !== "admin" && actor.roleIds.has(role.id)) return deny(db, { actorId: actor.id, target, rule: "own_role", ip: input.ip });
   const old = new Set(role.permissions);
   const next = new Set(input.permissions);
@@ -341,6 +365,109 @@ export async function createRequest(
   const row = await findChangeRequest(db, id);
   if (row === null) throw new Error("change request vanished right after insert");
   return { kind: "ok", request: toView(row, await loadCaller(db, input.actorId, now), now) };
+}
+
+// ------------------------------- direct (two-layer off) ----------------------
+
+export type DirectChangeResult =
+  | { kind: "ok"; role: RoleView }
+  | { kind: "not-found" }
+  | { kind: "two-layer-on" }
+  | { kind: "no-change" }
+  | { kind: "sod-conflict"; pairs: [string, string][] }
+  | { kind: "request-pending" }
+  | { kind: "stale" }
+  | Forbidden;
+
+/**
+ * C-11-001 order: 404 → root_role → two-layer-on (409) → jit_actor → admin_or_owner (permanent admin / giam_doc with
+ * roles:write) → admin role: owner_only (FIX-05 R2) | other: own_role → 422 nothing changes → sod-conflict →
+ * grant_not_held → request-pending (an open request keeps the role; it stays approvable) → stale.
+ */
+async function classifyDirect(
+  deps: RoleChangeDeps,
+  input: { actorId: string; roleId: string; expectedVersion: number; permissions: string[]; ip: string | null },
+  now: number,
+): Promise<Exclude<DirectChangeResult, { kind: "ok" }> | Pass<{ name: string; label: string; added: string[]; removed: string[] }>> {
+  const { db } = deps;
+  const target = `role:${input.roleId}`;
+  const role = await findRoleDetail(db, input.roleId);
+  if (role === null) return { kind: "not-found" };
+  const actor = await loadCaller(db, input.actorId, now);
+  const denyAs = (rule: ChangeRule, permissions?: string[]) =>
+    deny(db, { actorId: actor.id, target, rule, ip: input.ip, ...(permissions !== undefined && { permissions }) });
+  if (role.name === ROOT_ROLE) return denyAs("root_role");
+  if ((await findTwoLayer(db)).enabled) return { kind: "two-layer-on" };
+  if (actor.jit) return denyAs("jit_actor");
+  if (!actor.directEditor || !actor.permissions.has("roles:write")) return denyAs("admin_or_owner");
+  if (role.name === "admin" ? !actor.owner : actor.roleIds.has(role.id)) return denyAs(role.name === "admin" ? "owner_only" : "own_role");
+  const old = new Set(role.permissions);
+  const next = new Set(input.permissions);
+  const added = [...next].filter((k) => !old.has(k)).sort();
+  const removed = [...old].filter((k) => !next.has(k)).sort();
+  if (added.length === 0 && removed.length === 0) return { kind: "no-change" };
+  const pairs = sodViolations(input.permissions, await listSodPairs(db));
+  if (pairs.length > 0) return { kind: "sod-conflict", pairs };
+  const missing = missingFrom(added, actor.permissions);
+  if (missing.length > 0) return denyAs("grant_not_held", missing);
+  if (await holds(db, openRequestSql(role.id, now))) return { kind: "request-pending" };
+  if (role.version !== input.expectedVersion) return { kind: "stale" };
+  return { kind: "pass", name: role.name, label: role.label, added, removed };
+}
+
+/**
+ * Two-layer approval OFF: apply a new permission set at once. One batch: audit `role.permissions_changed`
+ * `{…, direct:true}` FIRST with the full guard (the batch marker, as in approve) → revoke → grant → version CAS LAST.
+ */
+export async function changeDirect(
+  deps: RoleChangeDeps,
+  input: { actorId: string; roleId: string; expectedVersion: number; permissions: string[]; ip: string | null },
+): Promise<DirectChangeResult> {
+  const { db } = deps;
+  const now = deps.now();
+  const pre = await classifyDirect(deps, input, now);
+  if (pre.kind !== "pass") return pre;
+  const { added, removed } = pre;
+  const target = `role:${input.roleId}`;
+  const actorId = input.actorId;
+
+  const guard: SQL = sql`${twoLayerOffSql()}
+    AND EXISTS (SELECT 1 FROM roles dr WHERE dr.id = ${input.roleId} AND dr.version = ${input.expectedVersion} AND dr.name = ${pre.name})
+    AND ${userIsDirectEditorSql(actorId)}
+    AND ${userHoldsKeySql(actorId, "roles:write")}
+    AND NOT ${jitActiveSql(actorId, now)}
+    AND ${pre.name === "admin" ? userIsOwnerSql(actorId) : sql`NOT ${actorCarriesRole(actorId, input.roleId)}`}
+    AND ${sodClearSql(input.permissions)}
+    AND ${actorHoldsAll(actorId, added)}
+    AND NOT ${openRequestSql(input.roleId, now)}`;
+  const markerId = generateUlid();
+  const marker = auditRowExistsSql(markerId);
+  const stmts: BatchItem<"sqlite">[] = [
+    auditWithIdWhenStmt(db, {
+      id: markerId,
+      actor: actorId,
+      action: "role.permissions_changed",
+      target,
+      metadata: { name: pre.name, label: pre.label, added, removed, direct: true },
+      ip: input.ip,
+      ts: now,
+      when: guard,
+    }),
+  ];
+  if (removed.length > 0) stmts.push(revokePermissionsStmt(db, { roleId: input.roleId, keys: removed, when: marker }));
+  if (added.length > 0) stmts.push(grantPermissionsStmt(db, { roleId: input.roleId, keys: added, actorId, when: marker }));
+  stmts.push(bumpRoleVersionStmt(db, { roleId: input.roleId, baseVersion: input.expectedVersion, now, when: marker }));
+
+  const res = await db.batch(asBatch(stmts));
+  const bumped: unknown = res[res.length - 1];
+  if (!Array.isArray(bumped) || bumped.length === 0) {
+    const post = await classifyDirect(deps, input, deps.now());
+    return post.kind === "pass" ? { kind: "stale" } : post;
+  }
+  await purgeHolders(deps, input.roleId);
+  const role = await roleViewFor(db, actorId, input.roleId, now);
+  if (role === null) throw new Error("role vanished right after a direct change");
+  return { kind: "ok", role };
 }
 
 // ------------------------------- approve -------------------------------------

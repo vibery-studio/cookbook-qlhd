@@ -524,7 +524,7 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     // FR-10 / DEC-13
     const catalog = (await listRoles(gd)).catalog;
     for (const code of NEW_CODES) expect(catalog).toContain(code);
-    expect(catalog).toHaveLength(23); // + SPEC-08 FR-7 price:write, product:write; + SPEC-09 DEC-10 B quote/payment_request/delivery_note:write
+    expect(catalog).toHaveLength(24); // + SPEC-08 FR-7 price:write, product:write; + SPEC-09 DEC-10 B quote/payment_request/delivery_note:write; + C-11-001 security:write
     expect(sorted((await me(gd)).permissions)).toEqual(SEED_GRANTS["giam_doc"]);
     for (const p of [admin, ql, nv]) {
       const perms = (await me(p)).permissions;

@@ -22,6 +22,7 @@ import { templatesWriteRoutes } from "./templates-write.routes";
 import { rolesRoutes } from "./roles.routes";
 import { roleChangeRequestsRoutes } from "./role-change-requests.routes";
 import { sodPairsRoutes } from "./sod-pairs.routes";
+import { securityRoutes } from "./security.routes";
 import { jitGrantsRoutes } from "./jit-grants.routes";
 import { accessReviewsRoutes } from "./access-reviews.routes";
 import { demoRoutes } from "./demo.routes";
@@ -44,6 +45,7 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   rolesRoutes(app);
   roleChangeRequestsRoutes(app);
   sodPairsRoutes(app);
+  securityRoutes(app);
   jitGrantsRoutes(app);
   accessReviewsRoutes(app);
   auditRoutes(app);

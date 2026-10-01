@@ -27,7 +27,7 @@ const security = [{ cookieAuth: [] }];
 const PROBLEM_HEADERS = { "content-type": "application/problem+json" } as const;
 
 const FORBIDDEN_403 =
-  "Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | " +
+  "Missing roles:write, or `forbidden` with rule root_role (root never changes through the app) | own_role (caller carries the role) | admin_role (admin is immutable) | " +
   "system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each.";
 
 const listRolesRoute = createRoute({
@@ -111,6 +111,7 @@ const PROBLEM = (c: Context<Env>) => ({ instance: c.req.path, request_id: c.get(
 
 function forbidden(c: Context<Env>, res: Forbidden) {
   const detail: Record<RoleGuardRule, string> = {
+    root_role: "The root role never changes through the app.",
     admin_role: "The admin role is immutable through the API.",
     system_role: "System roles cannot be deleted.",
     own_role: "You cannot edit or delete a role you carry.",

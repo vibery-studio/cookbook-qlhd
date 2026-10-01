@@ -9,6 +9,7 @@ import { rolesRoutes } from "../features/roles/routes";
 import { auditRoutes } from "../features/audit/routes";
 import { usersRoutes } from "../features/users/routes";
 import { accessReviewRoutes } from "../features/access-review/routes";
+import { securityRoutes } from "../features/security/routes";
 import { HomeRedirect, protectFeatureRoutes, ProtectedLayout } from "./route-guard";
 import { NotFoundScreen } from "./not-found-screen";
 
@@ -22,6 +23,7 @@ const featureRoutes: RouteObject[] = [
   ...protectFeatureRoutes(accessReviewRoutes),
   ...protectFeatureRoutes(auditRoutes),
   ...protectFeatureRoutes(usersRoutes),
+  ...protectFeatureRoutes(securityRoutes),
 ];
 
 export const appRoutes: RouteObject[] = [

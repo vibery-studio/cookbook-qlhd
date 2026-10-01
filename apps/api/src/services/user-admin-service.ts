@@ -56,6 +56,7 @@ import {
   grantRoleByNameStmt,
   listRoleNamesForUser,
   OWNER_ROLE,
+  ROOT_ROLE,
   ownerMayAssignSql,
   ownerMayReassignSql,
   userHasRole,
@@ -103,7 +104,8 @@ export function activationUrl(env: Bindings, rawToken: string): string {
 
 // ------------------------------- invite ------------------------------------
 
-export type EscalationRule = "self_role" | "admin_only" | "owner_only";
+/** C-11-001: `root_role` — nobody is given, or loses, the seeder-only `root` role through the app. */
+export type EscalationRule = "self_role" | "admin_only" | "owner_only" | "root_role";
 
 export type InviteResult =
   | { kind: "ok"; user: AdminUserView; rawToken: string; expiresAt: number }
@@ -195,6 +197,9 @@ export async function inviteUser(
   input: { actorId: string; email: string; displayName: string; role: string; ip?: string | null },
 ): Promise<InviteResult> {
   const email = input.email.trim().toLowerCase();
+  if (input.role === ROOT_ROLE) {
+    return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "root_role", role: input.role, ip: input.ip });
+  }
   if (await needsOwner(deps.db, input.actorId, input.role)) {
     return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "owner_only", role: input.role, ip: input.ip });
   }
@@ -383,6 +388,7 @@ export async function updateUser(
     return denyEscalation(db, { ...deny, rule: "admin_only" });
   }
   if (roleChange && input.role !== undefined) {
+    if (input.role === ROOT_ROLE || currentRoles.includes(ROOT_ROLE)) return denyEscalation(db, { ...deny, rule: "root_role" });
     if (input.actorId === id) return denyEscalation(db, { ...deny, rule: "self_role" });
     if (
       (await needsOwnerToReassign(db, input.actorId, id)) ||

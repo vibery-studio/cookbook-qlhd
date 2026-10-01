@@ -13,7 +13,8 @@
  * `template:write` are the contract app's permissions (documents.workbook §3, the mockup's matrix). `product:write`,
  * `price:write` = products & dated price levels (SPEC-08 FR-7; reading products uses `contract:read`). `quote:write`,
  * `payment_request:write`, `delivery_note:write` = making a document of that type (SPEC-09 DEC-10 B; `contract:write` makes a
- * HĐ); reading/submitting/approving/issuing every type stays on the shared `contract:*` codes.
+ * HĐ); reading/submitting/approving/issuing every type stays on the shared `contract:*` codes. `security:write` = toggle
+ * two-layer approval of role permission changes (C-11-001) — held by the seeder-only `root` role alone.
  */
 export const PERMISSIONS = [
   "audit:read",
@@ -34,6 +35,7 @@ export const PERMISSIONS = [
   "quote:write",
   "reviews:write",
   "roles:write",
+  "security:write",
   "settings:read",
   "settings:write",
   "template:write",

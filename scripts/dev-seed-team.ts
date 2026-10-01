@@ -18,6 +18,8 @@ const TEAM: { email: string; role: RoleName; name: string }[] = [
   { email: "giamdoc@runway.local", role: "giam_doc", name: "Nguyễn Nhật Minh" },
   { email: "quanly@runway.local", role: "quan_ly", name: "Tường Vi" },
   { email: "nhanvien@runway.local", role: "nhan_vien", name: "Minh Khánh" },
+  // C-11-001: root exists only through this seeder (the app never gives it) — toggles two-layer approval.
+  { email: "root@runway.local", role: "root", name: "Root admin" },
 ];
 
 async function main(): Promise<void> {

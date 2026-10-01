@@ -19,7 +19,7 @@ export const PermissionSet = z
   .max(PERMISSIONS.length)
   .refine((xs) => new Set(xs).size === xs.length, { message: "permissions must not repeat" });
 
-export const LockedReason = z.enum(["system", "own_role", "admin"]).nullable();
+export const LockedReason = z.enum(["root", "system", "own_role", "admin"]).nullable();
 
 /** SPEC-07 (PLAN-07 R-10): why the caller cannot send a permission change request for the role. */
 export const RequestLockedReason = z.enum(["request_pending", "no_approver"]).nullable();
@@ -45,8 +45,11 @@ export const RoleSchema = z
     version: z.number().int().min(1),
     holders: z.number().int().min(0),
     permissions: z.array(z.string()),
-    /** `request` (SPEC-07): may send a permission change request. A pending request → all three false. */
-    can: z.object({ edit: z.boolean(), delete: z.boolean(), request: z.boolean() }),
+    /**
+     * `request` (SPEC-07): may send a permission change request. A pending request → all false. `direct` (C-11-001):
+     * two-layer approval is off and the caller may change the set at once (PUT /roles/{id}/permissions).
+     */
+    can: z.object({ edit: z.boolean(), delete: z.boolean(), request: z.boolean(), direct: z.boolean() }),
     locked_reason: LockedReason,
     request_locked_reason: RequestLockedReason,
     pending_request: PendingRequestSummary.nullable(),
@@ -58,6 +61,8 @@ export const RolesResponse = z
     items: z.array(RoleSchema),
     /** Full permission catalog (packages/rbac PERMISSIONS), so the screen can grant codes no role holds yet. */
     catalog: z.array(z.string()),
+    /** C-11-001: two-layer approval of permission changes is on (default). Off → `can.direct` may be true. */
+    two_layer: z.boolean(),
   })
   .openapi("RolesResponse");
 

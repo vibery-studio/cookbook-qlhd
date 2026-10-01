@@ -137,6 +137,8 @@ export const ProblemType = {
   ParentRequired: "parent-required",
   TemplateType: "template-type",
   NothingToPay: "nothing-to-pay",
+  // C-11-001
+  TwoLayerOn: "two-layer-on",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];

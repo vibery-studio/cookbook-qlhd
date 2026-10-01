@@ -25,12 +25,18 @@ import { isUniqueViolation } from "../dao/customer-dao";
 import { listPermissionKeysForUser } from "../dao/permission-dao";
 import {
   countCustomRoles,
+  DIRECT_EDITOR_ROLES,
   findRoleDetail,
   listRoleDetails,
   listRoleIdsForUser,
+  listRoleNamesForUser,
   listUserIdsOfRole,
+  OWNER_ROLE,
+  ROOT_ROLE,
   type RoleDetailDto,
 } from "../dao/role-dao";
+import { findActiveJit } from "../dao/jit-dao";
+import { findTwoLayer } from "../dao/security-dao";
 import {
   auditWhenStmt,
   deleteGuard,
@@ -57,7 +63,8 @@ export interface RoleAdminDeps {
   now: () => number; // unix seconds
 }
 
-export type LockedReason = "system" | "own_role" | "admin" | null;
+/** C-11-001: `root` — the seeder-only root role is locked for everything. */
+export type LockedReason = "root" | "system" | "own_role" | "admin" | null;
 /** SPEC-07 (PLAN-07 R-10): why the caller cannot send a permission change request. */
 export type RequestLockedReason = "request_pending" | "no_approver" | null;
 
@@ -79,13 +86,14 @@ export interface RoleView {
   version: number;
   holders: number;
   permissions: string[];
-  can: { edit: boolean; delete: boolean; request: boolean };
+  /** `direct` (C-11-001): two-layer approval is off and the caller may change the permission set at once. */
+  can: { edit: boolean; delete: boolean; request: boolean; direct: boolean };
   locked_reason: LockedReason;
   request_locked_reason: RequestLockedReason;
   pending_request: PendingRequestSummary | null;
 }
 
-export type RoleGuardRule = "admin_role" | "system_role" | "own_role" | "grant_not_held";
+export type RoleGuardRule = "root_role" | "admin_role" | "system_role" | "own_role" | "grant_not_held";
 
 export type Forbidden = { kind: "forbidden"; rule: RoleGuardRule; permissions?: string[] };
 
@@ -98,6 +106,22 @@ interface Actor {
 async function loadActor(db: Db, actorId: string): Promise<Actor> {
   const [roleIds, perms] = await Promise.all([listRoleIdsForUser(db, actorId), listPermissionKeysForUser(db, actorId)]);
   return { id: actorId, roleIds: new Set(roleIds), permissions: new Set(perms) };
+}
+
+/** C-11-001 hint for `can.direct`: two-layer approval off + a permanent admin / giam_doc carrier (no JIT). */
+interface DirectContext {
+  off: boolean;
+  editor: boolean;
+  owner: boolean;
+}
+
+async function loadDirect(db: Db, actorId: string, now: number): Promise<DirectContext> {
+  const [setting, names, jit] = await Promise.all([findTwoLayer(db), listRoleNamesForUser(db, actorId), findActiveJit(db, actorId, now)]);
+  return {
+    off: !setting.enabled,
+    editor: jit === null && names.some((n) => (DIRECT_EDITOR_ROLES as readonly string[]).includes(n)),
+    owner: names.includes(OWNER_ROLE),
+  };
 }
 
 /** Caller-independent extras of a role (SPEC-07): its open request, and whether anyone else could approve. */
@@ -115,9 +139,17 @@ interface RequestContext {
  * FIX-05 R2: `admin` stays locked for label/delete (`locked_reason:"admin"`), but its permissions change by request like
  * any role — even its carriers may propose; the approver must be another `giam_doc` holder.
  */
-function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext): RoleView {
+function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext, direct: DirectContext): RoleView {
   const locked: LockedReason =
-    role.name === "admin" ? "admin" : actor.roleIds.has(role.id) ? "own_role" : role.isSystem ? "system" : null;
+    role.name === ROOT_ROLE
+      ? "root"
+      : role.name === "admin"
+        ? "admin"
+        : actor.roleIds.has(role.id)
+          ? "own_role"
+          : role.isSystem
+            ? "system"
+            : null;
   const writer = actor.permissions.has("roles:write");
   const pending = ctx.pending;
   const open = writer && (locked === null || locked === "system");
@@ -139,6 +171,13 @@ function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext): RoleVie
       edit,
       delete: edit && locked === null,
       request: requestOpen && pending === undefined && approverOk,
+      direct:
+        direct.off &&
+        direct.editor &&
+        writer &&
+        pending === undefined &&
+        locked !== "root" &&
+        (role.name === "admin" ? direct.owner : locked !== "own_role"),
     },
     locked_reason: locked,
     request_locked_reason,
@@ -196,31 +235,34 @@ export async function listRolesFor(
   db: Db,
   actorId: string,
   now: number = nowSeconds(),
-): Promise<{ items: RoleView[]; catalog: string[] }> {
-  const [roles, actor, open, hasApprover, hasOwnerApprover] = await Promise.all([
+): Promise<{ items: RoleView[]; catalog: string[]; two_layer: boolean }> {
+  const [roles, actor, open, hasApprover, hasOwnerApprover, direct] = await Promise.all([
     listRoleDetails(db),
     loadActor(db, actorId),
     listOpenRequests(db, { now }),
     holds(db, eligibleApproverSql({ requesterId: actorId, now })),
     holds(db, eligibleApproverSql({ requesterId: actorId, now, ownerOnly: true })),
+    loadDirect(db, actorId, now),
   ]);
   const byRole = new Map(open.map((r) => [r.roleId, r]));
   return {
-    items: roles.map((r) => toView(r, actor, { pending: byRole.get(r.id), hasApprover, hasOwnerApprover })),
+    items: roles.map((r) => toView(r, actor, { pending: byRole.get(r.id), hasApprover, hasOwnerApprover }, direct)),
     catalog: [...PERMISSIONS],
+    two_layer: !direct.off,
   };
 }
 
 /** One role as `actorId` sees it (approve response), or null. */
 export async function roleViewFor(db: Db, actorId: string, roleId: string, now: number = nowSeconds()): Promise<RoleView | null> {
-  const [role, actor, open, hasApprover, hasOwnerApprover] = await Promise.all([
+  const [role, actor, open, hasApprover, hasOwnerApprover, direct] = await Promise.all([
     findRoleDetail(db, roleId),
     loadActor(db, actorId),
     listOpenRequests(db, { now, roleIds: [roleId] }),
     holds(db, eligibleApproverSql({ requesterId: actorId, now })),
     holds(db, eligibleApproverSql({ requesterId: actorId, now, ownerOnly: true })),
+    loadDirect(db, actorId, now),
   ]);
-  return role === null ? null : toView(role, actor, { pending: open[0], hasApprover, hasOwnerApprover });
+  return role === null ? null : toView(role, actor, { pending: open[0], hasApprover, hasOwnerApprover }, direct);
 }
 
 // ------------------------------- create ------------------------------------
@@ -337,6 +379,7 @@ export async function patchRole(
   const actor = await loadActor(db, input.actorId);
   const denyAs = (rule: RoleGuardRule) => deny(db, { actorId: actor.id, target, rule, ip: input.ip });
 
+  if (role.name === ROOT_ROLE) return denyAs("root_role");
   if (role.name === "admin") return denyAs("admin_role");
   if (actor.roleIds.has(role.id)) return denyAs("own_role");
   if (await holds(db, openRequestSql(role.id, now))) return { kind: "request-pending" };
@@ -423,6 +466,7 @@ export async function deleteRole(
   const actor = await loadActor(db, input.actorId);
   const denyAs = (rule: RoleGuardRule) => deny(db, { actorId: actor.id, target, rule, ip: input.ip });
 
+  if (role.name === ROOT_ROLE) return denyAs("root_role");
   if (role.name === "admin") return denyAs("admin_role");
   if (role.isSystem) return denyAs("system_role");
   if (actor.roleIds.has(role.id)) return denyAs("own_role");

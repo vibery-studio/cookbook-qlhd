@@ -17,6 +17,7 @@ export const PERMISSION_LABELS: Readonly<Record<string, string>> = {
   "audit:read": "Xem nhật ký",
   "jit:grant": "Cấp quản trị tạm thời",
   "reviews:write": "Rà soát quyền",
+  "security:write": "Cấu hình bảo mật",
   // Base RUNWAY permissions (no contract-app screen uses them): DEC-2.
   "flags:read": "Xem cờ tính năng",
   "flags:write": "Đổi cờ tính năng",
@@ -34,7 +35,7 @@ export const PERMISSION_GROUP_ADMIN = "Quản trị";
 export const PERMISSION_GROUPS = [PERMISSION_GROUP_APP, PERMISSION_GROUP_ADMIN, PERMISSION_GROUP_INFRA] as const;
 
 const INFRA_RESOURCES = ["flags", "notes", "settings"];
-const ADMIN_CODES = ["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write"];
+const ADMIN_CODES = ["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write", "security:write"];
 
 /** Group heading for a permission code: Hợp đồng · Quản trị (users:*, roles:write, audit:read, jit:grant, reviews:write) · Hạ tầng (base RUNWAY). */
 export function permissionGroup(code: string): string {
@@ -60,7 +61,7 @@ export function permissionLabel(code: string): string {
   return PERMISSION_LABELS[code] ?? code;
 }
 
-const ROLE_ORDER = ["giam_doc", "quan_ly", "nhan_vien", "admin", "member"];
+const ROLE_ORDER = ["giam_doc", "quan_ly", "nhan_vien", "admin", "root", "member"];
 
 /** System roles first in ROLE_ORDER, then the self-made ones by label. */
 export function sortRoles<T extends { name: string; label?: string }>(roles: readonly T[]): T[] {

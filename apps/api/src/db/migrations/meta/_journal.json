@@ -190,6 +190,13 @@
       "when": 1790860156902,
       "tag": "0026_seed_doc_type_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1790869219049,
+      "tag": "0027_seed_root_security",
+      "breakpoints": true
     }
   ]
 }

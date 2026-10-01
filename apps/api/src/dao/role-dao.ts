@@ -231,3 +231,21 @@ export function ownerMayAssignSql(actorId: string, roleName: string): SQL {
 export function ownerMayReassignSql(actorId: string, userId: string): SQL {
   return sql`(NOT ${userIsOwnerSql(userId)} OR ${userIsOwnerSql(actorId)})`;
 }
+
+// ---------------------------------------------------------------------------
+// C-11-001: Root admin + direct permission changes when two-layer approval is off.
+// ---------------------------------------------------------------------------
+
+/** Seeder-only role (`security:write` + `audit:read`): never assigned, changed or requested through the app. */
+export const ROOT_ROLE = "root";
+
+/** Roles whose permanent carriers may change permissions directly while two-layer approval is off. */
+export const DIRECT_EDITOR_ROLES = ["admin", OWNER_ROLE] as const;
+
+/** Predicate: the user carries `admin` or `giam_doc` permanently (`user_roles`; a JIT grant is never there). */
+export function userIsDirectEditorSql(userId: string): SQL {
+  return sql`EXISTS (SELECT 1 FROM user_roles der JOIN roles derl ON derl.id = der.role_id WHERE der.user_id = ${userId} AND derl.name IN (${sql.join(
+    DIRECT_EDITOR_ROLES.map((n) => sql`${n}`),
+    sql`, `,
+  )}))`;
+}

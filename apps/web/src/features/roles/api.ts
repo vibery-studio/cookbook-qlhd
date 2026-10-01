@@ -123,6 +123,25 @@ export function useSendChangeRequest() {
   });
 }
 
+export type DirectPermissionsBody = components["schemas"]["DirectPermissionsRequest"];
+
+/** C-11-001 — two-layer approval off: apply a new permission set at once (PUT /roles/{id}/permissions). */
+export function useDirectChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; body: DirectPermissionsBody }): Promise<Role> => {
+      const { data, error, response } = await client.typed.PUT("/roles/{id}/permissions", {
+        params: { path: { id: input.id } },
+        body: input.body,
+      });
+      if (response.ok && data) return data;
+      throw new ApiProblemError(asProblem(error, response.status));
+    },
+    onSuccess: (role) => putRole(qc, role),
+    onSettled: () => refreshRequests(qc),
+  });
+}
+
 export function useApproveRequest() {
   const qc = useQueryClient();
   return useMutation({

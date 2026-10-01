@@ -74,6 +74,7 @@ export const AUDIT_ACTIONS: Readonly<Record<string, Entry>> = {
   "price.added": { icon: "💲", tone: "accent", text: "đặt giá" },
   "price.cancelled": { icon: "↩", tone: "neutral", text: "hủy mức giá" },
   "settings.update": { icon: "⚙️", tone: "neutral", text: "đổi cài đặt hệ thống" },
+  "security.two_layer_changed": { icon: "🔐", tone: "accent", text: "đổi cơ chế duyệt 2 lớp khi đổi quyền" },
 };
 
 export const KNOWN_AUDIT_ACTIONS: readonly string[] = Object.keys(AUDIT_ACTIONS);
@@ -88,7 +89,8 @@ function roleText(action: string, metadata: Record<string, unknown> | null | und
     const on = count(metadata?.["added"]);
     const off = count(metadata?.["removed"]);
     const parts = [...(on > 0 ? [`bật ${on}`] : []), ...(off > 0 ? [`tắt ${off}`] : [])];
-    return parts.length > 0 ? `${parts.join(" · ")} quyền của «${label}»` : `${fallback} «${label}»`;
+    const direct = metadata?.["direct"] === true ? " trực tiếp (cơ chế duyệt 2 lớp đang tắt)" : "";
+    return parts.length > 0 ? `${parts.join(" · ")} quyền của «${label}»${direct}` : `${fallback} «${label}»${direct}`;
   }
   return `${fallback} «${label}»`;
 }
@@ -130,6 +132,14 @@ function jitGrantText(metadata: Record<string, unknown> | null | undefined, fall
     ...(name !== null ? [`cho «${name}»`] : []),
     ...(typeof expires === "number" ? [`tới ${hhmm.format(new Date(expires * 1000))}`] : []),
   ].join(" ") + (reason !== null ? ` — lý do: ${reason}` : "");
+}
+
+/** security.two_layer_changed: "tắt cơ chế duyệt 2 lớp khi đổi quyền — lý do: …". */
+function twoLayerText(metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const enabled = metadata?.["enabled"];
+  const reason = str(metadata?.["reason"]);
+  const head = enabled === true ? "bật cơ chế duyệt 2 lớp khi đổi quyền" : enabled === false ? "tắt cơ chế duyệt 2 lớp khi đổi quyền" : fallback;
+  return reason !== null ? `${head} — lý do: ${reason}` : head;
 }
 
 function reviewPeriod(metadata: Record<string, unknown> | null | undefined): string | null {
@@ -203,6 +213,7 @@ export function auditSentence(event: AuditEventLike): AuditSentence {
   if (action.startsWith("role.change_")) return { ...entry, text: changeText(action, event.metadata, entry.text) };
   if (action.startsWith("sod.")) return { ...entry, text: sodText(event.metadata, entry.text) };
   if (action === "jit.granted") return { ...entry, text: jitGrantText(event.metadata, entry.text) };
+  if (action === "security.two_layer_changed") return { ...entry, text: twoLayerText(event.metadata, entry.text) };
   if (action.startsWith("review.")) return { ...entry, text: reviewText(action, event.metadata, entry.text) };
   if (action.startsWith("contract.")) return { ...entry, text: contractText(action, event.metadata, entry.text) };
   if (action.startsWith("role.")) return { ...entry, text: roleText(action, event.metadata, entry.text) };

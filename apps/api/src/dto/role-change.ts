@@ -48,6 +48,15 @@ export const CreateChangeRequestBody = z
   .strict()
   .openapi("CreateChangeRequest");
 
+/** C-11-001: two-layer approval OFF → `PUT /roles/{id}/permissions` applies the complete new set at once. */
+export const DirectPermissionsBody = z
+  .object({
+    expected_version: z.number().int().min(1),
+    permissions: PermissionSet,
+  })
+  .strict()
+  .openapi("DirectPermissionsRequest");
+
 export const ApproveChangeRequestBody = z.object({ note: Note.optional() }).strict().openapi("ApproveChangeRequest");
 
 export const RejectChangeRequestBody = z

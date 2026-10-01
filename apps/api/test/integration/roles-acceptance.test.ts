@@ -39,7 +39,7 @@ const UNKNOWN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`; SPEC-07 FR-10: + `jit:grant`, `reviews:write` (18);
  * SPEC-08 FR-7: + `price:write`, `product:write` (20); SPEC-09 DEC-10 B: + `delivery_note:write`, `payment_request:write`,
- * `quote:write` (23). */
+ * `quote:write` (23); C-11-001: + `security:write` (24, root only). */
 const CATALOG = [
   "audit:read",
   "contract:approve",
@@ -59,6 +59,7 @@ const CATALOG = [
   "quote:write",
   "reviews:write",
   "roles:write",
+  "security:write",
   "settings:read",
   "settings:write",
   "template:write",

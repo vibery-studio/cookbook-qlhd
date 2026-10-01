@@ -13,6 +13,13 @@ export function diffCounts(added: number, removed: number): string {
   return [...(added > 0 ? [`+${added}`] : []), ...(removed > 0 ? [`−${removed}`] : [])].join(" · ");
 }
 
+/** C-11-001 — two-layer approval off: the edit is saved at once: "Lưu quyền", "Lưu (−1)", "Lưu (+2 · −1)". */
+export function directDiffLabel(oldPerms: readonly string[], newPerms: readonly string[]): string {
+  const { added, removed } = roleDiff(oldPerms, newPerms);
+  const counts = diffCounts(added.length, removed.length);
+  return counts === "" ? "Lưu quyền" : `Lưu (${counts})`;
+}
+
 /** Submit-button text of a permission edit (SPEC-07 DEC-1: sent, not saved): "Gửi yêu cầu", "Gửi yêu cầu (−1)", "Gửi yêu cầu (+2 · −1)". */
 export function requestDiffLabel(oldPerms: readonly string[], newPerms: readonly string[]): string {
   const { added, removed } = roleDiff(oldPerms, newPerms);

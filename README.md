@@ -40,7 +40,7 @@ separately.
 
 ```bash
 pnpm db:migrate:local
-RUNWAY_LOCAL=1 pnpm dev:seed-team       # 4 tài khoản dưới đây
+RUNWAY_LOCAL=1 pnpm dev:seed-team       # 5 tài khoản dưới đây
 RUNWAY_LOCAL=1 pnpm dev:seed-products   # sản phẩm + giá DEMO
 pnpm dev                                # http://localhost:8787
 ```
@@ -53,8 +53,9 @@ Mật khẩu chung: `correct-horse-battery-staple`
 | `giamdoc@runway.local` | Giám đốc | duyệt (giảm > 10%), phát hành, nhập mẫu từ Word, cấp quản trị tạm thời, rà soát quyền |
 | `quanly@runway.local` | Quản lý | duyệt, phát hành, sản phẩm & giá |
 | `nhanvien@runway.local` | Nhân viên | tạo báo giá / hợp đồng / phiếu xuất kho, lập tài liệu con |
+| `root@runway.local` | Root admin | bật/tắt cơ chế duyệt 2 lớp |
 
-Chỉ có 4 email này — email khác (vd. `test@runway.local`) không đăng nhập được.
+Chỉ có 5 email này — email khác (vd. `test@runway.local`) không đăng nhập được.
 
 ## What's inside
 

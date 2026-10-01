@@ -4,10 +4,10 @@ import type { Role } from "../../app/roles-query";
 import { Alert, Button, Field, LockedNote } from "../../ui";
 import { ConfirmDialog } from "../contracts/confirm-dialog";
 import { Dialog, DialogHeader } from "../contracts/dialog";
-import { asPerms, roleError, useDeleteRole, useSendChangeRequest, useUpdateRole, type RoleError } from "./api";
+import { asPerms, roleError, useDeleteRole, useDirectChange, useSendChangeRequest, useUpdateRole, type RoleError } from "./api";
 import { PermissionChecklist } from "./permission-checklist";
 import { permissionLabel } from "./permission-labels";
-import { requestDiffLabel, roleDiff } from "./role-diff";
+import { directDiffLabel, requestDiffLabel, roleDiff } from "./role-diff";
 import { RequestActions } from "./request-actions";
 import { diffText, formatDayMonth, useChangeRequests, useSodPairs, violatedPairs } from "./requests";
 
@@ -15,6 +15,7 @@ type Meta = { label: string; description: string };
 
 export const SYSTEM_REASON = "Vai trò hệ thống — không xóa/đổi tên";
 const LOCK_TEXT = {
+  root: "Root admin: chỉ tạo bằng công cụ cài đặt — không sửa, không gán trong ứng dụng.",
   admin: "Quản trị hệ thống: không đổi tên hay xóa được. Đổi quyền thì gửi yêu cầu — chỉ Giám đốc duyệt.",
   own_role: "Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
   system: SYSTEM_REASON,
@@ -39,6 +40,7 @@ export function RoleDrawer({
   role,
   catalog,
   holds,
+  twoLayerOff = false,
   onClose,
   onClone,
   onDeleted,
@@ -48,6 +50,8 @@ export function RoleDrawer({
   catalog: readonly string[];
   /** Does the caller hold this permission? (hint only — the API decides) */
   holds: (code: string) => boolean;
+  /** C-11-001: two-layer approval is off — a permission edit the caller may make directly is saved at once. */
+  twoLayerOff?: boolean;
   onClose: () => void;
   onClone: (role: Role) => void;
   onDeleted: (role: Role) => void;
@@ -61,6 +65,7 @@ export function RoleDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const update = useUpdateRole();
   const send = useSendChangeRequest();
+  const directSave = useDirectChange();
   const remove = useDeleteRole();
   const requests = useChangeRequests(true);
   const sod = useSodPairs();
@@ -70,7 +75,8 @@ export function RoleDrawer({
   const canEdit = role.can.edit;
   const pending = role.pending_request;
   const noApprover = role.request_locked_reason === "no_approver";
-  const canEditPerms = role.can.request || noApprover;
+  const direct = twoLayerOff && role.can.direct;
+  const canEditPerms = direct || role.can.request || noApprover;
   const isSystem = role.is_system;
   const metaDirty = meta.label.trim() !== role.label || meta.description.trim() !== (role.description ?? "");
   const { added, removed } = roleDiff(role.permissions, [...perms]);
@@ -140,6 +146,19 @@ export function RoleDrawer({
     }
   }
 
+  async function saveDirect() {
+    if (directSave.isPending || !permsChanged || broken.length > 0 || !direct) return;
+    try {
+      await directSave.mutateAsync({ id: role.id, body: { expected_version: role.version, permissions: asPerms([...perms].sort()) } });
+      setPermEdit(null);
+      setError(null);
+      setNotice("Đã lưu — có hiệu lực ngay.");
+    } catch (e) {
+      setNotice(null);
+      setError(roleError(e));
+    }
+  }
+
   async function doDelete() {
     try {
       await remove.mutateAsync({ id: role.id, expectedVersion: role.version });
@@ -186,7 +205,7 @@ export function RoleDrawer({
             </div>
           ) : null}
 
-          {noApprover ? <LockedNote>{role.name === "admin" ? ADMIN_NO_APPROVER_TEXT : NO_APPROVER_TEXT}</LockedNote> : null}
+          {noApprover && !direct ? <LockedNote>{role.name === "admin" ? ADMIN_NO_APPROVER_TEXT : NO_APPROVER_TEXT}</LockedNote> : null}
 
           <div className="grid gap-s4">
             <Field
@@ -280,7 +299,17 @@ export function RoleDrawer({
                 Lưu
               </Button>
             ) : null}
-            {canEditPerms ? (
+            {direct ? (
+              <Button
+                type="button"
+                data-testid="direct-save"
+                loading={directSave.isPending}
+                disabled={!permsChanged || broken.length > 0}
+                onClick={() => void saveDirect()}
+              >
+                {directDiffLabel(role.permissions, [...perms])}
+              </Button>
+            ) : canEditPerms ? (
               <Button
                 type="button"
                 loading={send.isPending}
