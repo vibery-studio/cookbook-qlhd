@@ -20,6 +20,8 @@
     "@runway/email-templates": "workspace:*",
     "@runway/rbac": "workspace:*",
     "drizzle-orm": "0.45.2",
+    "fast-xml-parser": "5.11.2",
+    "fflate": "0.8.3",
     "hono": "4.13.8",
     "zod": "4.1.11"
   },

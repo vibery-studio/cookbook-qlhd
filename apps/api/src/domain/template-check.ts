@@ -44,13 +44,13 @@ const ALLOWED_CLASSES = new Set(["center", "right", "b", "sig"]);
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
 // Strict tag grammar: optional single class="…" attribute, nothing else. Anything that does not match is refused.
 const TAG_RE = /^<(\/?)([a-zA-Z][a-zA-Z0-9]*)(?:\s+class\s*=\s*"([^"<>]*)")?\s*(\/?)>/;
-const INTERNAL_NOTE_PHRASES = ["ghi chu noi bo", "xoa truoc khi gui khach"];
+export const INTERNAL_NOTE_PHRASES = ["ghi chu noi bo", "xoa truoc khi gui khach"];
 
 const POLICY_MODES = ["none", "steps", "threshold", "combined"];
 const POLICY_OPS = ["gt", "gte", "lt", "lte", "eq"];
 const POLICY_VARS = ["discount_bps", "total"];
 
-function fold(s: string): string {
+export function fold(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "d").toLowerCase();
 }
 
