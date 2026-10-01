@@ -75,9 +75,9 @@ test("SPEC-10: Giám đốc imports Bao_Gia.docx (15 fields → line table → s
   await expect(row("hieu_luc_den")).toContainText("mới");
   await expect(row("hieu_luc_den")).toContainText("Người lập nhập tay");
 
-  // ---- "Đây là bảng dòng hàng" → 11 fields, bang_hang = lines ----
+  // ---- "Đây là bảng dòng hàng" → 12 fields (giam_gia kept, P-7), bang_hang = lines ----
   await dlg.getByTestId("import-table").getByRole("button", { name: "Đây là bảng dòng hàng" }).click();
-  await expect(rows).toHaveCount(11);
+  await expect(rows).toHaveCount(12);
   await expect(row("bang_hang")).toHaveCount(1);
   await expect(row("bang_hang").getByLabel("Kiểu bang_hang")).toHaveValue("lines");
   await expect(row("bang_hang").getByLabel("Nguồn bang_hang")).toHaveValue("derived:lines_table");

@@ -1,13 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router";
 import { useCurrentUser } from "../../app/me";
 import { cn } from "../../lib/cn";
 import { client } from "../../lib/client";
 import { problemMessage } from "../../lib/problem-messages";
-import { Button, EmptyState, ErrorState, Icon, LockedNote, Pill, Skeleton } from "../../ui";
+import { Button, EmptyState, ErrorState, Icon, LockedNote, Pill, Skeleton, Toast } from "../../ui";
 import { DOC_TYPE_LABEL, DOC_TYPE_SHORT, DOC_TYPES, type DocType } from "../contracts/doc-type-labels";
 import { policySteps } from "./approval-rules";
+import { ImportDialog } from "./import/import-dialog";
 
 const asDocType = (type: string): DocType => ((DOC_TYPES as readonly string[]).includes(type) ? (type as DocType) : "contract");
 const typeShort = (type: string) => DOC_TYPE_SHORT[asDocType(type)];
@@ -129,19 +131,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+function TemplateDrawer({ id, onClose, onImportVersion, importOpen }: { id: string; onClose: () => void; onImportVersion: () => void; importOpen: boolean }) {
   const me = useCurrentUser();
   const canWrite = me.permissions.includes("contract:write");
+  const canImport = me.permissions.includes("template:write");
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ["template", id], queryFn: () => fetchTemplate(id) });
 
   useEffect(() => {
+    if (importOpen) return; // Esc belongs to the import dialog on top
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, importOpen]);
 
   const detail = query.data;
   const version = detail?.version;
@@ -271,6 +275,11 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               <LockedNote>Bạn không có quyền tạo hợp đồng (cần quyền contract:write).</LockedNote>
             )
           ) : null}
+          {canImport ? (
+            <Button variant="secondary" onClick={onImportVersion}>
+              Nhập phiên bản mới từ Word
+            </Button>
+          ) : null}
           <p className="text-sm text-muted">🔒 Sửa mẫu qua Giám đốc (chưa có trên giao diện)</p>
         </div>
       </aside>
@@ -281,16 +290,30 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
 export function TemplatesScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const me = useCurrentUser();
+  const canImport = me.permissions.includes("template:write");
   const query = useTemplatesData();
   const items = query.data ?? [];
+  const [importing, setImporting] = useState<{ mode: "new" } | { mode: "version"; templateId: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   return (
     <section className="grid gap-s4">
       <div className="grid gap-s2">
-        <h1 className="text-2xl font-bold leading-head text-strong">Mẫu hợp đồng</h1>
+        <div className="flex flex-wrap items-center justify-between gap-s3">
+          <h1 className="text-2xl font-bold leading-head text-strong">Mẫu hợp đồng</h1>
+          {canImport ? <Button onClick={() => setImporting({ mode: "new" })}>Nhập từ Word</Button> : null}
+        </div>
         <p className="max-w-[720px] text-md text-muted text-wrap-pretty">
           Mỗi mẫu quy định trước các trường cần điền, hạng mục, điều khoản và luồng duyệt. Chỉ xem — khi tạo hợp đồng, hệ thống dựng sẵn theo mẫu.
         </p>
+        {!canImport ? <LockedNote>Chỉ Giám đốc nhập mẫu (cần quyền template:write)</LockedNote> : null}
       </div>
 
       {query.isPending ? (
@@ -314,7 +337,28 @@ export function TemplatesScreen() {
         </div>
       )}
 
-      {id ? <TemplateDrawer id={id} onClose={() => void navigate("/mau-hop-dong")} /> : null}
+      {id ? (
+        <TemplateDrawer id={id} onClose={() => void navigate("/mau-hop-dong")} onImportVersion={() => setImporting({ mode: "version", templateId: id })} importOpen={importing !== null} />
+      ) : null}
+
+      {importing ? (
+        <ImportDialog
+          templates={items.map((t) => ({ id: t.id, name: t.name }))}
+          initial={importing}
+          onClose={() => setImporting(null)}
+          onSaved={(templateId, versionNo) => {
+            setImporting(null);
+            setNotice(`Đã lưu phiên bản ${versionNo}`);
+            void navigate(`/mau-hop-dong/${templateId}`);
+          }}
+          onOpenTemplate={(templateId) => {
+            setImporting(null);
+            void navigate(`/mau-hop-dong/${templateId}`);
+          }}
+        />
+      ) : null}
+
+      {notice ? createPortal(<Toast tone="success">{notice}</Toast>, document.body) : null}
     </section>
   );
 }

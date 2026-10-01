@@ -54,6 +54,9 @@ export const KNOWN_PROBLEM_SLUGS = [
   "parent-required",
   "template-type",
   "nothing-to-pay",
+  "docx-invalid",
+  "payload-too-large",
+  "unsupported-media-type",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -74,6 +77,8 @@ export type ProblemWithExtensions = Problem & {
   pairs?: string[][];
   /** sod-conflict on POST /sod-pairs: the roles that already hold both permissions. */
   roles?: Array<{ id: string; name: string; label: string }>;
+  /** docx-invalid (SPEC-10): why the .docx was refused. */
+  reason?: string;
   /** has-children: the children still alive (Ref). */
   children?: Array<{ id: string; type: DocType; number: string | null; status: string; total: number; doc_date: string }>;
 };
@@ -257,6 +262,8 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
       );
       return list.length > 0 ? `Còn tài liệu con chưa hủy: ${list.join(", ")}.` : "Còn tài liệu con chưa hủy — hủy tài liệu con trước.";
     }
+    case "docx-invalid":
+      return (problem.reason ? DOCX_REASONS[problem.reason] : undefined) ?? DOCX_FALLBACK;
     case "not-found":
       return options.resource === "contract" ? "Không tìm thấy hợp đồng (có thể đã bị xóa khỏi danh sách của bạn)." : undefined;
     default:
@@ -264,13 +271,25 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
   }
 }
 
+const DOCX_REASONS: Record<string, string> = {
+  not_docx: "File này không phải Word .docx. Lưu lại thành .docx rồi chọn lại.",
+  macro_enabled: "File có macro nên không nhận. Lưu thành .docx thường (không macro) rồi chọn lại.",
+  no_document: "File Word không có phần nội dung văn bản.",
+  xml_invalid: "Nội dung file Word bị lỗi nên không đọc được. Mở bằng Word, lưu lại rồi chọn lại.",
+  too_large_inflated: "File Word giải nén ra quá lớn nên không nhận.",
+  too_many_entries: "File Word có quá nhiều phần bên trong nên không nhận.",
+};
+const DOCX_FALLBACK = "Không đọc được file Word này. Chọn file .docx khác.";
+
 const SPEC09_422: ReadonlySet<string> = new Set(["child-type", "lines-locked", "template-type", "parent-required", "nothing-to-pay"]);
 
 function baseMessage(slug: string, status: number): string {
   if (status === 401 || slug === "unauthorized") return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   if (status === 403 || slug === "forbidden") return "🔒 Bạn không có quyền thực hiện thao tác này.";
   if (status === 404 || slug === "not-found") return "Không tìm thấy nội dung bạn cần.";
-  const specific422 = slug === "price-backdated" || slug === "no-price" || slug === "product-inactive" || slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role" || SPEC09_422.has(slug);
+  if (status === 413 || slug === "payload-too-large") return "File lớn hơn 2 MB";
+  if (status === 415 || slug === "unsupported-media-type") return "Chỉ nhận file Word .docx";
+  const specific422 = slug === "price-backdated" || slug === "no-price" || slug === "product-inactive" || slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role" || slug === "docx-invalid" || SPEC09_422.has(slug);
   if ((status === 422 && !specific422) || slug === "validation") return "Kiểm tra lại các ô đánh dấu.";
   if (status >= 500) return "Hệ thống đang bận, thử lại sau.";
 

@@ -272,3 +272,33 @@ describe("SPEC-09 problem messages", () => {
   });
 });
 
+
+describe("import .docx problems (SPEC-10 §3.3, C-10-004)", () => {
+  const docx = (reason: string) => base("docx-invalid", 422, { reason, detail: `Unprocessable ${reason}` });
+  const cases: Array<[string, ProblemWithExtensions, string]> = [
+    ["not_docx", docx("not_docx"), "File này không phải Word .docx. Lưu lại thành .docx rồi chọn lại."],
+    ["macro_enabled", docx("macro_enabled"), "File có macro nên không nhận. Lưu thành .docx thường (không macro) rồi chọn lại."],
+    ["no_document", docx("no_document"), "File Word không có phần nội dung văn bản."],
+    ["xml_invalid", docx("xml_invalid"), "Nội dung file Word bị lỗi nên không đọc được. Mở bằng Word, lưu lại rồi chọn lại."],
+    ["too_large_inflated", docx("too_large_inflated"), "File Word giải nén ra quá lớn nên không nhận."],
+    ["too_many_entries", docx("too_many_entries"), "File Word có quá nhiều phần bên trong nên không nhận."],
+    ["413", base("payload-too-large", 413), "File lớn hơn 2 MB"],
+    ["415", base("unsupported-media-type", 415), "Chỉ nhận file Word .docx"],
+  ];
+  it.each(cases)("%s", (_name, problem, expected) => {
+    const m = problemMessage(problem);
+    expect(m.message).toBe(expected);
+    expect(m.message).not.toMatch(/Unprocessable|Raw English|Unsupported/);
+  });
+  it("413 without the slug (body-limit middleware) is still the size sentence", () => {
+    expect(problemMessage(base("about:blank", 413)).message).toBe("File lớn hơn 2 MB");
+  });
+  it("an unknown reason never leaks the raw code", () => {
+    const m = problemMessage(docx("something_new"));
+    expect(m.message).not.toMatch(/something_new|Unprocessable/);
+    expect(m.message.trim()).not.toBe("");
+  });
+  it("the new slugs are known", () => {
+    for (const s of ["docx-invalid", "payload-too-large", "unsupported-media-type"]) expect(KNOWN_PROBLEM_SLUGS).toContain(s);
+  });
+});
