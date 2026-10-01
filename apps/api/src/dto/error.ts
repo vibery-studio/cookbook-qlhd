@@ -49,6 +49,8 @@ export const ProblemDto = z
     holders: z.number().int().optional(),
     /** 409 `sod-conflict` (SPEC-07) on a role's permission set: the violated pairs `[perm_a, perm_b]` */
     pairs: z.array(z.array(z.string())).optional(),
+    /** 422 `docx-invalid` (SPEC-10): not_docx | macro_enabled | no_document | xml_invalid | too_large_inflated | too_many_entries */
+    reason: z.string().optional(),
     /** 409 `sod-conflict` (SPEC-07) on a new pair: roles already holding both codes */
     roles: z.array(z.object({ id: z.string(), name: z.string(), label: z.string() })).optional(),
   })
@@ -108,6 +110,10 @@ export const ProblemType = {
   NoPrice: "no-price",
   ProductInactive: "product-inactive",
   ProductLimit: "product-limit",
+  // SPEC-10 (row 5)
+  DocxInvalid: "docx-invalid",
+  PayloadTooLarge: "payload-too-large",
+  UnsupportedMediaType: "unsupported-media-type",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -130,6 +136,7 @@ export interface ProblemOptions {
   holders?: number;
   pairs?: string[][];
   roles?: { id: string; name: string; label: string }[];
+  reason?: string;
 }
 
 /**
@@ -166,6 +173,7 @@ export function problem(
     ...(options.holders !== undefined && { holders: options.holders }),
     ...(options.pairs !== undefined && { pairs: options.pairs }),
     ...(options.roles !== undefined && { roles: options.roles }),
+    ...(options.reason !== undefined && { reason: options.reason }),
   };
 }
 

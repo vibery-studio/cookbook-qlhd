@@ -3568,6 +3568,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/templates/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a Word (.docx) template import: placeholders, suggested fields, base policy, warnings (director only; stores nothing) */
+        post: {
+            parameters: {
+                query?: {
+                    template_id?: string;
+                    lines_table?: number | null;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            responses: {
+                /** @description Preview */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TemplateImportPreview"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing template:write permission (permission.denied audited) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description template_id not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description payload-too-large: file over 2 MB */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description unsupported-media-type: Content-Type is not the .docx type */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description validation (lines_table beyond the table count) | docx-invalid with `reason` (not_docx | macro_enabled | no_document | xml_invalid | too_large_inflated | too_many_entries) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contracts": {
         parameters: {
             query?: never;
@@ -5336,6 +5442,7 @@ export interface components {
             permissions?: string[];
             holders?: number;
             pairs?: string[][];
+            reason?: string;
             roles?: {
                 id: string;
                 name: string;
@@ -5890,6 +5997,64 @@ export interface components {
             }[];
             approval_policy: components["schemas"]["TemplateApprovalPolicy"];
             note?: string;
+        };
+        TemplateImportPreview: {
+            body: string;
+            placeholders: components["schemas"]["TemplateImportPlaceholder"][];
+            tables: components["schemas"]["TemplateImportTable"][];
+            removed: components["schemas"]["TemplateImportRemoved"][];
+            warnings: components["schemas"]["TemplateImportWarning"][];
+            sources: string[];
+            base: components["schemas"]["TemplateImportBase"];
+            check_errors: components["schemas"]["TemplateImportCheckError"][];
+            stats: {
+                body_bytes: number;
+                fields: number;
+            };
+        };
+        TemplateImportPlaceholder: {
+            key: string;
+            original: string;
+            count: number;
+            table_index: number | null;
+            suggested: components["schemas"]["TemplateField"];
+            /** @enum {string} */
+            suggestion_from: "current_version" | "other_template" | "none";
+        };
+        TemplateImportTable: {
+            index: number;
+            rows: number;
+            cols: number;
+            placeholder_keys: string[];
+        };
+        TemplateImportRemoved: {
+            /** @enum {string} */
+            kind: "internal_note";
+            text: string;
+        };
+        TemplateImportWarning: {
+            code: string;
+            message: string;
+            count: number;
+        };
+        TemplateImportBase: {
+            template_id: string | null;
+            version_no: number | null;
+            approval_policy: components["schemas"]["TemplateApprovalPolicy"];
+            field_rules: components["schemas"]["TemplateFieldRule"][];
+            default_line_items: {
+                [key: string]: unknown;
+            }[];
+            default_clauses: {
+                [key: string]: unknown;
+            }[];
+        };
+        TemplateImportCheckError: {
+            path: string;
+            code: string;
+            key?: string;
+            source?: string;
+            message: string;
         };
         Contract: {
             id: string;

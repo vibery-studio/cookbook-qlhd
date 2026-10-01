@@ -1,3 +1,4 @@
 import base from "@runway/config/eslint";
 
-export default base;
+// Fixture generator (plain Node script, outside the TS project) — SPEC-10 test fixtures.
+export default [{ ignores: ["test/fixtures/**/*.mjs"] }, ...base];
