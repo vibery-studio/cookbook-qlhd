@@ -33,4 +33,17 @@ describe("auditSentence", () => {
     expect(auditSentence({ action: "contract.deleted" }).text).toBe("xóa hợp đồng nháp");
     expect(auditSentence({ action: "contract.pdf_generated" }).text).toBe("tạo PDF cho hợp đồng");
   });
+
+  it("names the role in role.* sentences, with or without metadata", () => {
+    expect(auditSentence({ action: "role.created", metadata: { label: "Kế toán" } }).text).toBe("tạo vai trò «Kế toán»");
+    expect(auditSentence({ action: "role.updated", metadata: { label: "Kế toán" } }).text).toBe("sửa vai trò «Kế toán»");
+    expect(auditSentence({ action: "role.deleted", metadata: { label: "Kế toán" } }).text).toBe("xóa vai trò «Kế toán»");
+    expect(
+      auditSentence({ action: "role.permissions_changed", metadata: { label: "Quản lý", added: ["a:b"], removed: ["c:d", "e:f"] } }).text,
+    ).toBe("bật 1 · tắt 2 quyền của «Quản lý»");
+    expect(auditSentence({ action: "role.permissions_changed", metadata: { label: "Quản lý", added: [], removed: ["c:d"] } }).text).toBe(
+      "tắt 1 quyền của «Quản lý»",
+    );
+    expect(auditSentence({ action: "role.created" }).text).toBe("tạo vai trò");
+  });
 });

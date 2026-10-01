@@ -1,4 +1,5 @@
 import type { Problem } from "@runway/client";
+import { permissionLabel } from "../features/roles/permission-labels";
 
 export const KNOWN_PROBLEM_SLUGS = [
   "not-implemented",
@@ -25,6 +26,9 @@ export const KNOWN_PROBLEM_SLUGS = [
   "state-conflict",
   "changed-after-approval",
   "would-block-later-step",
+  "role-in-use",
+  "role-limit",
+  "unknown-role",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -37,11 +41,15 @@ export type ProblemWithExtensions = Problem & {
   rule?: string;
   label?: string;
   current_status?: string;
+  /** role-in-use: how many people still carry the role. */
+  holders?: number;
+  /** grant_not_held: the codes the caller lacks. */
+  permissions?: string[];
 };
 
 export type ProblemOptions = {
   /** "contract" switches on the contract-app wording (SPEC-04b 3.5) where it differs from the generic 4a copy. */
-  resource?: "contract";
+  resource?: "contract" | "role";
 };
 
 export type ProblemMessage = {
@@ -122,6 +130,10 @@ const RULE_MESSAGES: Record<string, string> = {
   // FIX-03 (SPEC-06 DEC-5): PATCH/POST /admin/users
   self_role: "🔒 Không tự đổi vai trò của mình. Nhờ người khác có quyền quản lý người dùng đổi giúp.",
   admin_only: "🔒 Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị.",
+  // SPEC-06: /roles and role assignment
+  own_role: "🔒 Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
+  admin_role: "🔒 Quản trị hệ thống luôn đủ quyền — không sửa hay xóa được.",
+  system_role: "🔒 Vai trò hệ thống — không xóa/đổi tên.",
 };
 
 /** Messages that need the problem's extension members (rule, label, current_status). */
@@ -129,6 +141,12 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
   const step = problem.label ? `«${problem.label}»` : "này";
   switch (slug) {
     case "forbidden": {
+      if (problem.rule === "grant_not_held") {
+        const codes = (problem.permissions ?? []).map((c) => `«${permissionLabel(c)}»`);
+        return codes.length > 0
+          ? `🔒 Bạn không có quyền ${codes.join(", ")} nên không cấp được.`
+          : "🔒 Bạn không có đủ quyền của vai trò này nên không cấp được.";
+      }
       const ruleMessage = problem.rule ? RULE_MESSAGES[problem.rule] : undefined;
       if (ruleMessage) return ruleMessage;
       return options.resource === "contract" ? "🔒 Bạn không có quyền hoặc vai trò cho bước này." : undefined;
@@ -144,7 +162,14 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
       return status ? `Hợp đồng vừa được người khác chuyển sang «${status}». Đã tải lại.` : undefined;
     }
     case "stale":
+      if (options.resource === "role") return "Người khác vừa sửa vai trò này.";
       return options.resource === "contract" ? "Người khác vừa sửa hợp đồng này." : undefined;
+    case "duplicate":
+      return options.resource === "role" ? "Đã có vai trò tên này. Đặt tên khác." : undefined;
+    case "role-in-use":
+      return typeof problem.holders === "number"
+        ? `Còn ${problem.holders} người mang vai trò này — đổi vai trò họ ở màn Người dùng trước.`
+        : "Còn người đang mang vai trò này — đổi vai trò họ ở màn Người dùng trước.";
     case "not-found":
       return options.resource === "contract" ? "Không tìm thấy hợp đồng (có thể đã bị xóa khỏi danh sách của bạn)." : undefined;
     default:
@@ -156,7 +181,7 @@ function baseMessage(slug: string, status: number): string {
   if (status === 401 || slug === "unauthorized") return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   if (status === 403 || slug === "forbidden") return "🔒 Bạn không có quyền thực hiện thao tác này.";
   if (status === 404 || slug === "not-found") return "Không tìm thấy nội dung bạn cần.";
-  const specific422 = slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields";
+  const specific422 = slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role";
   if ((status === 422 && !specific422) || slug === "validation") return "Kiểm tra lại các ô đánh dấu.";
   if (status >= 500) return "Hệ thống đang bận, thử lại sau.";
 
@@ -202,6 +227,12 @@ function baseMessage(slug: string, status: number): string {
       return "Đã có người duyệt hoặc từ chối một bước nên không rút về nháp được. Đã tải lại.";
     case "would-block-later-step":
       return "Không thể thực hiện vì sẽ chặn bước duyệt sau.";
+    case "role-in-use":
+      return "Còn người đang mang vai trò này — đổi vai trò họ ở màn Người dùng trước.";
+    case "role-limit":
+      return "Đã đủ 50 vai trò tự tạo. Xóa bớt vai trò không dùng rồi thêm.";
+    case "unknown-role":
+      return "Vai trò này không còn nữa. Tải lại danh sách rồi chọn lại.";
     default:
       return fallbackMessage;
   }

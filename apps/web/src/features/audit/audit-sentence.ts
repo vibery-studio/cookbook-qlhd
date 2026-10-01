@@ -45,10 +45,29 @@ export const AUDIT_ACTIONS: Readonly<Record<string, Entry>> = {
   "contract.issued": { icon: "📤", tone: "accent", text: "phát hành hợp đồng" },
   "contract.voided": { icon: "⛔", tone: "danger", text: "hủy hợp đồng đã phát hành" },
   "contract.pdf_generated": { icon: "📄", tone: "neutral", text: "tạo PDF cho hợp đồng" },
+  "role.created": { icon: "🛡", tone: "accent", text: "tạo vai trò" },
+  "role.updated": { icon: "🛡", tone: "neutral", text: "sửa vai trò" },
+  "role.permissions_changed": { icon: "🛡", tone: "accent", text: "đổi quyền của vai trò" },
+  "role.deleted": { icon: "🗑", tone: "neutral", text: "xóa vai trò" },
   "settings.update": { icon: "⚙️", tone: "neutral", text: "đổi cài đặt hệ thống" },
 };
 
 export const KNOWN_AUDIT_ACTIONS: readonly string[] = Object.keys(AUDIT_ACTIONS);
+
+const count = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
+
+/** role.* sentences name the role («label» from the event metadata, which survives deletion). */
+function roleText(action: string, metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const label = metadata?.["label"];
+  if (typeof label !== "string" || label === "") return fallback;
+  if (action === "role.permissions_changed") {
+    const on = count(metadata?.["added"]);
+    const off = count(metadata?.["removed"]);
+    const parts = [...(on > 0 ? [`bật ${on}`] : []), ...(off > 0 ? [`tắt ${off}`] : [])];
+    return parts.length > 0 ? `${parts.join(" · ")} quyền của «${label}»` : `${fallback} «${label}»`;
+  }
+  return `${fallback} «${label}»`;
+}
 
 export function auditSentence(event: AuditEventLike): AuditSentence {
   const action = event.action.trim();
@@ -62,5 +81,6 @@ export function auditSentence(event: AuditEventLike): AuditSentence {
       return { ...entry, text: "bị chặn: thử thao tác khi thiếu quyền", code: permission };
     }
   }
+  if (action.startsWith("role.")) return { ...entry, text: roleText(action, event.metadata, entry.text) };
   return entry;
 }

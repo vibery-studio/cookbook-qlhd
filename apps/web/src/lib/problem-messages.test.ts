@@ -120,3 +120,36 @@ describe("contract problem messages (SPEC-04b 3.5)", () => {
   });
 });
 
+
+describe("role problem messages (SPEC-06)", () => {
+  it.each([
+    ["own_role", "🔒 Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò."],
+    ["admin_role", "🔒 Quản trị hệ thống luôn đủ quyền — không sửa hay xóa được."],
+    ["system_role", "🔒 Vai trò hệ thống — không xóa/đổi tên."],
+  ])("forbidden rule %s", (rule, expected) => {
+    const m = problemMessage(base("forbidden", 403, { rule }), {}, { resource: "role" });
+    expect(m.message).toBe(expected);
+    expect(m.message).not.toMatch(/own_role|admin_role|system_role/);
+  });
+
+  it("grant_not_held names the missing permissions in Vietnamese (same sentence for roles and for assigning people)", () => {
+    const p = base("forbidden", 403, { rule: "grant_not_held", permissions: ["audit:read", "settings:write"] });
+    expect(problemMessage(p).message).toBe("🔒 Bạn không có quyền «Xem nhật ký», «Đổi cài đặt hệ thống» nên không cấp được.");
+    expect(problemMessage(base("forbidden", 403, { rule: "grant_not_held" })).message).toContain("không cấp được");
+  });
+
+  it("role-in-use carries the holder count; role-limit and unknown-role have their own copy", () => {
+    expect(problemMessage(base("role-in-use", 409, { holders: 3 })).message).toBe(
+      "Còn 3 người mang vai trò này — đổi vai trò họ ở màn Người dùng trước.",
+    );
+    expect(problemMessage(base("role-in-use", 409)).message).toContain("Người dùng");
+    expect(problemMessage(base("role-limit", 409)).message).toBe("Đã đủ 50 vai trò tự tạo. Xóa bớt vai trò không dùng rồi thêm.");
+    expect(problemMessage(base("unknown-role", 422)).message).toBe("Vai trò này không còn nữa. Tải lại danh sách rồi chọn lại.");
+  });
+
+  it("stale and duplicate switch to role wording only for the role resource", () => {
+    expect(problemMessage(base("stale", 409), {}, { resource: "role" }).message).toBe("Người khác vừa sửa vai trò này.");
+    expect(problemMessage(base("duplicate", 409), {}, { resource: "role" }).message).toBe("Đã có vai trò tên này. Đặt tên khác.");
+    expect(problemMessage(base("duplicate", 409)).message).toBe("Khách này đã có (trùng SĐT/MST).");
+  });
+});
