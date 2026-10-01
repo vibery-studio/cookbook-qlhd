@@ -15,7 +15,7 @@
  *     as text in the drawer footer;
  *   confirm dialog role=dialog name "Xác nhận": optional field "Lý do" (required for reject/void), button "Xác nhận";
  *   paper overlay role=dialog name "Văn bản hợp đồng" with `<iframe title="Văn bản hợp đồng">`, buttons "Đóng" · "In" · link "Mở ở tab mới";
- *   drawer button "Xem văn bản hợp đồng"; list rows `data-testid="contract-row"`; audit rows `data-testid="audit-row"`.
+ *   drawer button "Xem văn bản" (SPEC-09: one label for every type); list rows `data-testid="contract-row"`; audit rows `data-testid="audit-row"`.
  * Roles: global-setup USERS — staff (Nhân viên) · manager (Quản lý) · director (Giám đốc).
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -56,7 +56,8 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   // Mẫu hợp đồng → open the template → create from it (template preselected)
   await sidebar.getByRole("link", { name: "Mẫu hợp đồng", exact: true }).click();
   await expect(nv.getByTestId("template-card").first()).toBeVisible();
-  await nv.getByTestId("template-card").first().click();
+  // SPEC-09: 4 seed templates now — open the contract one
+  await nv.getByTestId("template-card").filter({ hasText: "Hợp đồng cung cấp dịch vụ phần mềm" }).click();
   await expect(nv.getByRole("button", { name: /Sửa mẫu/ })).toHaveCount(0); // read-only (Q-1)
   await nv.getByRole("button", { name: "Tạo hợp đồng từ mẫu này →" }).click();
   const create = nv.getByRole("dialog", { name: "Tạo hợp đồng" });
@@ -174,7 +175,7 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   if (SHOTS) writeFileSync(`e2e/shots/${pdf.suggestedFilename()}`, pdfBytes);
 
   // the paper now carries the number and no NHÁP
-  await qDrawer.getByRole("button", { name: "Xem văn bản hợp đồng" }).click();
+  await qDrawer.getByRole("button", { name: "Xem văn bản", exact: true }).click();
   const qPaper = ql.getByRole("dialog", { name: "Văn bản hợp đồng" });
   await expect(qPaper.frameLocator("iframe[title='Văn bản hợp đồng']").getByText(NUMBER).first()).toBeVisible();
   await qPaper.getByRole("button", { name: "Đóng" }).click();
@@ -188,7 +189,7 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await confirm.getByRole("button", { name: "Xác nhận" }).click();
   await expect(qDrawer).toContainText("Đã hủy");
   await expect(qDrawer).toContainText("Khách đổi sang gói G12");
-  await qDrawer.getByRole("button", { name: "Xem văn bản hợp đồng" }).click();
+  await qDrawer.getByRole("button", { name: "Xem văn bản", exact: true }).click();
   await expect(ql.getByRole("dialog", { name: "Văn bản hợp đồng" }).frameLocator("iframe").getByText("ĐÃ HỦY").first()).toBeVisible();
   await ql.keyboard.press("Escape");
 

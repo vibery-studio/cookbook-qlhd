@@ -48,7 +48,7 @@ test("4b mobile: menu opens, contracts are cards, drawer is full-screen, paper o
   await noHScroll();
 
   // paper opens and scrolls inside itself
-  await drawer.getByRole("button", { name: "Xem văn bản hợp đồng" }).click();
+  await drawer.getByRole("button", { name: "Xem văn bản", exact: true }).click();
   const paper = nv.getByRole("dialog", { name: "Văn bản hợp đồng" });
   await expect(paper.frameLocator("iframe[title='Văn bản hợp đồng']").getByText("NHÁP").first()).toBeVisible();
   await noHScroll();

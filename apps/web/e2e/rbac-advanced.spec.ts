@@ -124,11 +124,11 @@ test("SPEC-07: Giám đốc sends a permission change, admin approves it from th
   await expect(banner).toContainText(/Bạn đang có quyền quản trị tạm thời — hết hạn lúc \d{2}:\d{2}/);
   const sidebar = nv.getByTestId("sidebar");
   await expect(sidebar.getByRole("link", { name: "Người dùng", exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: "Hợp đồng", exact: true })).toHaveCount(0); // DEC-6: only admin, not admin + own role
+  await expect(sidebar.getByRole("link", { name: "Tài liệu", exact: true })).toHaveCount(0); // DEC-6: only admin, not admin + own role
   if (SHOTS) await nv.screenshot({ path: "e2e/shots/jit-banner.png" });
   await banner.getByRole("button", { name: "Kết thúc sớm" }).click();
   await expect(banner).toBeHidden();
-  await expect(sidebar.getByRole("link", { name: "Hợp đồng", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "Tài liệu", exact: true })).toBeVisible();
   await nv.context().close();
 
   // ---- Giám đốc: start this quarter's review; own row is 🔒 ----

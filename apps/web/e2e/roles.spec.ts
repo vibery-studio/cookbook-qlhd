@@ -43,7 +43,7 @@ test("SPEC-06: Giám đốc edits Quản lý in the drawer, own role is 🔒, cl
   await expect(nv.getByRole("button", { name: "+ Thêm vai trò" })).toHaveCount(0);
   await expect(nv.getByTestId("role-col")).toHaveCount(0);
   await nv.goto("/hop-dong");
-  await expect(nv.getByRole("button", { name: "+ Tạo hợp đồng" })).toBeVisible();
+  await expect(nv.getByRole("button", { name: "+ Tạo", exact: true })).toBeVisible();
 
   // ---- Giám đốc: /phan-quyen is editable ----
   const gd = await pageAs(browser, "director");
@@ -120,8 +120,14 @@ test("SPEC-06: Giám đốc edits Quản lý in the drawer, own role is 🔒, cl
   // the SAME Nhân viên session, reloaded: still logged in, sees Hợp đồng, no create button
   await nv.reload();
   await expect(nv).toHaveURL(/\/hop-dong$/);
-  await expect(nv.getByRole("heading", { level: 1, name: "Hợp đồng" })).toBeVisible();
-  await expect(nv.getByRole("button", { name: "+ Tạo hợp đồng" })).toHaveCount(0);
+  await expect(nv.getByRole("heading", { level: 1, name: "Tài liệu" })).toBeVisible();
+  // SPEC-09 DEC-10 B: "+ Tạo" lists only the types the user may create — no contract:write → no "Hợp đồng" item
+  const createMenu = nv.getByRole("button", { name: "+ Tạo", exact: true });
+  if ((await createMenu.count()) > 0) {
+    await createMenu.click();
+    await expect(nv.getByRole("menuitem", { name: "Hợp đồng", exact: true })).toHaveCount(0);
+    await nv.keyboard.press("Escape");
+  }
   await nv.context().close();
 
   // delete "Kế toán" while 1 person holds it → blocked, with the way out

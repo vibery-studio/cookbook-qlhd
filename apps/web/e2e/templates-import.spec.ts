@@ -71,11 +71,14 @@ test("SPEC-10: Giám đốc imports Bao_Gia.docx (15 fields → line table → s
   const frame = dlg.locator("iframe[title='Xem trước mẫu']");
   await expect(frame).toBeVisible();
   expect(await frame.getAttribute("sandbox")).not.toContain("allow-scripts");
-  await expect(dlg.frameLocator("iframe[title='Xem trước mẫu']").getByText("BÁO GIÁ")).toBeVisible();
+  await expect(dlg.frameLocator("iframe[title='Xem trước mẫu']").getByRole("heading", { name: "BÁO GIÁ" })).toBeVisible();
   const row = (k: string) => dlg.locator(`[data-testid="import-field-row"][data-key="${k}"]`);
   await expect(row("ten_khach")).toContainText("gợi ý từ: mẫu khác"); // seed v2 → subject:contact_person
-  await expect(row("hieu_luc_den")).toContainText("mới");
-  await expect(row("hieu_luc_den")).toContainText("Người lập nhập tay");
+  // SPEC-09 0026 seeds a BG template: hieu_luc_den is now suggested from it; nv_phu_trach (BG seed uses nhan_vien) stays new + manual
+  await expect(row("hieu_luc_den")).toContainText("gợi ý từ: mẫu khác");
+  await expect(row("hieu_luc_den").getByLabel("Nguồn hieu_luc_den")).toHaveValue("derived:valid_until");
+  await expect(row("nv_phu_trach")).toContainText("mới");
+  await expect(row("nv_phu_trach")).toContainText("Người lập nhập tay");
 
   // ---- "Đây là bảng dòng hàng" → 12 fields (giam_gia kept, P-7), bang_hang = lines ----
   await dlg.getByTestId("import-table").getByRole("button", { name: "Đây là bảng dòng hàng" }).click();
@@ -121,13 +124,14 @@ test("SPEC-10: Giám đốc imports Bao_Gia.docx (15 fields → line table → s
   await create.getByRole("combobox", { name: "Sản phẩm dòng 1" }).fill("G6");
   await create.getByRole("option", { name: /G6/ }).first().click();
   await create.getByLabel("Số lượng dòng 1").fill("1");
-  await create.getByLabel("Hiệu lực đến").fill("16/10/2026");
+  // hieu_luc_den = derived:valid_until (suggested from the BG seed) → no input
+  await expect(create.getByLabel("Hiệu lực đến")).toHaveCount(0);
   await create.getByLabel("Nhân viên phụ trách").fill("Phạm Nhân Viên");
   await create.getByRole("button", { name: "Tạo & xem văn bản" }).click();
   const paper = nv.getByRole("dialog", { name: "Văn bản báo giá" });
   await expect(paper).toBeVisible();
   const doc = paper.frameLocator("iframe[title='Văn bản báo giá']");
-  await expect(doc.getByText("BÁO GIÁ")).toBeVisible();
+  await expect(doc.getByRole("heading", { name: "BÁO GIÁ" })).toBeVisible();
   await expect(doc.locator("table.lines")).toHaveCount(1); // server-built line table (SPEC-08 DEC-7)
   await expect(doc.locator("table.lines")).toContainText("Gói 6 tháng");
   if (SHOTS) await nv.screenshot({ path: "e2e/shots/nhap-mau-nhap-tai-lieu.png" });
