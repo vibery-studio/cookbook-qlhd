@@ -34,6 +34,7 @@ Intent: docs/intent/INTENT-NN.md
 
 ## 5. Security
 - Who may do what: [ ] · Personal data: [where it lives, never logged] · Abuse: [what an attacker tries]
+- Security invariants (only when the feature touches auth, access, money, personal data or delete; else write "n/a"): one named line each, e.g. `INV-1: a role carrying roles:write is assigned only by an owner` · `INV-2: an export archive carries no credential column`. For each: **every path to the same effect** (invite, re-invite, edit, activate, cron, copy, import…) and the control each path uses. A path with no control listed = a gap to close now.
 
 ## 6. Decisions (the human decides)
 - [DEC-1] [choice] · options: [ ] · recommended: [ ] · decided: [ ]

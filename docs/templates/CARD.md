@@ -28,6 +28,7 @@ In: [concrete list] · Out: [what's tempting to over-reach into]
 
 ## Tests
 [none — <why> | test name → the break it catches]. The acceptance tests from PLAN §1 are not edited here.
+Security card (first card to touch auth / access / money / personal data / delete, or a card adding a NEW path to an effect that already has a rule): list the SPEC `INV-n` it must hold and the rule each new path applies; one invariant test at the strongest boundary (a route × role table or a column check beats one test per route); it must fail before the rule exists. Not security-touching → omit.
 
 ## Done check
 - Command: `[e.g. npm test -- deposit]` → expected: [ ]
