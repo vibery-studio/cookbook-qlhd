@@ -17,6 +17,7 @@
  *   drawer button "Xem văn bản hợp đồng"; list rows `data-testid="contract-row"`; audit rows `data-testid="audit-row"`.
  * Roles: global-setup USERS — staff (Nhân viên) · manager (Quản lý) · director (Giám đốc).
  */
+import { readFileSync, writeFileSync } from "node:fs";
 import { pageAs, test, expect } from "./fixtures";
 import { BASE } from "../playwright.config";
 
@@ -25,6 +26,7 @@ const NUMBER = /HD-\d{4}-001/;
 const CUSTOMER = { name: "Tạp hóa Cô Ba", contact: "Trần Thị Ba", phone: "0912 345 678", email: "coba@example.com" };
 
 test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, then fill) and submits, self-approve is 🔒; Quản lý approves + issues; void; paper", async ({ browser }) => {
+  test.setTimeout(240_000); // SPEC-05: waits for the queued PDF (local Chrome, first launch can take ~90s)
   // ---- logged out: every 4b URL lands on /login?next= (gap left by the 4a smoke) ----
   const anon = await browser.newContext({ locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" });
   const anonPage = await anon.newPage();
@@ -157,6 +159,25 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await ql.getByRole("dialog", { name: "Xác nhận" }).getByRole("button", { name: "Xác nhận" }).click();
   await expect(qDrawer).toContainText(NUMBER);
   await expect(qDrawer).toContainText("Đã phát hành");
+
+  // SPEC-05 AC-6/AC-7: the PDF is made by the queue + local Chrome after issue; F5 until "Tải PDF" is a link, then download
+  await expect
+    .poll(
+      async () => {
+        await ql.reload();
+        await expect(qDrawer).toContainText("Đã phát hành");
+        return qDrawer.getByRole("link", { name: "Tải PDF" }).count();
+      },
+      { timeout: 150_000, intervals: [3_000] },
+    )
+    .toBe(1);
+  const downloading = ql.waitForEvent("download");
+  await qDrawer.getByRole("link", { name: "Tải PDF" }).click();
+  const pdf = await downloading;
+  expect(pdf.suggestedFilename()).toMatch(/^HD-\d{4}-001\.pdf$/);
+  const pdfBytes = readFileSync((await pdf.path())!);
+  expect(pdfBytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+  if (SHOTS) writeFileSync(`e2e/shots/${pdf.suggestedFilename()}`, pdfBytes);
 
   // the paper now carries the number and no NHÁP
   await qDrawer.getByRole("button", { name: "Xem văn bản hợp đồng" }).click();
