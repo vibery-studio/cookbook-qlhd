@@ -22,6 +22,9 @@ const LOCK_TEXT = {
 export const NO_APPROVER_TEXT =
   "Không còn người nào khác có quyền Quản lý vai trò để duyệt — đổi quyền phải qua người quản trị kỹ thuật (migration).";
 
+const addNoApproverText = (label: string) =>
+  `Không ai duyệt được yêu cầu thêm quyền này: người duyệt phải có quyền Quản lý vai trò, không phải bạn, và không đang mang vai trò «${label}». Bớt quyền thì vẫn gửi được; muốn thêm, cấp quyền Quản lý vai trò cho một người thứ ba trước.`;
+
 const metaOf = (r: Role): Meta => ({ label: r.label, description: r.description ?? "" });
 
 /**
@@ -120,7 +123,9 @@ export function RoleDrawer({
       setNotice(null);
     } catch (e) {
       setNotice(null);
-      setError(roleError(e));
+      const err = roleError(e);
+      // FIX-04: adding permissions needs a third approver (own_role rule) — say so instead of the generic "no one left".
+      setError(err.slug === "no-eligible-approver" && added.length > 0 ? { ...err, message: addNoApproverText(role.label) } : err);
     }
   }
 
@@ -212,6 +217,9 @@ export function RoleDrawer({
             ))}
           </div>
 
+        </div>
+
+        <div data-testid="role-drawer-footer" className="grid gap-s2 border-t border-line bg-sunken px-s5 py-s4">
           {error ? (
             <Alert tone="danger">
               <p>
@@ -243,9 +251,6 @@ export function RoleDrawer({
               {notice}
             </p>
           ) : null}
-        </div>
-
-        <div className="grid gap-s2 border-t border-line bg-sunken px-s5 py-s4">
           <div className="flex flex-wrap justify-end gap-s2">
             <Button
               type="button"

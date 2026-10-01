@@ -197,6 +197,20 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     expect(await within(drawer).findByText(/đang có yêu cầu đổi quyền chờ duyệt/)).toBeTruthy();
   });
 
+  it("FIX-04: 409 no-eligible-approver on ADDED permissions shows the accurate sentence in the sticky footer, not the body", async () => {
+    post.mockImplementation(() => problem("no-eligible-approver", 409));
+    renderScreen(director);
+    await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
+    const drawer = await screen.findByRole("dialog", { name: "Vai trò · Quản lý" });
+    await userEvent.click(within(drawer).getByRole("checkbox", { name: /Tạo & sửa nháp/ }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "Gửi yêu cầu (+1)" }));
+    const footer = within(drawer).getByTestId("role-drawer-footer");
+    const alert = await within(footer).findByRole("alert");
+    expect(alert.textContent).toContain("Không ai duyệt được yêu cầu thêm quyền này");
+    expect(alert.textContent).toContain("không đang mang vai trò «Quản lý»");
+    expect(alert.textContent).toContain("Bớt quyền thì vẫn gửi được");
+  });
+
   it("three tabs; the Yêu cầu tab carries the pending count, lists the request, and Duyệt approves it", async () => {
     requests = [changeReq()];
     post.mockImplementation(() => ok({ request: changeReq({ status: "approved" }), role: roles.items[1] }));
