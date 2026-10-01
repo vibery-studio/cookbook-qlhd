@@ -6,6 +6,12 @@ const PRINT_CSS = `
   :root { color-scheme: light; }
   body { color: #111; background: #fff; font-family: Arial, sans-serif; line-height: 1.5; }
   .contract-document { max-width: 180mm; margin: 0 auto; }
+  .center { text-align: center; }
+  .b { font-weight: 700; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 12mm; table-layout: fixed; }
+  .sig th, .sig td { width: 50%; padding: 0 4mm; text-align: center; vertical-align: top; }
+  .sig th { font-weight: 700; }
+  .sig td { font-weight: 400; font-style: italic; }
   .draft-watermark { position: fixed; inset: 45% 0 auto; text-align: center; color: #b0b0b0; font-size: 52px; font-weight: 700; transform: rotate(-25deg); opacity: .28; pointer-events: none; }
   .void-band { position: fixed; top: 8mm; left: 0; right: 0; z-index: 2; padding: 7px; color: #fff; background: #a71930; font-weight: 700; text-align: center; letter-spacing: .18em; }
 `;
