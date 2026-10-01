@@ -3,6 +3,13 @@
 Status: Approved 2026-10-01 (DEC-1/3/4/5 bạn chốt; DEC-2/6/7 + edge "now/later" theo đề xuất — driver chốt, bạn ủy quyền)
 Intent: docs/intent/INTENT-06.md (Approved 2026-10-01; Q-1..Q-4 ràng buộc) · Roadmap: ROADMAP-02 row 2
 
+## 0. Bổ sung 2026-10-01 — đối chiếu bộ quy tắc RBAC bạn gửi (bạn chọn cả 4 nhóm; driver tách 2a/2b)
+- Dòng 2 tách: **2a = SPEC-06 này** (+ FR-12, FR-13 dưới) · **2b = SPEC-07** (Static SoD, four-eyes cho đổi quyền, rà soát định kỳ, JIT admin — mỗi cái cần thiết kế riêng, không chặn 2a).
+- [FR-12] Gán/gỡ vai trò R cho người khác (mời, đổi vai trò) chỉ khi quyền người gọi ⊇ quyền của R (cả vai trò cũ khi gỡ); `admin` được miễn (để mời Giám đốc — admin không có `contract:*`). Thiếu → 403 `forbidden` `rule: grant_not_held` + `permissions` thiếu + 1 dòng `permission.denied`. Kiểm từ D1 trong cùng request. → OUT-4, quy tắc "giới hạn ủy quyền" + "thu hồi tương ứng"
+- [FR-13] Nhật ký bất biến: trigger D1 từ chối `UPDATE`/`DELETE` trên `audit_events` (như `template_versions`). Không code sản phẩm nào sửa/xóa nhật ký (đã kiểm). Test dọn bảng qua một helper chung (tạm `DROP TRIGGER` → xóa → tạo lại) chỉ trong vitest. → quy tắc "ghi vết bất biến"
+- `member`: API từ chối gán (422 `unknown-role`), khớp DEC-7 ẩn ở UI (PLAN R-9, driver chốt).
+- AC-9: Giám đốc gán vai trò có `settings:write` (admin tạo) cho người khác → 403 `grant_not_held`; admin gán được · AC-10: `UPDATE`/`DELETE audit_events` qua D1 → lỗi trigger, số dòng không đổi.
+
 ## 1. Research (2026-10-01)
 Code (đã kiểm):
 - `roles` chỉ có `id, name UNIQUE, description` (`apps/api/src/db/schema.ts:98-102`) — không cờ hệ thống, không version, không nhãn riêng. Seed: `admin`, `member` (`0001_seed_rbac.sql:9-11`) + `giam_doc`/`quan_ly`/`nhan_vien` (`0010_seed_foundation.sql:7-10`). **Có 5 vai trò seed, không phải 4** (`member` = vai trò nền RUNWAY, không ai mang).
