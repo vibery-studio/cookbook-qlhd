@@ -679,7 +679,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Validation failed */
+                /** @description Validation failed, or unknown-role (role name does not exist / is not assignable) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -770,7 +770,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Validation failed */
+                /** @description Validation failed, or unknown-role (role name does not exist / is not assignable) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -864,7 +864,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Role x permission matrix */
+        /** Role x permission matrix + full permission catalog */
         get: {
             parameters: {
                 query?: never;
@@ -874,7 +874,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Roles with their permissions */
+                /** @description Roles (with holders, can/locked_reason for the caller) and the permission catalog */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -895,11 +895,254 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /** Create a custom role (clone = create with the source's permissions); name is server-made r_<ulid> */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateRoleRequest"];
+                };
+            };
+            responses: {
+                /** @description Role created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Role"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description duplicate (label, case/space-insensitive) | role-limit (50 custom roles) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Validation failed (unknown or repeated permission, label 1–60, description ≤ 200, extra keys) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a custom role nobody carries */
+        delete: {
+            parameters: {
+                query: {
+                    expected_version: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Role deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Role not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description stale (version mismatch) | role-in-use (+ `holders`) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Validation failed */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Edit a role's label, description and/or full permission set (optimistic lock by expected_version) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchRoleRequest"];
+                };
+            };
+            responses: {
+                /** @description Role updated (version + 1) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Role"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing roles:write, or `forbidden` with rule own_role (caller carries the role) | admin_role (admin is immutable) | system_role (system roles are not deleted) | grant_not_held (+ `permissions`: codes the caller lacks). One permission.denied row each. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Role not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description stale (version mismatch) | duplicate (label) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Validation failed */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/audit": {
@@ -3404,6 +3647,8 @@ export interface components {
             label?: string;
             current_status?: string;
             rule?: string;
+            permissions?: string[];
+            holders?: number;
         };
         SignupRequest: {
             /** Format: email */
@@ -3477,12 +3722,10 @@ export interface components {
             /** Format: email */
             email: string;
             display_name: string;
-            /** @enum {string} */
-            role: "giam_doc" | "quan_ly" | "nhan_vien";
+            role: string;
         };
         UpdateUserRequest: {
-            /** @enum {string} */
-            role?: "giam_doc" | "quan_ly" | "nhan_vien" | "admin";
+            role?: string;
             /** @enum {string} */
             status?: "active" | "disabled";
             display_name?: string;
@@ -3492,12 +3735,36 @@ export interface components {
             expires_at: number;
         };
         RolesResponse: {
-            items: components["schemas"]["RoleItem"][];
+            items: components["schemas"]["Role"][];
+            catalog: string[];
         };
-        RoleItem: {
+        Role: {
+            /** @example 01ROLE000000000000QUANLY00 */
+            id: string;
             name: string;
+            label: string;
             description: string | null;
+            is_system: boolean;
+            version: number;
+            holders: number;
             permissions: string[];
+            can: {
+                edit: boolean;
+                delete: boolean;
+            };
+            /** @enum {string|null} */
+            locked_reason: "system" | "own_role" | "admin" | null;
+        };
+        CreateRoleRequest: {
+            label: string;
+            description?: string;
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "notes:read" | "notes:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+        };
+        PatchRoleRequest: {
+            expected_version: number;
+            label?: string;
+            description?: string;
+            permissions?: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "notes:read" | "notes:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
         };
         AuditList: {
             items: components["schemas"]["AuditEvent"][];

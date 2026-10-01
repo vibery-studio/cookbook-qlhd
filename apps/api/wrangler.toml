@@ -32,7 +32,7 @@ PDF_RENDERER = "browser"
 [assets]
 directory = "../web/dist"
 not_found_handling = "single-page-application"
-run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/audit", "/customers", "/customers/*",
   "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [[d1_databases]]
@@ -128,7 +128,7 @@ name = "runway-api-preview-pr-PLACEHOLDER_PR"
 [env.preview.assets]
 directory = "../web/dist"
 not_found_handling = "single-page-application"
-run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/audit", "/customers", "/customers/*",
   "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.preview.vars]
@@ -220,7 +220,7 @@ name = "runway-api-prod"
 [env.production.assets]
 directory = "../web/dist"
 not_found_handling = "single-page-application"
-run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/audit", "/customers", "/customers/*",
+run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/audit", "/customers", "/customers/*",
   "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.production.vars]

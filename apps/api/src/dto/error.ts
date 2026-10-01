@@ -43,6 +43,10 @@ export const ProblemDto = z
     current_status: z.string().optional(),
     /** 403 separation-of-duties rule: `creator_cannot_approve` | `one_person_one_step` */
     rule: z.string().optional(),
+    /** 403 `grant_not_held` (SPEC-06): permission codes the caller does not hold */
+    permissions: z.array(z.string()).optional(),
+    /** 409 `role-in-use` (SPEC-06): how many users carry the role */
+    holders: z.number().int().optional(),
   })
   .openapi("Problem");
 
@@ -80,6 +84,9 @@ export const ProblemType = {
   AlreadyDecided: "already-decided",
   ChangedAfterApproval: "changed-after-approval",
   WouldBlockLaterStep: "would-block-later-step",
+  RoleInUse: "role-in-use",
+  RoleLimit: "role-limit",
+  UnknownRole: "unknown-role",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -98,6 +105,8 @@ export interface ProblemOptions {
   label?: string;
   current_status?: string;
   rule?: string;
+  permissions?: string[];
+  holders?: number;
 }
 
 /**
@@ -130,6 +139,8 @@ export function problem(
     ...(options.label !== undefined && { label: options.label }),
     ...(options.current_status !== undefined && { current_status: options.current_status }),
     ...(options.rule !== undefined && { rule: options.rule }),
+    ...(options.permissions !== undefined && { permissions: options.permissions }),
+    ...(options.holders !== undefined && { holders: options.holders }),
   };
 }
 

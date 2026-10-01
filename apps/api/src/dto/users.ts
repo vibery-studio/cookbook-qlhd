@@ -11,7 +11,8 @@ export const IdempotencyKeyHeader = z.object({
     .optional(),
 });
 
-export const BusinessRole = z.enum(["giam_doc", "quan_ly", "nhan_vien"]);
+/** A role `name` that exists in `roles` (SPEC-06 FR-9); unknown → 422 `unknown-role`. */
+export const RoleNameSchema = z.string().min(1).max(64);
 
 export const AdminUserSchema = z
   .object({
@@ -28,7 +29,7 @@ export const InviteUserBody = z
     // " KHANH@nhatminh.vn " is the same person as "khanh@nhatminh.vn" (SPEC-01 §4 Input)
     email: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() : v), EmailSchema),
     display_name: z.string().min(1).max(100),
-    role: BusinessRole,
+    role: RoleNameSchema,
   })
   .openapi("InviteUserRequest");
 
@@ -42,7 +43,7 @@ export const InviteUserResponse = z
 
 export const UpdateUserBody = z
   .object({
-    role: z.enum(["giam_doc", "quan_ly", "nhan_vien", "admin"]).optional(),
+    role: RoleNameSchema.optional(),
     status: z.enum(["active", "disabled"]).optional(),
     display_name: z.string().min(1).max(100).optional(),
   })
@@ -61,13 +62,3 @@ export const ActivateBody = z
     password: z.string().min(12).max(256),
   })
   .openapi("ActivateRequest");
-
-export const RoleItem = z
-  .object({
-    name: z.string(),
-    description: z.string().nullable(),
-    permissions: z.array(z.string()),
-  })
-  .openapi("RoleItem");
-
-export const RolesResponse = z.object({ items: z.array(RoleItem) }).openapi("RolesResponse");
