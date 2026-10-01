@@ -11,3 +11,5 @@ Status: Approved 2026-09-29 · mỗi dòng roadmap trỏ về một mã M dướ
 | M5 | Quản lý · Giám đốc | xem nhật ký: ai làm gì, lúc nào, kể cả lần bị từ chối quyền | I7 §6 |
 | M6 | cả phòng | xem danh sách khách hàng (tối thiểu) để chọn khi tạo hợp đồng | §8 |
 | M7 | cả phòng | xem ai có quyền gì (3 vai trò × quyền) | §3 |
+| M8 | Quản lý · Giám đốc | quản lý sản phẩm (dịch vụ · hàng hóa) và mức giá chưa VAT + thuế suất có hiệu lực theo ngày (INTENT-08, 2026-10-01) | — |
+| M9 | Nhân viên | lập tài liệu kế tiếp từ tài liệu trước (BG → HĐ → DNTT) không gõ lại; mỗi loại (BG · HD · DNTT · PXK) có tiền tố + dãy số riêng (INTENT-09, 2026-10-01) | — |
