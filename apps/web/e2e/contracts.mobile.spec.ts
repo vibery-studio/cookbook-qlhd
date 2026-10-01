@@ -30,7 +30,7 @@ test("4b mobile: menu opens, contracts are cards, drawer is full-screen, paper o
 
   // list = cards, not a table
   // .first(): desktop specs (products.spec) leave more "Cửa hàng Seed" drafts in the shared e2e D1 — any card proves the layout
-  const card = nv.getByTestId("contract-card").filter({ hasText: "Cửa hàng Seed" }).first();
+  const card = nv.getByTestId("contract-card").filter({ hasText: "Cửa hàng Seed" }).filter({ hasText: "Hợp đồng cung cấp dịch vụ phần mềm" }).first(); // row 4: other types for the same customer exist too
   await expect(card).toBeVisible();
   await expect(card).toContainText("Cửa hàng Seed");
   await expect(nv.getByRole("table")).toHaveCount(0);

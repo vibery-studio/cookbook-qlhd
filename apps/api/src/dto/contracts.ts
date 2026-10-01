@@ -40,7 +40,9 @@ export const ContractValues = z
     xuat_tai_kho: z.string().trim().max(200).optional(),
     dia_diem: z.string().trim().max(200).optional(),
   })
-  .strict()
+  // SPEC-10: a template imported from Word may declare ANY manual field (e.g. `nv_phu_trach`). Extra keys are scalar
+  // only; the snapshot builder still refuses keys that aren't the template's manual fields and validates each by type.
+  .catchall(z.union([z.string().max(2000), z.number().finite()]))
   .openapi("ContractValues");
 
 /** 1–50 `{product_id, qty}`; the server prices them on the doc date (exactly one monthly service line — DEC-10). */

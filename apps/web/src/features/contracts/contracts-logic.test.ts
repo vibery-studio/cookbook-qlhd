@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lockReason, visibleActions, type LockContext } from "./lock-reasons";
-import { buildValues, buildLines, rowsFromInputs, previewBody, bpsToPercentText, emptyForm, formFromInputs, activeKeys, productsFor, VALUE_LABELS, type FieldSpec } from "./values";
+import { buildValues, buildLines, rowsFromInputs, previewBody, bpsToPercentText, emptyForm, formFromInputs, activeKeys, productsFor, VALUE_LABELS, requiredKeys, type FieldSpec } from "./values";
 import { buildFlow } from "./flow";
 import { parseListParams, TYPE_TABS, typeEmptyTitle, createLabel, creatableTypes } from "./list-params";
 import { parseSnapshot } from "./snapshot";
@@ -63,21 +63,19 @@ describe("lockReason (SPEC-04b 3.4)", () => {
 
 describe("buildValues", () => {
   const fields: FieldSpec[] = [
-    { key: "ma_goi", required: true, source: "manual" }, // v1 leftovers: no longer form keys, never sent
-    { key: "so_cua_hang", required: true, source: "manual" },
     { key: "giam_gia", required: false, source: "manual" },
     { key: "chuc_vu_nguoi_ky", required: true, source: "manual" },
     { key: "so_bao_gia", required: false, source: "manual" },
     { key: "ngay_bao_gia", required: false, source: "manual" },
     { key: "ten_khach", required: false, source: "subject:contact_person" },
-    { key: "khoa_la", required: false, source: "manual" },
+    { key: "san_pham", required: true, source: "manual", type: "lines" }, // line block: never a form key
   ];
   const filled = { ...emptyForm(), chuc_vu_nguoi_ky: "  Chủ hộ  " };
 
-  it("sends only known keys, drops blanks, trims", () => {
+  it("sends form keys only (not auto / line fields), drops blanks, trims", () => {
     const r = buildValues({ ...filled, giam_gia: "5" }, fields);
     expect(r).toEqual({ ok: true, values: { giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ" } });
-    expect(activeKeys(fields)).not.toContain("khoa_la" as never);
+    expect(activeKeys(fields)).not.toContain("san_pham");
   });
   it("7,5 and 7.5 are 750 bps — an integer, not a float", () => {
     for (const t of ["7,5", "7.5"]) {
@@ -274,5 +272,39 @@ describe("form by type (SPEC-09 §3.5)", () => {
     expect(productsFor("delivery_note", items).map((p) => p.id)).toEqual(["2"]);
     expect(productsFor("quote", items).map((p) => p.id)).toEqual(["1", "2"]);
     expect(productsFor(undefined, items)).toHaveLength(2);
+  });
+});
+
+describe("imported template: any manual field (SPEC-10)", () => {
+  const fields: FieldSpec[] = [
+    { key: "nv_phu_trach", label: "Nhân viên phụ trách", type: "text", required: true, source: "manual" },
+    { key: "chuc_vu_nguoi_ky", label: "Chức vụ người ký", type: "text", required: true, source: "manual" },
+    { key: "ten_khach", label: "Tên khách", type: "text", required: true, source: "subject:contact_person" },
+    { key: "dong_hang", label: "Dòng hàng", type: "lines", required: true, source: "manual" },
+    { key: "phi_ban_dau", label: "Phí ban đầu", type: "money", required: false, source: "manual" },
+    { key: "so_nguoi", label: "Số người", type: "number", required: false, source: "manual" },
+    { key: "ty_le_coc", label: "Tỷ lệ cọc", type: "percent", required: false, source: "manual" },
+    { key: "han_chot", label: "Hạn chốt", type: "date", required: false, source: "manual" },
+  ];
+  it("form keys include unknown manual fields in template order, not auto/line fields", () => {
+    expect(activeKeys(fields)).toEqual(["nv_phu_trach", "chuc_vu_nguoi_ky", "phi_ban_dau", "so_nguoi", "ty_le_coc", "han_chot"]);
+    expect([...requiredKeys(fields)]).toEqual(["nv_phu_trach", "chuc_vu_nguoi_ky"]);
+  });
+  it("body sends the unknown text key trimmed; required blank is flagged under its input", () => {
+    const ok = buildValues({ ...emptyForm(), nv_phu_trach: "  Lan  ", chuc_vu_nguoi_ky: "GĐ" }, fields);
+    expect(ok).toEqual({ ok: true, values: { nv_phu_trach: "Lan", chuc_vu_nguoi_ky: "GĐ" } });
+    const bad = buildValues({ ...emptyForm(), chuc_vu_nguoi_ky: "GĐ" }, fields);
+    expect(bad).toMatchObject({ ok: false, errors: { nv_phu_trach: "Nhân viên phụ trách là bắt buộc" }, message: "Thiếu: Nhân viên phụ trách. Điền rồi tạo lại." });
+  });
+  it("money/number/percent/date parse by field type", () => {
+    const r = buildValues(
+      { ...emptyForm(), nv_phu_trach: "Lan", chuc_vu_nguoi_ky: "GĐ", phi_ban_dau: "1.500.000", so_nguoi: "7,5", ty_le_coc: "30", han_chot: "2026-10-01" },
+      fields,
+    );
+    expect(r).toEqual({ ok: true, values: { nv_phu_trach: "Lan", chuc_vu_nguoi_ky: "GĐ", phi_ban_dau: 1500000, so_nguoi: 7.5, ty_le_coc: 3000, han_chot: "2026-10-01" } });
+    expect(buildValues({ ...emptyForm(), nv_phu_trach: "L", chuc_vu_nguoi_ky: "G", phi_ban_dau: "12abc" }, fields)).toMatchObject({ ok: false, errors: { phi_ban_dau: "Phí ban đầu phải là số tiền (số nguyên, ví dụ 1.500.000)" } });
+  });
+  it("edit: unknown keys are refilled from snapshot inputs", () => {
+    expect(formFromInputs({ nv_phu_trach: "Lan", ty_le_coc: 3000 }, fields)).toMatchObject({ nv_phu_trach: "Lan", ty_le_coc: "30" });
   });
 });

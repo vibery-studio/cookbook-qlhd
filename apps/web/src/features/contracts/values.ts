@@ -19,8 +19,10 @@ export const VALUE_LABELS: Record<ValueKey, string> = {
   dia_diem: "Địa điểm",
 };
 
-export type FormState = Record<ValueKey, string>;
-export type FieldSpec = { key: string; required: boolean; source: string };
+export type FormState = Record<string, string>;
+/** A template field as the form needs it; `label`/`type` come from the template (known keys keep their built-in label and input). */
+export type FieldSpec = { key: string; required: boolean; source: string; label?: string; type?: string };
+export type FieldKind = "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice";
 
 export function emptyForm(): FormState {
   return { giam_gia: "", chuc_vu_nguoi_ky: "", ngay_bat_dau: "", so_bao_gia: "", ngay_bao_gia: "", ly_do_xuat_kho: "", xuat_tai_kho: "", dia_diem: "" };
@@ -36,18 +38,40 @@ export type FormOptions = {
 };
 
 /** Keys a type never shows or sends: PXK carries no money (no discount), BG has no signer yet (the contract made from it asks). */
-function hiddenKeys(type: DocType | undefined, opts: FormOptions): ReadonlySet<ValueKey> {
-  const hidden = new Set<ValueKey>();
+function hiddenKeys(type: DocType | undefined, opts: FormOptions): ReadonlySet<string> {
+  const hidden = new Set<string>();
   if (type === "delivery_note" || opts.frozen) hidden.add("giam_gia");
   if (type === "quote") hidden.add("chuc_vu_nguoi_ky");
   return hidden;
 }
 
-/** The keys the form shows: manual template fields among the known ones, minus what the type hides (products + quantities live in the line block, not in `values`). */
-export function activeKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): ValueKey[] {
-  const manual = new Set(fields.filter((f) => f.source === "manual").map((f) => f.key));
+/** Line-block fields (products, quantities) live in `lines`, never in `values`. */
+const isLineField = (f: FieldSpec): boolean => f.type === "lines" || f.type === "goods";
+
+/** The keys the form shows: every manual template field in template order (SPEC-10 imports can declare any), minus what the type hides and the line block. */
+export function activeKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): string[] {
   const hidden = hiddenKeys(type, opts);
-  return VALUE_KEYS.filter((k) => manual.has(k) && !hidden.has(k));
+  const keys: string[] = [];
+  for (const f of fields) if (f.source === "manual" && !isLineField(f) && !hidden.has(f.key) && !keys.includes(f.key)) keys.push(f.key);
+  return keys;
+}
+
+function fieldOf(fields: readonly FieldSpec[], key: string): FieldSpec | undefined {
+  return fields.find((f) => f.key === key);
+}
+
+/** Label of a form key: the built-in one for known keys, else the template's label, else the key. */
+export function labelOf(fields: readonly FieldSpec[], key: string): string {
+  return isValueKey(key) ? VALUE_LABELS[key] : (fieldOf(fields, key)?.label ?? key);
+}
+
+/** Input kind of a form key: known keys keep their behaviour; the rest follow the template field `type`. */
+export function kindOf(fields: readonly FieldSpec[], key: string): FieldKind {
+  if (key === "giam_gia") return "percent";
+  if (key === "ngay_bat_dau" || key === "ngay_bao_gia") return "date";
+  if (isValueKey(key)) return "text";
+  const t = fieldOf(fields, key)?.type;
+  return t === "paragraph" || t === "money" || t === "number" || t === "percent" || t === "date" || t === "choice" ? t : "text";
 }
 
 /** PXK = goods only (SPEC-09 FR-12); every other type offers the whole price list. */
@@ -55,58 +79,88 @@ export function productsFor<P extends Pick<Product, "kind">>(type: DocType | und
   return type === "delivery_note" ? items.filter((p) => p.kind === "goods") : [...items];
 }
 
-const SERVER_DEFAULTED: ReadonlySet<ValueKey> = new Set<ValueKey>(["ngay_bat_dau", "giam_gia"]);
+const SERVER_DEFAULTED: ReadonlySet<string> = new Set(["ngay_bat_dau", "giam_gia"]);
 
-export function requiredKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): Set<ValueKey> {
-  const req = new Set<ValueKey>();
+export function requiredKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): Set<string> {
+  const req = new Set<string>();
   const hidden = hiddenKeys(type, opts);
   // Fields the template gives a default (ngay_bat_dau = Ngày lập, giam_gia = 0): blank is valid, the server fills it.
-  for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key) && !SERVER_DEFAULTED.has(f.key) && !hidden.has(f.key)) req.add(f.key);
+  for (const f of fields) if (f.source === "manual" && !isLineField(f) && f.required && !SERVER_DEFAULTED.has(f.key) && !hidden.has(f.key)) req.add(f.key);
   return req;
 }
 
 export type BuildResult =
   | { ok: true; values: ContractValues }
-  | { ok: false; errors: Partial<Record<ValueKey, string>>; message: string };
+  | { ok: false; errors: Record<string, string>; message: string };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** "1.500.000" / "1 500 000" / "1500000" -> 1500000 (whole dong only); anything else -> null. */
+export function parseMoney(text: string): number | null {
+  const t = text.trim();
+  if (!/^\d{1,3}(?:[. ]\d{3})+$|^\d+$/.test(t)) return null;
+  const n = Number.parseInt(t.replace(/[. ]/g, ""), 10);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** "12", "-3", "7,5", "7.5" -> number; anything else -> null. */
+export function parseNumber(text: string): number | null {
+  const t = text.trim();
+  if (!/^-?\d+(?:[.,]\d+)?$/.test(t)) return null;
+  const n = Number(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
 const PAIR_MESSAGE = "Nhập cả hai hoặc bỏ trống cả hai";
 
 /** Form text -> the request `values`. Blank fields are dropped; the discount goes as integer bps from the string (no floats). */
 export function buildValues(form: FormState, fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): BuildResult {
   const active = new Set(activeKeys(fields, type, opts));
   const required = requiredKeys(fields, type, opts);
-  const errors: Partial<Record<ValueKey, string>> = {};
+  const errors: Record<string, string> = {};
   const missing: string[] = [];
-  const text = (k: ValueKey): string => form[k].trim();
+  const text = (k: string): string => (form[k] ?? "").trim();
 
   for (const k of active) {
     if (required.has(k) && text(k) === "") {
-      missing.push(VALUE_LABELS[k]);
-      errors[k] = `${VALUE_LABELS[k]} là bắt buộc`;
+      missing.push(labelOf(fields, k));
+      errors[k] = `${labelOf(fields, k)} là bắt buộc`;
     }
   }
 
-  const values: Partial<Record<ValueKey, string | number>> = {};
+  const values: Record<string, string | number> = {};
   for (const k of active) {
     const v = text(k);
     if (v === "" || errors[k]) continue;
+    const kind = kindOf(fields, k);
+    const label = labelOf(fields, k);
     if (k === "giam_gia") {
       const bps = parsePercentToBps(v);
       if (bps === null) errors[k] = "Giảm giá phải từ 0 đến 100%, tối đa 2 số lẻ";
       else values[k] = bps;
-    } else if (k === "ngay_bat_dau" || k === "ngay_bao_gia") {
-      if (!ISO_DATE.test(v)) errors[k] = `${VALUE_LABELS[k]} chưa hợp lệ`;
+    } else if (kind === "percent") {
+      const bps = parsePercentToBps(v);
+      if (bps === null) errors[k] = `${label} phải từ 0 đến 100%, tối đa 2 số lẻ`;
+      else values[k] = bps;
+    } else if (kind === "date") {
+      if (!ISO_DATE.test(v)) errors[k] = `${label} chưa hợp lệ`;
       else values[k] = v;
+    } else if (kind === "money") {
+      const n = parseMoney(v);
+      if (n === null) errors[k] = `${label} phải là số tiền (số nguyên, ví dụ 1.500.000)`;
+      else values[k] = n;
+    } else if (kind === "number") {
+      const n = parseNumber(v);
+      if (n === null) errors[k] = `${label} phải là số`;
+      else values[k] = n;
     } else {
       values[k] = v;
     }
   }
 
-  if (active.has("so_bao_gia") && active.has("ngay_bao_gia") && !errors.so_bao_gia && !errors.ngay_bao_gia) {
+  if (active.has("so_bao_gia") && active.has("ngay_bao_gia") && !errors["so_bao_gia"] && !errors["ngay_bao_gia"]) {
     if ((text("so_bao_gia") === "") !== (text("ngay_bao_gia") === "")) {
-      errors.so_bao_gia = PAIR_MESSAGE;
-      errors.ngay_bao_gia = PAIR_MESSAGE;
+      errors["so_bao_gia"] = PAIR_MESSAGE;
+      errors["ngay_bao_gia"] = PAIR_MESSAGE;
     }
   }
 
@@ -117,6 +171,7 @@ export function buildValues(form: FormState, fields: readonly FieldSpec[], type?
       message: missing.length > 0 ? `Thiếu: ${missing.join(", ")}. Điền rồi tạo lại.` : "Kiểm tra lại các ô đánh dấu.",
     };
   }
+  // the generated type lists the 8 known keys; unknown manual keys of an imported template ride along as-is
   return { ok: true, values: values as ContractValues };
 }
 
@@ -130,12 +185,13 @@ export function bpsToPercentText(bps: number): string {
 }
 
 /** Fill the edit form from `snapshot.inputs` (what the user typed last time). */
-export function formFromInputs(inputs: Record<string, string | number>): FormState {
+export function formFromInputs(inputs: Record<string, string | number>, fields: readonly FieldSpec[] = []): FormState {
   const form = emptyForm();
-  for (const k of VALUE_KEYS) {
+  const keys = new Set<string>([...VALUE_KEYS, ...fields.filter((f) => f.source === "manual").map((f) => f.key)]);
+  for (const k of keys) {
     const v = inputs[k];
     if (v === undefined || v === null) continue;
-    form[k] = k === "giam_gia" && typeof v === "number" ? bpsToPercentText(v) : String(v);
+    form[k] = typeof v === "number" && kindOf(fields, k) === "percent" ? bpsToPercentText(v) : String(v);
   }
   return form;
 }

@@ -29,13 +29,13 @@ import { FrozenLines, LineItems, type KnownProduct } from "./line-items";
 import { parseSnapshot } from "./snapshot";
 import { TotalsBox } from "./totals-box";
 import {
-  VALUE_LABELS,
   activeKeys,
   buildLines,
   buildValues,
   emptyForm,
   formFromInputs,
-  isValueKey,
+  kindOf,
+  labelOf,
   newRow,
   previewBody,
   productsFor,
@@ -44,7 +44,6 @@ import {
   type FormState,
   type LineRow,
   type LinesResult,
-  type ValueKey,
 } from "./values";
 
 export type ContractFormProps =
@@ -93,14 +92,20 @@ export function ContractFormModal(props: ContractFormProps) {
   const keys = useMemo(() => activeKeys(fields, docType, { frozen }), [fields, docType, frozen]);
   const required = useMemo(() => requiredKeys(fields, docType, { frozen }), [fields, docType, frozen]);
   const goodsOnly = docType === "delivery_note";
+  // edit: the template arrives after the first render; fill the imported template's own keys from the saved inputs (typed values win)
+  useEffect(() => {
+    if (!editing || fields.length === 0) return;
+    const saved = parseSnapshot(editing.snapshot).inputs;
+    setForm((f) => ({ ...formFromInputs(saved, fields), ...f }));
+  }, [editing, fields]);
 
   const [customer, setCustomer] = useState<PickedCustomer | null>(editing ? { id: editing.customer_id, name: editing.customer_name } : null);
-  const [form, setForm] = useState<FormState>(() => (editing ? formFromInputs(parseSnapshot(editing.snapshot).inputs) : emptyForm()));
+  const [form, setForm] = useState<FormState>(() => (editing ? formFromInputs(parseSnapshot(editing.snapshot).inputs, []) : emptyForm()));
   const [rows, setRows] = useState<LineRow[]>(() => (editing ? rowsFromInputs(parseSnapshot(editing.snapshot).inputLines) : [newRow()]));
   const [lineErrors, setLineErrors] = useState<Record<number, string>>({});
   const [linesError, setLinesError] = useState<string | undefined>(undefined);
   const [version, setVersion] = useState(editing?.version ?? 0);
-  const [errors, setErrors] = useState<Partial<Record<ValueKey | "customer" | "template", string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [pending, setPending] = useState(false);
@@ -138,7 +143,7 @@ export function ContractFormModal(props: ContractFormProps) {
 
   // totals: POST /pricing/preview, debounced ~300 ms; an error shows its sentence and never blocks typing (DEC-13 A)
   const noMoney = goodsOnly || frozen; // PXK carries no money; a child's money is the parent's
-  const wanted = useMemo(() => (noMoney ? null : previewBody(rows, form.giam_gia)), [rows, form.giam_gia, noMoney]);
+  const wanted = useMemo(() => (noMoney ? null : previewBody(rows, form.giam_gia ?? "")), [rows, form.giam_gia, noMoney]);
   const [debounced, setDebounced] = useState(wanted);
   const wantedKey = JSON.stringify(wanted);
   useEffect(() => {
@@ -151,7 +156,7 @@ export function ContractFormModal(props: ContractFormProps) {
   const amounts = useMemo(() => new Map((previewData?.lines ?? []).map((l) => [l.product_id, l.amount_ex_vat] as const)), [previewData]);
 
   const canAddCustomer = me.permissions.includes("contract:write");
-  const setField = useCallback((key: ValueKey, value: string) => {
+  const setField = useCallback((key: string, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
     setMessage(null);
@@ -159,7 +164,7 @@ export function ContractFormModal(props: ContractFormProps) {
 
   function applyServerError(error: unknown) {
     const info = errorMessage(error, docType);
-    const next: Partial<Record<ValueKey | "customer" | "template", string>> = {};
+    const next: Partial<Record<string, string>> = {};
     const nextLines: Record<number, string> = {};
     let block: string | undefined;
     for (const [path, text] of Object.entries(info.fieldErrors)) {
@@ -168,7 +173,7 @@ export function ContractFormModal(props: ContractFormProps) {
       else if (path === "lines") block = text;
       else {
         const key = path.replace(/^values\./, "");
-        if (isValueKey(key)) next[key] = text;
+        next[key] = text;
       }
     }
     setErrors(next);
@@ -236,7 +241,7 @@ export function ContractFormModal(props: ContractFormProps) {
     const result = await latestContract.refetch();
     if (!result.data) return;
     const snap = parseSnapshot(result.data.snapshot);
-    setForm(formFromInputs(snap.inputs));
+    setForm(formFromInputs(snap.inputs, fields));
     setRows(rowsFromInputs(snap.inputLines));
     setLineErrors({});
     setLinesError(undefined);
@@ -332,28 +337,39 @@ export function ContractFormModal(props: ContractFormProps) {
           {keys.map((k) => {
               if (loadingTemplate || !templateId) return null;
               const id = `cf-${k}`;
-              const isDate = k === "ngay_bat_dau" || k === "ngay_bao_gia";
+              const kind = kindOf(fields, k);
+              const value = form[k] ?? "";
+              const error = errors[k];
+              const common = {
+                id,
+                name: k,
+                value,
+                "aria-invalid": error ? true : undefined,
+                "aria-describedby": error ? `${id}-error` : undefined,
+                className: cn(INPUT_CLASS, error ? "border-danger" : "border-line-strong"),
+              } as const;
+              const hint = k === "giam_gia" || kind === "percent" ? "0–100, gõ 7,5 hoặc 7.5" : kind === "money" ? "Số tiền (₫), ví dụ 1.500.000" : undefined;
+              const options = fields.find((f) => f.key === k)?.options ?? [];
               return (
-                <Row
-                  key={k}
-                  id={id}
-                  label={VALUE_LABELS[k]}
-                  required={required.has(k)}
-                  error={errors[k]}
-                  {...(k === "giam_gia" ? { hint: "0–100, gõ 7,5 hoặc 7.5" } : {})}
-                >
-                  <input
-                    id={id}
-                    name={k}
-                    type={isDate ? "date" : "text"}
-                    inputMode={k === "giam_gia" ? "decimal" : undefined}
-                    value={form[k]}
-                    autoComplete="off"
-                    aria-invalid={errors[k] ? true : undefined}
-                    aria-describedby={errors[k] ? `${id}-error` : undefined}
-                    onChange={(e) => setField(k, e.target.value)}
-                    className={cn(INPUT_CLASS, errors[k] ? "border-danger" : "border-line-strong")}
-                  />
+                <Row key={k} id={id} label={labelOf(fields, k)} required={required.has(k)} error={error} {...(hint ? { hint } : {})}>
+                  {kind === "paragraph" ? (
+                    <textarea {...common} rows={3} autoComplete="off" onChange={(e) => setField(k, e.target.value)} />
+                  ) : kind === "choice" && options.length > 0 ? (
+                    <select {...common} onChange={(e) => setField(k, e.target.value)}>
+                      <option value="">Chọn</option>
+                      {options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      {...common}
+                      type={kind === "date" ? "date" : "text"}
+                      inputMode={kind === "percent" ? "decimal" : kind === "money" ? "numeric" : kind === "number" ? "decimal" : undefined}
+                      autoComplete="off"
+                      onChange={(e) => setField(k, e.target.value)}
+                    />
+                  )}
                 </Row>
               );
             })}

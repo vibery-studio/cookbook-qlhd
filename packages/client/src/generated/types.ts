@@ -6252,6 +6252,8 @@ export interface components {
             ly_do_xuat_kho?: string;
             xuat_tai_kho?: string;
             dia_diem?: string;
+        } & {
+            [key: string]: string | number;
         };
         ContractList: {
             items: components["schemas"]["ContractListItem"][];
