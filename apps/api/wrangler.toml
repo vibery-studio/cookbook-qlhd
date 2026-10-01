@@ -228,7 +228,7 @@ run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/role-cha
 
 [env.production.vars]
 APP_ENV = "production"
-APP_ORIGIN = "https://runway-api-prod.workers.dev"
+APP_ORIGIN = "https://runway-api-prod.bnqtoan.workers.dev"
 BUILD_SHA = "prod"
 EMAIL_PROVIDER = "noop"
 PASSWORD_MIN_LENGTH = "12"
