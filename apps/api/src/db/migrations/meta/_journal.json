@@ -169,6 +169,13 @@
       "when": 1790854768878,
       "tag": "0023_seed_contract_template_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1790859089663,
+      "tag": "0024_bouncy_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }
