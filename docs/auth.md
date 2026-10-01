@@ -52,6 +52,14 @@ case for the change to bite = `max(KV lag ≤ 60s, cache TTL 60s)` — the TTL c
 that missed the cache, read D1 just before the commit and re-cached the old principal
 just after the purge → **~60s**, not 300s. Same KV location (tests, one colo): next request.
 
+JIT admin (SPEC-07 DEC-8): KV `expirationTtl` minimum is 60 (developers.cloudflare.com/kv/api/write-key-value-pairs,
+re-read 2026-10-01), so expiry cannot ride the TTL. Every cached principal carries `valid_until` =
+`min(now + 60, jit.expires_at)` (no JIT: `now + 60`); `getCachedPrincipal` treats `now ≥ valid_until`, or an entry
+without `valid_until`, as a miss → D1 re-read. Max time to revoke at **expiry = 0** (cut at the exact second, even if
+KV still holds the key or the purge failed). Early revoke / grant purge the recipient's key → same as a role change
+(~60s worst case cross-region, next request in one colo). During JIT the principal is `admin` ONLY (DEC-6); D1 guards
+read `user_roles` and never see JIT (DEC-7). `*/5` cron only writes `jit.expired` (+ purge), ≤100/tick.
+
 Middleware layers a per-isolate in-memory LRU (TTL 60s, key=`jti`) in front of
 the D1 `jwt_revocations` lookup so repeat requests on the same JWT don't hit
 D1 every time — this cache is a hot-path optimization only; it never widens

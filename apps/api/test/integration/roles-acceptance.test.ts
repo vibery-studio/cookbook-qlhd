@@ -37,7 +37,8 @@ const PASSWORD = "correct-horse-battery-staple";
 const fetcher = (input: string, init?: RequestInit) => SELF.fetch(input, init);
 const UNKNOWN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`; SPEC-07 FR-10: + `jit:grant`, `reviews:write` (18). */
+/** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`; SPEC-07 FR-10: + `jit:grant`, `reviews:write` (18);
+ * SPEC-08 FR-7: + `price:write`, `product:write` (20). */
 const CATALOG = [
   "audit:read",
   "contract:approve",
@@ -50,6 +51,8 @@ const CATALOG = [
   "jit:grant",
   "notes:read",
   "notes:write",
+  "price:write",
+  "product:write",
   "reviews:write",
   "roles:write",
   "settings:read",
@@ -60,7 +63,8 @@ const CATALOG = [
 ];
 
 /** Seed grants of the system roles these tests edit (0010_seed_foundation.sql + SPEC-06 §3.1 roles:write for giam_doc
- * + SPEC-07 FR-10 jit:grant, reviews:write for giam_doc — 0020). */
+ * + SPEC-07 FR-10 jit:grant, reviews:write for giam_doc — 0020; SPEC-08 FR-7 price:write, product:write for giam_doc +
+ * quan_ly — 0022). */
 const SEED_GRANTS: Record<string, string[]> = {
   giam_doc: [
     "audit:read",
@@ -70,13 +74,24 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:submit",
     "contract:write",
     "jit:grant",
+    "price:write",
+    "product:write",
     "reviews:write",
     "roles:write",
     "template:write",
     "users:read",
     "users:write",
   ],
-  quan_ly: ["audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write"],
+  quan_ly: [
+    "audit:read",
+    "contract:approve",
+    "contract:issue",
+    "contract:read",
+    "contract:submit",
+    "contract:write",
+    "price:write",
+    "product:write",
+  ],
   nhan_vien: ["contract:read", "contract:submit", "contract:write"],
 };
 

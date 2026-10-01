@@ -14,6 +14,7 @@ import type { Db } from "../db/client";
 import { auditEvents, rolePermissions, roles } from "../db/schema";
 import { deepScrub } from "../observability/logger";
 import { generateUlid } from "../utils/id";
+import { sodClearSql } from "./sod-dao";
 
 const keyList = (keys: readonly string[]): SQL => sql.join(keys.map((k) => sql`${k}`), sql`, `);
 
@@ -51,8 +52,10 @@ export function deleteGuard(input: { roleId: string; expectedVersion: number }):
 }
 
 /**
- * New custom role, inserted only while there are fewer than `limit` custom roles and the actor holds every
- * requested code. `label_key` UNIQUE refuses a duplicate label (whole batch rolls back). RETURNING id → 0 rows = refused.
+ * New custom role, inserted only while there are fewer than `limit` custom roles, the actor holds every
+ * requested code, and the set holds both codes of no declared SoD pair (SPEC-07 FR-2 — repeated here so a pair
+ * declared concurrently cannot slip in). `label_key` UNIQUE refuses a duplicate label (whole batch rolls back).
+ * RETURNING id → 0 rows = refused.
  */
 export function insertCustomRoleStmt(
   db: Db,
@@ -72,7 +75,7 @@ export function insertCustomRoleStmt(
   return db
     .insert(roles)
     .select(
-      sql`SELECT ${input.id}, ${input.name}, ${input.description}, ${input.label}, ${input.labelKey}, 0, 1, ${input.now}, ${input.now} WHERE (SELECT COUNT(*) FROM roles lr WHERE lr.is_system = 0) < ${input.limit} AND ${actorHoldsAll(input.actorId, input.permissions)}`,
+      sql`SELECT ${input.id}, ${input.name}, ${input.description}, ${input.label}, ${input.labelKey}, 0, 1, ${input.now}, ${input.now} WHERE (SELECT COUNT(*) FROM roles lr WHERE lr.is_system = 0) < ${input.limit} AND ${actorHoldsAll(input.actorId, input.permissions)} AND ${sodClearSql(input.permissions)}`,
     )
     .returning({ id: roles.id });
 }
@@ -123,6 +126,8 @@ export function updateRoleCasStmt(
     labelKey?: string;
     description?: string | null;
     now: number;
+    /** Extra predicate (SPEC-07 DEC-4: no pending change request on the role). */
+    also?: SQL;
   },
 ) {
   return db
@@ -140,13 +145,14 @@ export function updateRoleCasStmt(
         ne(roles.name, "admin"),
         sql`NOT ${actorCarriesRole(input.actorId, input.roleId)}`,
         actorHoldsAll(input.actorId, input.added),
+        input.also,
       ),
     )
     .returning({ version: roles.version });
 }
 
 /** CAS delete of a custom role nobody carries. RETURNING id → 0 rows = refused. */
-export function deleteRoleCasStmt(db: Db, input: { roleId: string; expectedVersion: number }) {
+export function deleteRoleCasStmt(db: Db, input: { roleId: string; expectedVersion: number; also?: SQL }) {
   return db
     .delete(roles)
     .where(
@@ -155,6 +161,7 @@ export function deleteRoleCasStmt(db: Db, input: { roleId: string; expectedVersi
         eq(roles.version, input.expectedVersion),
         eq(roles.isSystem, 0),
         sql`NOT EXISTS (SELECT 1 FROM user_roles hu WHERE hu.role_id = ${input.roleId})`,
+        input.also,
       ),
     )
     .returning({ id: roles.id });
@@ -164,7 +171,7 @@ export function deleteRoleCasStmt(db: Db, input: { roleId: string; expectedVersi
 export function auditWhenStmt(
   db: Db,
   input: {
-    actor: string;
+    actor: string | null;
     action: string;
     target: string;
     metadata: Record<string, unknown>;

@@ -60,7 +60,8 @@ const DAY_ONE_Q4 = "2026-10-01T03:00:00.000Z";
 /** SPEC-07 FR-10: catalog 16 → 18. */
 const NEW_CODES = ["jit:grant", "reviews:write"];
 
-/** Seed grants of the system roles (0010 + 0017 + SPEC-07 0020: jit:grant, reviews:write → giam_doc). */
+/** Seed grants of the system roles (0010 + 0017 + SPEC-07 0020: jit:grant, reviews:write → giam_doc; SPEC-08 0022:
+ * price:write, product:write → giam_doc + quan_ly). */
 const SEED_GRANTS: Record<string, string[]> = {
   giam_doc: [
     "audit:read",
@@ -70,13 +71,24 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:submit",
     "contract:write",
     "jit:grant",
+    "price:write",
+    "product:write",
     "reviews:write",
     "roles:write",
     "template:write",
     "users:read",
     "users:write",
   ],
-  quan_ly: ["audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write"],
+  quan_ly: [
+    "audit:read",
+    "contract:approve",
+    "contract:issue",
+    "contract:read",
+    "contract:submit",
+    "contract:write",
+    "price:write",
+    "product:write",
+  ],
   nhan_vien: ["contract:read", "contract:submit", "contract:write"],
 };
 
@@ -505,7 +517,7 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     // FR-10 / DEC-13
     const catalog = (await listRoles(gd)).catalog;
     for (const code of NEW_CODES) expect(catalog).toContain(code);
-    expect(catalog).toHaveLength(18);
+    expect(catalog).toHaveLength(20); // + SPEC-08 FR-7 price:write, product:write
     expect(sorted((await me(gd)).permissions)).toEqual(SEED_GRANTS["giam_doc"]);
     for (const p of [admin, ql, nv]) {
       const perms = (await me(p)).permissions;

@@ -6,6 +6,7 @@ import { MeJitSchema } from "../dto/jit";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
+import { findActiveJit } from "../dao/jit-dao";
 import { findUserById } from "../dao/user-dao";
 import { requireAuth } from "../middleware/auth";
 
@@ -72,6 +73,8 @@ export function meRoutes(app: OpenAPIHono<Env>): void {
         401,
       );
     }
+    // SPEC-07: from D1 (never the cache) — the principal already drops JIT at `valid_until`.
+    const jit = await findActiveJit(db, principal.id, Math.floor(Date.now() / 1000));
     return c.json(
       {
         id: user.id,
@@ -79,7 +82,7 @@ export function meRoutes(app: OpenAPIHono<Env>): void {
         display_name: user.displayName,
         roles: [...principal.roles],
         permissions: [...principal.permissions],
-        jit: null, // TODO(C-07-005): active JIT grant from D1
+        jit: jit === null ? null : { expires_at: jit.expires_at },
       },
       200,
     );

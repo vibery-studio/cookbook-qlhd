@@ -149,6 +149,16 @@ const duplicate = (c: Context<Env>) =>
     PROBLEM_HEADERS,
   );
 
+const requestPending = (c: Context<Env>) =>
+  c.json(
+    problem(409, "Role has a pending change request", ProblemType.RequestPending, {
+      ...PROBLEM(c),
+      detail: "The role is locked while a permission change request waits; withdraw it or wait for the decision.",
+    }),
+    409,
+    PROBLEM_HEADERS,
+  );
+
 const deps = (c: Context<Env>): RoleAdminDeps => ({
   db: getDb(c.env),
   kv: c.env.SESSIONS,
@@ -190,6 +200,16 @@ export function rolesRoutes(app: OpenAPIHono<Env>): void {
           409,
           PROBLEM_HEADERS,
         );
+      case "sod-conflict":
+        return c.json(
+          problem(409, "Conflicting permissions", ProblemType.SodConflict, {
+            ...PROBLEM(c),
+            detail: "The permission set holds both codes of a declared conflicting pair; drop one of each.",
+            pairs: res.pairs,
+          }),
+          409,
+          PROBLEM_HEADERS,
+        );
       case "forbidden":
         return forbidden(c, res);
     }
@@ -215,6 +235,8 @@ export function rolesRoutes(app: OpenAPIHono<Env>): void {
         return stale(c);
       case "duplicate":
         return duplicate(c);
+      case "request-pending":
+        return requestPending(c);
       case "forbidden":
         return forbidden(c, res);
     }
@@ -235,6 +257,8 @@ export function rolesRoutes(app: OpenAPIHono<Env>): void {
         return notFound(c);
       case "stale":
         return stale(c);
+      case "request-pending":
+        return requestPending(c);
       case "role-in-use":
         return c.json(
           problem(409, "Role is in use", ProblemType.RoleInUse, {

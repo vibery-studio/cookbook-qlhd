@@ -1,7 +1,7 @@
 import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { problem, problemResponse, ProblemType, type ProblemTypeSlug } from "../dto/error";
 import {
   ApproveChangeRequestBody,
   ApproveChangeRequestResponse,
@@ -17,10 +17,21 @@ import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
 import { requirePerm } from "../middleware/require-permission";
+import { getDb } from "../db/client";
+import {
+  approveRequest,
+  createRequest,
+  listRequests,
+  rejectRequest,
+  withdrawRequest,
+  type ChangeRule,
+  type Forbidden,
+  type RoleChangeDeps,
+} from "../services/role-change-service";
 
 /**
- * SPEC-07 §3.2 / PLAN-07 §2b — four-eyes permission change requests (DEC-1 A). Contract only (C-07-002): handlers
- * answer 501 after the real middleware; C-07-004 fills them.
+ * SPEC-07 §3.2 / PLAN-07 §2b — four-eyes permission change requests (DEC-1 A). Contract: C-07-002; handlers:
+ * C-07-004. Routes own `c`; role-change-service sees plain inputs and returns typed outcomes.
  */
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -29,8 +40,55 @@ const security = [{ cookieAuth: [] }];
 const PROBLEM_HEADERS = { "content-type": "application/problem+json" } as const;
 const tags = ["role-change-requests"];
 
-const notImplemented = (c: Context<Env>) =>
-  c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, PROBLEM_HEADERS);
+const PROBLEM = (c: Context<Env>) => ({ instance: c.req.path, request_id: c.get("requestId") });
+const deps = (c: Context<Env>): RoleChangeDeps => ({
+  db: getDb(c.env),
+  kv: c.env.SESSIONS,
+  now: () => Math.floor(Date.now() / 1000),
+});
+const ipOf = (c: Context<Env>) => c.req.header("cf-connecting-ip") ?? null;
+
+const RULE_DETAIL: Record<ChangeRule, string> = {
+  admin_role: "The admin role is immutable through the API.",
+  own_role: "You cannot change a role you carry (approving a removal from it is allowed).",
+  grant_not_held: "The requester must hold every permission being added.",
+  self_approve: "You sent this request; someone else must decide it.",
+  jit_actor: "Temporary admin access cannot decide permission change requests.",
+};
+
+function forbidden(c: Context<Env>, res: Forbidden) {
+  return c.json(
+    problem(403, "Forbidden", ProblemType.Forbidden, {
+      ...PROBLEM(c),
+      detail: res.rule === undefined ? "Only the requester may do this." : RULE_DETAIL[res.rule],
+      ...(res.rule !== undefined && { rule: res.rule }),
+      ...(res.permissions !== undefined && { permissions: res.permissions }),
+    }),
+    403,
+    PROBLEM_HEADERS,
+  );
+}
+
+const fail = (c: Context<Env>, status: 404 | 409, slug: ProblemTypeSlug, title: string, detail?: string) =>
+  c.json(problem(status, title, slug, { ...PROBLEM(c), ...(detail !== undefined && { detail }) }), status, PROBLEM_HEADERS);
+
+const notFound = (c: Context<Env>, what: string) => fail(c, 404, ProblemType.NotFound, `${what} not found`);
+const notPending = (c: Context<Env>) =>
+  fail(c, 409, ProblemType.NotPending, "Request is no longer pending", "It was already decided, withdrawn or expired.");
+const expired = (c: Context<Env>) =>
+  fail(c, 409, ProblemType.Expired, "Request expired", "Pending requests expire 7 days after they are sent.");
+const stale = (c: Context<Env>) =>
+  fail(c, 409, ProblemType.Stale, "Role was changed by someone else", "expected_version is out of date; reload the role and retry.");
+const sodConflict = (c: Context<Env>, pairs: [string, string][]) =>
+  c.json(
+    problem(409, "Conflicting permissions", ProblemType.SodConflict, {
+      ...PROBLEM(c),
+      detail: "The resulting permission set holds both codes of a declared conflicting pair.",
+      pairs,
+    }),
+    409,
+    PROBLEM_HEADERS,
+  );
 
 const createRequestRoute = createRoute({
   method: "post",
@@ -144,9 +202,121 @@ export function roleChangeRequestsRoutes(app: OpenAPIHono<Env>): void {
   // withdraw: requester-only, decided in the service (C-07-004)
   app.on("post", "/role-change-requests/:id/withdraw", requireAuth());
 
-  app.openapi(createRequestRoute, (c) => notImplemented(c));
-  app.openapi(listRequestsRoute, (c) => notImplemented(c));
-  app.openapi(approveRoute, (c) => notImplemented(c));
-  app.openapi(rejectRoute, (c) => notImplemented(c));
-  app.openapi(withdrawRoute, (c) => notImplemented(c));
+  app.openapi(createRequestRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const body = c.req.valid("json");
+    const res = await createRequest(deps(c), {
+      actorId: principal.id,
+      roleId: c.req.valid("param").id,
+      expectedVersion: body.expected_version,
+      permissions: body.permissions,
+      note: body.note,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.request, 201);
+      case "not-found":
+        return notFound(c, "Role");
+      case "no-change":
+        return c.json(
+          problem(422, "Validation failed", ProblemType.Validation, {
+            ...PROBLEM(c),
+            errors: [{ path: "permissions", message: "The new set equals the current one; nothing to change." }],
+          }),
+          422,
+          PROBLEM_HEADERS,
+        );
+      case "sod-conflict":
+        return sodConflict(c, res.pairs);
+      case "stale":
+        return stale(c);
+      case "request-pending":
+        return fail(
+          c,
+          409,
+          ProblemType.RequestPending,
+          "Role has a pending change request",
+          "One pending request per role; withdraw it or wait for the decision.",
+        );
+      case "no-eligible-approver":
+        return fail(
+          c,
+          409,
+          ProblemType.NoEligibleApprover,
+          "Nobody else can approve this request",
+          "No other active user holds roles:write permanently (without temporary admin) and may approve it.",
+        );
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
+
+  app.openapi(listRequestsRoute, async (c) => {
+    const principal = c.get("principal")!;
+    return c.json(await listRequests(deps(c), { actorId: principal.id, status: c.req.valid("query").status }), 200);
+  });
+
+  app.openapi(approveRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const res = await approveRequest(deps(c), {
+      actorId: principal.id,
+      id: c.req.valid("param").id,
+      note: c.req.valid("json").note,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json({ request: res.request, role: res.role }, 200);
+      case "not-found":
+        return notFound(c, "Request");
+      case "not-pending":
+        return notPending(c);
+      case "expired":
+        return expired(c);
+      case "stale":
+        return stale(c);
+      case "sod-conflict":
+        return sodConflict(c, res.pairs);
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
+
+  app.openapi(rejectRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const res = await rejectRequest(deps(c), {
+      actorId: principal.id,
+      id: c.req.valid("param").id,
+      note: c.req.valid("json").note,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.request, 200);
+      case "not-found":
+        return notFound(c, "Request");
+      case "not-pending":
+        return notPending(c);
+      case "expired":
+        return expired(c);
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
+
+  app.openapi(withdrawRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const res = await withdrawRequest(deps(c), { actorId: principal.id, id: c.req.valid("param").id, ip: ipOf(c) });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.request, 200);
+      case "not-found":
+        return notFound(c, "Request");
+      case "not-pending":
+        return notPending(c);
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
 }

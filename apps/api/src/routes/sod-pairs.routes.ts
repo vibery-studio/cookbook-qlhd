@@ -1,16 +1,18 @@
 import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { problem, problemResponse, ProblemType } from "../dto/error";
 import { CreateSodPairBody, SodPairIdParam, SodPairList, SodPairSchema } from "../dto/sod";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
 import { requirePerm } from "../middleware/require-permission";
+import { getDb } from "../db/client";
+import { addPair, listPairs, removePair, type SodDeps } from "../services/sod-service";
 
 /**
- * SPEC-07 §3.2 — separation-of-duties permission pairs (FR-1, DEC-9 B). Contract only (C-07-002): handlers answer
- * 501 after the real middleware; C-07-003 fills them.
+ * SPEC-07 §3.2 — separation-of-duties permission pairs (FR-1, DEC-9 B). Contract: C-07-002; handlers: C-07-003.
+ * Routes own `c`; the service sees plain inputs.
  */
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -19,8 +21,9 @@ const security = [{ cookieAuth: [] }];
 const PROBLEM_HEADERS = { "content-type": "application/problem+json" } as const;
 const tags = ["sod-pairs"];
 
-const notImplemented = (c: Context<Env>) =>
-  c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, PROBLEM_HEADERS);
+const PROBLEM = (c: Context<Env>) => ({ instance: c.req.path, request_id: c.get("requestId") });
+const deps = (c: Context<Env>): SodDeps => ({ db: getDb(c.env), now: () => Math.floor(Date.now() / 1000) });
+const ipOf = (c: Context<Env>) => c.req.header("cf-connecting-ip") ?? null;
 
 const listRoute = createRoute({
   method: "get",
@@ -74,7 +77,49 @@ export function sodPairsRoutes(app: OpenAPIHono<Env>): void {
   app.on("post", "/sod-pairs", requireAuth(), requirePerm("roles:write"));
   app.on("delete", "/sod-pairs/:id", requireAuth(), requirePerm("roles:write"));
 
-  app.openapi(listRoute, (c) => notImplemented(c));
-  app.openapi(createRouteDef, (c) => notImplemented(c));
-  app.openapi(deleteRouteDef, (c) => notImplemented(c));
+  app.openapi(listRoute, async (c) => c.json(await listPairs(getDb(c.env)), 200));
+
+  app.openapi(createRouteDef, async (c) => {
+    const principal = c.get("principal")!;
+    const body = c.req.valid("json");
+    const res = await addPair(deps(c), {
+      actorId: principal.id,
+      permA: body.perm_a,
+      permB: body.perm_b,
+      reason: body.reason,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.pair, 201);
+      case "duplicate":
+        return c.json(
+          problem(409, "Pair already declared", ProblemType.Duplicate, {
+            ...PROBLEM(c),
+            detail: "This pair (in either order) is already declared.",
+          }),
+          409,
+          PROBLEM_HEADERS,
+        );
+      case "sod-conflict":
+        return c.json(
+          problem(409, "Roles already hold both permissions", ProblemType.SodConflict, {
+            ...PROBLEM(c),
+            detail: "Remove one of the two permissions from these roles first.",
+            roles: res.roles,
+          }),
+          409,
+          PROBLEM_HEADERS,
+        );
+    }
+  });
+
+  app.openapi(deleteRouteDef, async (c) => {
+    const principal = c.get("principal")!;
+    const res = await removePair(deps(c), { actorId: principal.id, id: c.req.valid("param").id, ip: ipOf(c) });
+    if (res.kind === "not-found") {
+      return c.json(problem(404, "Pair not found", ProblemType.NotFound, PROBLEM(c)), 404, PROBLEM_HEADERS);
+    }
+    return c.body(null, 204);
+  });
 }

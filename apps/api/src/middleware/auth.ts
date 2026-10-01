@@ -18,9 +18,10 @@ import { verifyAccessToken } from "@runway/auth";
 import type { Bindings } from "../env";
 import type { Principal, Variables } from "../openapi";
 import { isJtiRevoked } from "../dao/jwt-revocation-dao";
-import { listPermissionKeysForUser } from "../dao/permission-dao";
+import { findActiveJit } from "../dao/jit-dao";
+import { listPermissionKeysForRoleNames, listPermissionKeysForUser } from "../dao/permission-dao";
 import { listRoleNamesForUser } from "../dao/role-dao";
-import { getCachedPrincipal, setCachedPrincipal } from "../dao/session-cache";
+import { getCachedPrincipal, PRINCIPAL_CACHE_TTL_SECONDS, setCachedPrincipal } from "../dao/session-cache";
 import { findUserById } from "../dao/user-dao";
 import { getDb } from "../db/client";
 import { problem, ProblemType, PROBLEM_TYPE_BASE } from "../dto/error";
@@ -87,7 +88,9 @@ async function loadPrincipal(
   userId: string,
 ): Promise<Principal | null> {
   const kv = c.env.SESSIONS;
-  const cached = await getCachedPrincipal(kv, userId);
+  // SPEC-07 DEC-8: one clock for the cache check and the JIT read (tests pin it with vi.setSystemTime).
+  const now = Math.floor(Date.now() / 1000);
+  const cached = await getCachedPrincipal(kv, userId, now);
   if (cached !== null) {
     return {
       id: cached.id,
@@ -101,15 +104,18 @@ async function loadPrincipal(
   if (user === null) return null;
   if (user.status === "disabled") return null;
 
-  // Two parallel joins: user_roles → roles (names) and user_roles →
-  // role_permissions → permissions (keys). Both are keyed off the same
-  // user_roles rows, so a single D1 batch is possible but the DAO
-  // interfaces are cleaner kept apart; the extra ~5ms latency is fine
-  // for a session-cache miss path (hot path is KV read).
-  const [roles, permissions] = await Promise.all([
+  // Cache-miss path only (SPEC-07 R-2): user_roles → names + keys, and the active JIT grant, in parallel.
+  const [roleNames, ownPermissions, jit] = await Promise.all([
     listRoleNamesForUser(db, user.id),
     listPermissionKeysForUser(db, user.id),
+    findActiveJit(db, user.id, now),
   ]);
+
+  // DEC-6 A: during a JIT grant the principal is `admin` ONLY (replace, not add). Guards that must not see JIT read
+  // D1 `user_roles` themselves (DEC-7) — `listRoleNamesForUser` is unchanged.
+  const roles = jit === null ? roleNames : [jit.role_name];
+  const permissions = jit === null ? ownPermissions : await listPermissionKeysForRoleNames(db, [jit.role_name]);
+  const validUntil = jit === null ? now + PRINCIPAL_CACHE_TTL_SECONDS : Math.min(now + PRINCIPAL_CACHE_TTL_SECONDS, jit.expires_at);
 
   const principal: Principal = { id: user.id, roles, permissions };
 
@@ -117,6 +123,7 @@ async function loadPrincipal(
     id: principal.id,
     roles: [...roles],
     permissions: [...permissions],
+    valid_until: validUntil,
   });
 
   return principal;
