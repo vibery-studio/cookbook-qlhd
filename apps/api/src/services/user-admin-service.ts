@@ -216,9 +216,9 @@ export async function loadAssignContext(db: Db, actorId: string): Promise<Assign
 /** Writes the one `permission.denied` row of a refusal (403) and returns it; other refusals pass through. */
 async function refuse(
   db: Db,
-  refusal: AssignRefusal,
+  refusal: AssignRefusal | { kind: "forbidden"; rule: "self_disable" },
   input: { actorId: string; target: string; role: string; ip?: string | null },
-): Promise<AssignRefusal> {
+): Promise<AssignRefusal | { kind: "forbidden"; rule: "self_disable" }> {
   if (refusal.kind === "unknown-role") return refusal;
   await writeAuditEvent(db, {
     actor: input.actorId,

@@ -29,10 +29,12 @@ export interface AssignTarget {
   roles: readonly string[];
 }
 
-export type EscalationRule = "self_role" | "self_disable" | "admin_only" | "owner_only" | "root_role";
+/** Rules of a role assignment; `self_disable` is the extra rule of a status change. */
+export type RoleRule = "self_role" | "admin_only" | "owner_only" | "root_role";
+export type EscalationRule = RoleRule | "self_disable";
 
 export type AssignRefusal =
-  | { kind: "forbidden"; rule: EscalationRule }
+  | { kind: "forbidden"; rule: RoleRule }
   | { kind: "unknown-role" }
   | { kind: "grant-not-held"; missing: string[] };
 
@@ -88,7 +90,7 @@ export function assignRefusal(ctx: AssignContext, input: { target: AssignTarget 
 // ------------------------------------------------------------------ the list view (GET /admin/users)
 
 /** Why an option of the role select is locked — the rule the API would answer with. */
-export type RoleOptionLock = EscalationRule | "grant_not_held";
+export type RoleOptionLock = RoleRule | "grant_not_held";
 /** Why a whole action of a user row is locked. `self_disable` / `pending` are the status rules (see `statusLock`). */
 export type ChangeRoleLock = RoleOptionLock | "no_role_option";
 export type StatusLock = "admin_only" | "self_disable" | "pending";
