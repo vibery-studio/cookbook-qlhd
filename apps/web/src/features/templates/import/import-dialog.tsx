@@ -57,7 +57,7 @@ export function ImportDialog({ templates, initial, onClose, onSaved, onOpenTempl
   const [templateId, setTemplateId] = useState(initial.mode === "version" ? initial.templateId : (templates[0]?.id ?? ""));
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [type, setType] = useState<ImportType>(IMPORT_TYPES[0].value);
+  const [type, setType] = useState<ImportType>("contract");
   const [linesTable, setLinesTable] = useState<number | undefined>(undefined);
 
   const [preview, setPreview] = useState<ImportPreview | null>(null);

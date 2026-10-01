@@ -15,6 +15,7 @@ import {
   versionBody,
   type FieldRow,
 } from "./import-logic";
+import { IMPORT_TYPES } from "./type-select";
 
 type Preview = components["schemas"]["TemplateImportPreview"];
 type Placeholder = components["schemas"]["TemplateImportPlaceholder"];
@@ -61,10 +62,15 @@ describe("save payload (P-3: web sets the note)", () => {
   const p = preview([ph("a", {}, { label: "Nhãn A" })]);
   const rows = rowsFromPreview(p);
   it("note", () => expect(importNote("Bao_Gia.docx")).toBe("Nhập từ Bao_Gia.docx"));
+  it("type options: value = row-4 key (never the label), label from DOC_TYPE_LABEL, DOC_TYPES order", () => {
+    expect(IMPORT_TYPES.map((t) => t.value)).toEqual(["quote", "contract", "payment_request", "delivery_note"]);
+    expect(IMPORT_TYPES.map((t) => t.label)).toEqual(["Báo giá", "Hợp đồng", "Đề nghị thanh toán", "Phiếu xuất kho"]);
+    for (const t of IMPORT_TYPES) expect(t.value).not.toBe(t.label);
+  });
   it("new template body", () => {
-    const body = createBody({ type: "contract", name: "Bao Gia", fileName: "Bao_Gia.docx", preview: p, rows });
+    const body = createBody({ type: "quote", name: "Bao Gia", fileName: "Bao_Gia.docx", preview: p, rows });
     expect(body).toMatchObject({
-      type: "contract",
+      type: "quote",
       name: "Bao Gia",
       subject_type: "customer",
       version: {

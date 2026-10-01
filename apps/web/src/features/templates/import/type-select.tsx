@@ -1,8 +1,10 @@
+import { DOC_TYPES, DOC_TYPE_LABEL, type DocType } from "../../contracts/doc-type-labels";
 import { SELECT_CLASS } from "../../products/price-fields";
 
-/** C-10-005 widens this list (Báo giá, Đề nghị thanh toán, Phiếu xuất kho); today only the contract type exists for import. */
-export const IMPORT_TYPES = [{ value: "contract", label: "Hợp đồng" }] as const;
-export type ImportType = (typeof IMPORT_TYPES)[number]["value"];
+/** C-10-005 — the four row-4 document types; value = `DocType` key sent as `templates.type`, label from the shared labels (DOC_TYPES order). */
+type ImportTypeOption = { value: DocType; label: string };
+export const IMPORT_TYPES = DOC_TYPES.map((value) => ({ value, label: DOC_TYPE_LABEL[value] })) as [ImportTypeOption, ...ImportTypeOption[]];
+export type ImportType = DocType;
 
 export function TypeSelect({ value, onChange, disabled }: { value: ImportType; onChange: (value: ImportType) => void; disabled?: boolean }) {
   return (
