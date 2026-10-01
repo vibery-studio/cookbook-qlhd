@@ -32,6 +32,7 @@
     "db:seed:admin": "tsx scripts/seed-admin.ts",
     "dev:reset": "tsx scripts/dev-reset.ts",
     "dev:seed-admin": "tsx scripts/dev-seed-admin.ts",
+    "dev:seed-team": "tsx scripts/dev-seed-team.ts",
     "deploy:preflight": "tsx scripts/deploy-preflight.ts",
     "deploy:verify": "tsx scripts/deploy-verify.ts",
     "deploy:rollback": "tsx scripts/deploy-rollback.ts",
@@ -58,6 +59,9 @@
         "@vitest/snapshot": "4.1.0",
         "@cloudflare/workers-types": "5.20260918.1"
       }
+    },
+    "patchedDependencies": {
+      "@cloudflare/vitest-pool-workers@0.9.9": "patches/@cloudflare__vitest-pool-workers@0.9.9.patch"
     }
   }
 }
