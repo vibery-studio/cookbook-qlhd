@@ -303,7 +303,7 @@ describe("delete draft (integration)", () => {
     expect(src?.replaced_by_id).toBeNull();
     const rows = await auditRows("contract.deleted", `contract:${copy.id}`);
     expect(rows).toHaveLength(1);
-    expect(JSON.parse(rows[0]!.metadata!)).toEqual({ id: copy.id });
+    expect(JSON.parse(rows[0]!.metadata!)).toEqual({ id: copy.id, type: "contract" });
     expect((await del(t.nv, copy.id)).status).toBe(404);
     expect(await orphanSteps()).toBe(0);
   }, 60_000);

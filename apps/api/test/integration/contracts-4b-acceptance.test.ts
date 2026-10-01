@@ -455,7 +455,7 @@ describe("SPEC-04b API (acceptance)", () => {
 
     const withdrawn = await auditRows("contract.withdrawn", `contract:${d.id}`);
     expect(withdrawn).toHaveLength(1);
-    expect(JSON.parse(withdrawn[0]!.metadata!)).toEqual({ from: "pending", to: "draft" });
+    expect(JSON.parse(withdrawn[0]!.metadata!)).toEqual({ from: "pending", to: "draft", type: "contract" });
     expect(withdrawn[0]!.actor).toBe(t.nv.userId);
     expect(await auditRows("contract.submitted", `contract:${d.id}`)).toHaveLength(1);
 
@@ -537,7 +537,7 @@ describe("SPEC-04b API (acceptance)", () => {
     const rows = await auditRows("contract.deleted", `contract:${d.id}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe(t.nv.userId);
-    expect(JSON.parse(rows[0]!.metadata!)).toEqual({ id: d.id });
+    expect(JSON.parse(rows[0]!.metadata!)).toEqual({ id: d.id, type: "contract" });
     for (const secret of ["Cô Ba", "0901", "coba", "2565000", "Lê Lợi"]) expect(rows[0]!.metadata).not.toContain(secret);
 
     // second DELETE → 404 (the UI treats it as done)

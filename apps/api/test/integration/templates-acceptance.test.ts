@@ -87,30 +87,23 @@ interface CheckProblem {
 // ---- fixtures ----------------------------------------------------------------------------------------------------
 /**
  * `template_versions` is append-only (a DB trigger refuses UPDATE/DELETE — AC-10), so the per-test reset
- * drops that trigger, removes what tests created, puts the seed template back on its seeded current version (v2 since
- * SPEC-08 migration 0023; v1 kept), and recreates the trigger.
+ * drops that trigger, removes what tests created (every row with a `created_by` — the migration seeds have NULL), puts each
+ * seed template back on its latest seeded version (contract v3 since SPEC-09 migration 0026; v1/v2 kept; quote,
+ * payment_request, delivery_note v1), and recreates the trigger.
  * Everything is raw SQL and tolerant of a missing table (red run).
  */
 async function resetTemplates(): Promise<void> {
   try {
-    const seed = await env.DB.prepare("SELECT id FROM templates WHERE name = ?").bind(SEED_NAME).first<{ id: string }>();
     const triggers = await env.DB.prepare(
       "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'template_versions'",
     ).all<{ name: string; sql: string }>();
     for (const t of triggers.results) await env.DB.prepare(`DROP TRIGGER ${t.name}`).run();
     try {
-      if (seed) {
-        await env.DB.prepare("DELETE FROM template_versions WHERE template_id <> ? OR version_no > 2").bind(seed.id).run();
-        await env.DB.prepare("DELETE FROM templates WHERE id <> ?").bind(seed.id).run();
-        await env.DB.prepare(
-          "UPDATE templates SET current_version_id = (SELECT id FROM template_versions WHERE template_id = templates.id AND version_no = 2) WHERE id = ?",
-        )
-          .bind(seed.id)
-          .run();
-      } else {
-        await env.DB.prepare("DELETE FROM template_versions").run();
-        await env.DB.prepare("DELETE FROM templates").run();
-      }
+      await env.DB.prepare("DELETE FROM template_versions WHERE created_by IS NOT NULL").run();
+      await env.DB.prepare("DELETE FROM templates WHERE created_by IS NOT NULL").run();
+      await env.DB.prepare(
+        "UPDATE templates SET current_version_id = (SELECT id FROM template_versions WHERE template_id = templates.id ORDER BY version_no DESC LIMIT 1)",
+      ).run();
     } finally {
       for (const t of triggers.results) await env.DB.prepare(t.sql).run();
     }
@@ -221,11 +214,11 @@ async function auditRows(s: RunwaySession, action: string) {
   return body.items;
 }
 
-// SPEC-02 §3.4 + SPEC-08 §3.4 (seed v2, migration 0023) — the 20 placeholders and where each value comes from
+// SPEC-02 §3.4 + SPEC-08 §3.4 + SPEC-09 FR-13 (seed v3, migration 0026) — the 20 placeholders and where each value comes from
 const SEED_SOURCES: Record<string, string> = {
   so_hop_dong: "issue:number",
-  so_bao_gia: "manual",
-  ngay_bao_gia: "manual",
+  so_bao_gia: "parent:number",
+  ngay_bao_gia: "parent:doc_date",
   ngay_hop_dong: "derived:doc_date",
   ten_cua_hang: "subject:name",
   ten_khach: "subject:contact_person",
@@ -245,8 +238,12 @@ const SEED_SOURCES: Record<string, string> = {
   tong_thanh_toan_bang_chu: "derived:total_in_words",
 };
 
-/** The seed's current version (v2 since SPEC-08 DEC-8); a POSTed version becomes SEED_V + 1. */
-const SEED_V = 2;
+/** The seed's current version (v3 since SPEC-09 FR-13, migration 0026); a POSTed version becomes SEED_V + 1. */
+const SEED_V = 3;
+/** SPEC-09 FR-13: one seed template per document type (migration 0026). */
+const SEED_TYPES = ["contract", "delivery_note", "payment_request", "quote"];
+const SEED_COUNT = SEED_TYPES.length;
+const seedItem = (list: TemplateList) => list.items.find((i) => i.name === SEED_NAME);
 
 describe("SPEC-02 templates (acceptance)", () => {
   beforeEach(async () => {
@@ -255,23 +252,25 @@ describe("SPEC-02 templates (acceptance)", () => {
     _resetJtiCache();
   });
 
-  it("AC-1: after migrate, all three roles see exactly the one seeded template at v2 (v1 kept) with its approval policy", async () => {
+  it("AC-1: after migrate, all three roles see the seeded templates (one per type; contract at v3, v1/v2 kept) with its approval policy", async () => {
     const { gd, ql, nv } = await team();
     for (const s of [nv.session, ql.session, gd.session]) {
       const res = await s.fetch("/templates");
       expect(res.status).toBe(200);
       const list: TemplateList = await res.json();
-      expect(list.items).toHaveLength(1);
-      expect(list.items[0]).toMatchObject({ name: SEED_NAME, type: "contract", active: true });
-      expect(list.items[0]?.current_version.version_no).toBe(SEED_V);
-      expect(list.items[0]?.required_fields).toContain("chuc_vu_nguoi_ky");
-      expect(list.items[0]).not.toHaveProperty("body"); // list has no body (§3.8)
+      expect(list.items).toHaveLength(SEED_COUNT);
+      expect(list.items.map((i) => i.type).sort()).toEqual(SEED_TYPES);
+      const item = seedItem(list);
+      expect(item).toMatchObject({ name: SEED_NAME, type: "contract", active: true });
+      expect(item?.current_version.version_no).toBe(SEED_V);
+      expect(item?.required_fields).toContain("chuc_vu_nguoi_ky");
+      expect(item).not.toHaveProperty("body"); // list has no body (§3.8)
     }
 
     const t = await getSeed(nv.session);
     expect(t.subject_type).toBe("customer");
     expect(t.version.version_no).toBe(SEED_V);
-    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
     expect(t.version.approval_policy).toEqual({
       mode: "combined",
       steps: [{ step_no: 1, label: "Quản lý duyệt", permission: "contract:approve" }],
@@ -291,7 +290,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(t.version.default_clauses).toEqual([]);
   });
 
-  it("AC-2: seed body v2 — no internal note, 20 placeholders each with the right source, chuc_vu_nguoi_ky manual + required, so_bao_gia/ngay_bao_gia optional + all_or_none, {{#if}} wraps 'Căn cứ'", async () => {
+  it("AC-2: seed body v3 — no internal note, 20 placeholders each with the right source, chuc_vu_nguoi_ky manual + required, so_bao_gia/ngay_bao_gia optional from the parent (no all_or_none), {{#if}} wraps 'Căn cứ'", async () => {
     const { nv } = await team();
     const t = await getSeed(nv.session);
     const body = t.version.body;
@@ -311,7 +310,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(byKey.get("chuc_vu_nguoi_ky")).toMatchObject({ source: "manual", required: true });
     expect(byKey.get("so_bao_gia")?.required).toBe(false);
     expect(byKey.get("ngay_bao_gia")?.required).toBe(false);
-    expect(t.version.field_rules).toContainEqual({ all_or_none: ["so_bao_gia", "ngay_bao_gia"] });
+    expect(t.version.field_rules).toEqual([]); // SPEC-09 §3.1: both come from the parent together
     for (const k of ["ten_khach", "sdt", "email"]) expect(byKey.get(k)?.required, k).toBe(true); // DEC-8
     // SPEC-08: packages + quantities are document lines now — no ma_goi / so_cua_hang / tong_tien, no price_list source
     for (const gone of ["ma_goi", "so_cua_hang", "tong_tien"]) expect(byKey.has(gone), gone).toBe(false);
@@ -321,7 +320,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(body).toContain("CÔNG TY TNHH PHẦN MỀM NHẬT MINH"); // Bên A stays in the body (DEC-4)
   });
 
-  it("AC-3: Giám đốc posts v3 (expected_version_no 2) → 201; v3 becomes current; v2 is byte-for-byte unchanged", async () => {
+  it("AC-3: Giám đốc posts v4 (expected_version_no 3) → 201; v4 becomes current; v3 is byte-for-byte unchanged", async () => {
     const { gd, nv } = await team();
     const seed = await getSeed(gd.session);
     // compare the v2 VERSION object only — the detail's `versions[]` list legitimately gains v3
@@ -341,9 +340,9 @@ describe("SPEC-02 templates (acceptance)", () => {
     const now: TemplateDetail = await (await nv.session.fetch(`/templates/${seed.id}`)).json();
     expect(now.version.version_no).toBe(SEED_V + 1);
     expect(now.version.body).toBe(edited);
-    expect(now.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
+    expect(now.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3, 4]);
     const list: TemplateList = await (await nv.session.fetch("/templates")).json();
-    expect(list.items[0]?.current_version.version_no).toBe(SEED_V + 1);
+    expect(seedItem(list)?.current_version.version_no).toBe(SEED_V + 1);
 
     const v1After = await v1Of(nv.session);
     expect(v1After).toBe(v1Before);
@@ -378,7 +377,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     for (const e of p.errors) expect(e.message.length).toBeGreaterThan(0);
 
     const after: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(after.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
+    expect(after.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
     expect((await auditRows(gd.session, "template.version_created")).length).toBe(auditBefore);
   });
 
@@ -435,7 +434,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(after.versions).toHaveLength(SEED_V);
   });
 
-  it("AC-6: two concurrent POSTs with the same expected_version_no → exactly one 201 and one 409 stale; versions 1, 2 and 3 only", async () => {
+  it("AC-6: two concurrent POSTs with the same expected_version_no → exactly one 201 and one 409 stale; versions 1, 2, 3 and 4 only", async () => {
     const { admin, gd } = await team();
     const other = await invite(admin, "giam_doc", "hai@nhatminh.vn", "Giám đốc hai");
     const seed = await getSeed(gd.session);
@@ -448,10 +447,10 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(loserBody.type).toMatch(/\/stale$/);
 
     const t: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3, 4]);
     expect(t.version.version_no).toBe(SEED_V + 1);
     const rows = await env.DB.prepare("SELECT version_no FROM template_versions WHERE template_id = ? ORDER BY version_no").bind(seed.id).all<{ version_no: number }>();
-    expect(rows.results.map((r) => r.version_no)).toEqual([1, 2, 3]);
+    expect(rows.results.map((r) => r.version_no)).toEqual([1, 2, 3, 4]);
     expect(await auditRows(gd.session, "template.version_created")).toHaveLength(1);
   });
 
@@ -466,7 +465,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(r2.status).toBe(201);
     expect(await r2.text()).toBe(await r1.text());
     const t: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3, 4]);
     expect(await auditRows(gd.session, "template.version_created")).toHaveLength(1);
   });
 
@@ -498,8 +497,8 @@ describe("SPEC-02 templates (acceptance)", () => {
     }
 
     const list: TemplateList = await (await gd.session.fetch("/templates")).json();
-    expect(list.items).toHaveLength(1);
-    expect(list.items[0]?.current_version.version_no).toBe(SEED_V);
+    expect(list.items).toHaveLength(SEED_COUNT);
+    expect(seedItem(list)?.current_version.version_no).toBe(SEED_V);
     expect((await admin.fetch("/templates")).status).toBe(403);
     expect((await admin.fetch(`/templates/${seed.id}`)).status).toBe(403);
   });
@@ -507,8 +506,8 @@ describe("SPEC-02 templates (acceptance)", () => {
   it("AC-9: every successful POST writes exactly one template.created / template.version_created row (no body in metadata); GET /audit shows it", async () => {
     const { gd } = await team();
     const seedRow = await env.DB.prepare("SELECT actor, target FROM audit_events WHERE action = 'template.created' AND actor IS NULL").all<{ actor: string | null; target: string }>();
-    expect(seedRow.results).toHaveLength(1); // the migration's own row (DEC-5)
-    expect(seedRow.results[0]?.target).toMatch(/^template:/);
+    expect(seedRow.results).toHaveLength(SEED_COUNT); // the migrations' own rows (DEC-5; 0013 + 0026)
+    for (const r of seedRow.results) expect(r.target).toMatch(/^template:/);
 
     const created = await postTemplate(gd.session, "Mẫu thử nghiệm AC-9");
     expect(created.status).toBe(201);
@@ -569,7 +568,9 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(dupSeed.status).toBe(409);
 
     const list: TemplateList = await (await nv.session.fetch("/templates")).json();
-    expect(list.items.map((i) => i.name).sort()).toEqual([SEED_NAME, "Phiếu đề nghị thanh toán"].sort());
+    expect(list.items).toHaveLength(SEED_COUNT + 1);
+    expect(list.items.map((i) => i.name)).toContain(SEED_NAME);
+    expect(list.items.filter((i) => i.name === "Phiếu đề nghị thanh toán")).toHaveLength(1);
     // wrong shape → 422 validation (not template-check-failed)
     const shape = await gd.session.fetch("/templates", { method: "POST", body: JSON.stringify({ type: "contract", name: "X" }) });
     expect(shape.status).toBe(422);

@@ -455,10 +455,10 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect(html).toContain("NHÁP");
     expect(html).toContain("(chưa có số)");
 
-    const withQuote = await create(t.nv, tpl, c.id, { ...BASE_VALUES, so_bao_gia: "BG-2026-001", ngay_bao_gia: "2026-09-20" });
-    expect((await render(t.nv, withQuote.id)).html).toContain("Căn cứ báo giá số BG-2026-001 ngày 20/09/2026.");
-
-    // DEC-8: the pair goes together
+    // SPEC-09 FR-13 (template v3, migration 0026): so_bao_gia/ngay_bao_gia come from the parent quote only (doc-types AC-4
+    // prints "Căn cứ báo giá số …"); typed by hand — the pair or one of them — they are not manual fields → 422
+    const typed = await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, so_bao_gia: "BG-2026-001", ngay_bao_gia: "2026-09-20" });
+    expect(typed.status).toBe(422);
     const half = await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, so_bao_gia: "BG-2026-001" });
     expect(half.status).toBe(422);
   });

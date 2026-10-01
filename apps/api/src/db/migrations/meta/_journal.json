@@ -183,6 +183,13 @@
       "when": 1790859486203,
       "tag": "0025_seed_doc_type_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1790860156902,
+      "tag": "0026_seed_doc_type_templates",
+      "breakpoints": true
     }
   ]
 }
