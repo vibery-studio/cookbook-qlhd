@@ -28,5 +28,5 @@ Asked by: bạn (phiên feedback 2026-10-01) · Written: 2026-10-01
   - A. **Cloudflare Browser Rendering** (Chrome headless qua binding) in `rendered_html` đã lưu → PDF, lưu vào **R2**; tạo qua Queue sau khi phát hành (thử lại tự động). Đẹp đúng bản in, ít code nhất. Cần: bật Browser Rendering + tạo 1 bucket R2 (bạn làm, `docs/deploy.md`); có giới hạn phút/ngày theo gói.
   - B. Thư viện JS dựng PDF trong Worker (pdf-lib/pdfmake): không dịch vụ ngoài, nhưng phải vẽ lại bố cục tờ giấy bằng code + nhúng font tiếng Việt; dễ lệch bản in, mỗi mẫu mới (row 3–4) phải vẽ lại.
   - C. Tạo PDF ở trình duyệt (html2pdf): 1 nút, không hạ tầng, nhưng không đạt OUT-2 (khác theo máy) và OUT-3 (không lưu).
-  - Khuyến nghị: **A** — chỉ A đạt cả OUT-1/2/3, và tự đúng cho mọi mẫu/loại tài liệu sau này. → answer:
+  - Khuyến nghị: **A** — chỉ A đạt cả OUT-1/2/3, và tự đúng cho mọi mẫu/loại tài liệu sau này. → answer: **A** (bạn chốt 2026-10-01)
 - [Q-2] Tài liệu đã hủy: vẫn tải PDF gốc (bản đã gửi khách)? Khuyến nghị: **có, file gốc không đổi**; trạng thái "Đã hủy" hiện trên app, không đóng dấu vào file. → answer: **có, file gốc** (bạn chốt 2026-10-01)
