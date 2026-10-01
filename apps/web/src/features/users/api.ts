@@ -4,8 +4,6 @@ import { ApiProblemError, client } from "../../lib/client";
 import { networkProblemMessage, problemMessage, problemSlug } from "../../lib/problem-messages";
 
 export type AdminUser = components["schemas"]["AdminUser"];
-export type AssignableRole = "giam_doc" | "quan_ly" | "nhan_vien" | "admin";
-export type InviteRole = "giam_doc" | "quan_ly" | "nhan_vien";
 export type ActivationLink = { url: string; expiresAt: number };
 
 const PAGE_SIZE = 50;
@@ -52,7 +50,7 @@ export function useUsers() {
 export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { email: string; display_name: string; role: InviteRole; key: string }): Promise<ActivationLink> => {
+    mutationFn: async (input: { email: string; display_name: string; role: string; key: string }): Promise<ActivationLink> => {
       const { key, ...body } = input;
       const data = await unwrap(
         client.typed.POST("/admin/users", { body, params: { header: { "Idempotency-Key": key } } }) as Raw<{
@@ -87,7 +85,7 @@ export function useReinvite() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; role?: AssignableRole; status?: "active" | "disabled" }) => {
+    mutationFn: async (input: { id: string; role?: string; status?: "active" | "disabled" }) => {
       const { id, ...body } = input;
       await unwrap(client.typed.PATCH("/admin/users/{id}", { params: { path: { id } }, body }) as Raw<AdminUser>);
     },

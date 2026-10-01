@@ -10,6 +10,7 @@ export type Me = {
   permissions: string[];
 };
 
+/** Fallback labels for the built-in roles, used until GET /roles loads (the API label wins — see roles-query.ts). */
 export const roleLabels: Record<string, string> = {
   admin: "Quản trị hệ thống",
   member: "Thành viên (nền)",
@@ -17,10 +18,6 @@ export const roleLabels: Record<string, string> = {
   quan_ly: "Quản lý",
   nhan_vien: "Nhân viên",
 };
-
-export function roleLabel(roles: readonly string[]): string {
-  return roleLabels[roles[0] ?? ""] ?? roles[0] ?? "Thành viên";
-}
 
 async function fetchMe(): Promise<Me> {
   const result = await client.me();

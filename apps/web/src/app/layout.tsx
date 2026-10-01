@@ -3,7 +3,8 @@ import { NavLink, Outlet, useNavigate } from "react-router";
 import { client, queryClient } from "../lib/client";
 import { cn } from "../lib/cn";
 import { Icon } from "../ui";
-import { roleLabel, useCurrentUser } from "./me";
+import { useCurrentUser } from "./me";
+import { useRoleLabelOf } from "./roles-query";
 import { navRegistry } from "./nav";
 import type { NavItem } from "./route-types";
 
@@ -27,6 +28,8 @@ function Brand({ mobile = false }: { mobile?: boolean }) {
 
 export function AppShell({ children }: { children?: ReactNode }) {
   const user = useCurrentUser();
+  const labelOf = useRoleLabelOf();
+  const roleChip = labelOf(user.roles[0] ?? "") || "Thành viên";
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
@@ -93,7 +96,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
               <div className="truncate text-md font-semibold text-strong" title={userLabel}>{userLabel}</div>
               <div className="truncate text-sm text-muted" title={user.email}>{user.email}</div>
             </div>
-            <span className="shrink-0 rounded-full border border-accent-border bg-accent-soft px-s2 py-s1 text-sm font-medium text-accent">{roleLabel(user.roles)}</span>
+            <span className="shrink-0 rounded-full border border-accent-border bg-accent-soft px-s2 py-s1 text-sm font-medium text-accent">{roleChip}</span>
           </div>
           <button
             type="button"
