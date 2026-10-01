@@ -1,6 +1,6 @@
 # PLAN-06: Quản lý vai trò — sửa quyền, thêm vai trò, clone vai trò
 
-Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền)
+Status: Done 2026-10-01 (driver chốt — bạn ủy quyền)
 Spec: docs/spec/SPEC-06.md (Approved 2026-10-01; §0 bổ sung: FR-12, FR-13, `member` không gán được, AC-9, AC-10)
 Roadmap row: ROADMAP-02 row 2. Phụ thuộc ngoài: **FIX-03** (DEC-5: `self_role`/`admin_only`) phải commit trước C-06-001 (001 sửa `fix-03-role-escalation.test.ts` + `foundation-acceptance.test.ts` sang helper dọn nhật ký) —
 FIX-03 sở hữu `user-admin-service.ts`, `admin-users.routes.ts`, `users-screen.tsx`, `role-locks.ts`, `problem-messages.ts`,
@@ -110,3 +110,12 @@ Chỉ 005 sửa `problem-messages.ts` (gồm cả câu `unknown-role` cho 006). 
   - AC-10: `wrangler d1 execute runway_dev --local --command "DELETE FROM audit_events"` → lỗi append-only, Nhật ký còn nguyên.
 - Attack: không đăng nhập `POST /roles` → 401; Nhân viên `PATCH /roles/{id}` → 403 + `permission.denied`; gửi `name:"admin"` → 422; đoán id → 404; GĐ tự thêm `settings:write` vào vai trò khác → 403 `grant_not_held`; GĐ mời người vào vai trò có `settings:write` → 403 `grant_not_held`.
 - Result: [ ]
+
+### PROOF run (2026-10-01, driver)
+- API: `CI=true pnpm --filter @runway/api test` → 48 files, `289 passed | 2 skipped (291)`; `roles-acceptance` 11/11 (AC-1..AC-7, AC-9, AC-10 + role-limit + AC-6 race).
+- Web unit `17 files · 160 passed` · `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · `openapi:export && client:generate` → không drift.
+- e2e (một lần): `PROOF_SHOTS=1 CI=true pnpm --filter @runway/web e2e` → `4 passed (22.1s)` gồm `roles.spec.ts` (Giám đốc sửa Quản lý trong ngăn, vai trò mình 🔒, clone Nhân viên → Kế toán, gán, người đó tải lại thấy quyền mới, xóa bị chặn khi còn người mang, Nhật ký có dòng vai trò). Ảnh: `phan-quyen.png`, `phan-quyen-ngan.png`, `nhat-ky-vai-tro.png`.
+- Attack (trong suite): không `roles:write` → 403 + `permission.denied`; sửa vai trò mình mang → 403 `own_role`; cấp quyền mình không có → 403 `grant_not_held`; sửa `admin` → 403 `admin_role`; Giám đốc gán vai trò có `settings:write` → 403 `grant_not_held`; `UPDATE/DELETE audit_events` → trigger từ chối.
+- Nit: Escape đóng ngăn không hỏi khi đang sửa (later).
+- Result: pass.
+
