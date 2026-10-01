@@ -1,13 +1,11 @@
 import { parsePercentToBps } from "../../lib/percent-bps";
 import type { ContractValues } from "./api";
 
-/** The only `values` keys SPEC-03 3.5 accepts; anything else a template declares is ignored. */
-export const VALUE_KEYS = ["ma_goi", "so_cua_hang", "giam_gia", "chuc_vu_nguoi_ky", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia"] as const;
+/** The only `values` keys SPEC-08 §2b accepts; anything else a template declares is ignored. */
+export const VALUE_KEYS = ["giam_gia", "chuc_vu_nguoi_ky", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia"] as const;
 export type ValueKey = (typeof VALUE_KEYS)[number];
 
 export const VALUE_LABELS: Record<ValueKey, string> = {
-  ma_goi: "Gói dịch vụ",
-  so_cua_hang: "Số cửa hàng",
   giam_gia: "Giảm giá (%)",
   chuc_vu_nguoi_ky: "Chức vụ người ký",
   ngay_bat_dau: "Ngày bắt đầu",
@@ -19,18 +17,14 @@ export type FormState = Record<ValueKey, string>;
 export type FieldSpec = { key: string; required: boolean; source: string };
 
 export function emptyForm(): FormState {
-  return { ma_goi: "", so_cua_hang: "", giam_gia: "", chuc_vu_nguoi_ky: "", ngay_bat_dau: "", so_bao_gia: "", ngay_bao_gia: "" };
+  return { giam_gia: "", chuc_vu_nguoi_ky: "", ngay_bat_dau: "", so_bao_gia: "", ngay_bao_gia: "" };
 }
 
 export function isValueKey(key: string): key is ValueKey {
   return (VALUE_KEYS as readonly string[]).includes(key);
 }
 
-/**
- * The keys the form shows: manual template fields among the 7 known. C-08-005 shim (PLAN-08 R-2): template v2 has no
- * `ma_goi` / `so_cua_hang` (products + quantities moved to `lines`), so they are no longer forced in and never sent;
- * C-08-008 replaces them with the line block.
- */
+/** The keys the form shows: manual template fields among the 5 known (products + quantities live in the line block, not in `values`). */
 export function activeKeys(fields: readonly FieldSpec[]): ValueKey[] {
   const manual = new Set(fields.filter((f) => f.source === "manual").map((f) => f.key));
   return VALUE_KEYS.filter((k) => manual.has(k));
@@ -71,11 +65,7 @@ export function buildValues(form: FormState, fields: readonly FieldSpec[]): Buil
   for (const k of active) {
     const v = text(k);
     if (v === "" || errors[k]) continue;
-    if (k === "so_cua_hang") {
-      const n = /^\d{1,4}$/.test(v) ? Number.parseInt(v, 10) : 0;
-      if (n < 1 || n > 999) errors[k] = "Số cửa hàng phải là số nguyên từ 1 đến 999";
-      else values[k] = n;
-    } else if (k === "giam_gia") {
+    if (k === "giam_gia") {
       const bps = parsePercentToBps(v);
       if (bps === null) errors[k] = "Giảm giá phải từ 0 đến 100%, tối đa 2 số lẻ";
       else values[k] = bps;
@@ -122,4 +112,56 @@ export function formFromInputs(inputs: Record<string, string | number>): FormSta
     form[k] = k === "giam_gia" && typeof v === "number" ? bpsToPercentText(v) : String(v);
   }
   return form;
+}
+
+/** One row of the "Dòng hàng" block: a product id (empty until picked) and the quantity as typed. */
+export type LineRow = { key: string; productId: string; qty: string };
+export type LineBody = { product_id: string; qty: number };
+
+let rowSeq = 0;
+export function newRow(productId = "", qty = "1"): LineRow {
+  rowSeq += 1;
+  return { key: `row-${rowSeq}`, productId, qty };
+}
+
+/** Edit form: rows rebuilt from `snapshot.inputs.lines`; a fresh empty row when there are none. */
+export function rowsFromInputs(lines: readonly { productId: string; qty: number }[]): LineRow[] {
+  return lines.length > 0 ? lines.map((l) => newRow(l.productId, String(l.qty))) : [newRow()];
+}
+
+const QTY = /^\d{1,4}$/;
+const parseQty = (text: string): number | null => {
+  const t = text.trim();
+  if (!QTY.test(t)) return null;
+  const n = Number.parseInt(t, 10);
+  return n >= 1 && n <= 9999 ? n : null;
+};
+
+export type LinesResult = { ok: true; lines: LineBody[] } | { ok: false; errors: Record<number, string>; message: string };
+
+/** Rows -> request `lines`. Only product ids + integer quantities are ever sent — never a price (DEC-13 A, I4). */
+export function buildLines(rows: readonly LineRow[]): LinesResult {
+  if (rows.length === 0) return { ok: false, errors: {}, message: "Thêm ít nhất một dòng hàng." };
+  const errors: Record<number, string> = {};
+  const lines: LineBody[] = [];
+  rows.forEach((r, i) => {
+    const qty = parseQty(r.qty);
+    if (r.productId === "") errors[i] = "Chọn sản phẩm";
+    else if (qty === null) errors[i] = "Số lượng phải là số nguyên từ 1 đến 9999";
+    else lines.push({ product_id: r.productId, qty });
+  });
+  if (Object.keys(errors).length > 0) return { ok: false, errors, message: "Kiểm tra lại các dòng hàng đánh dấu." };
+  return { ok: true, lines };
+}
+
+/** Body of POST /pricing/preview: complete rows only; null while there is nothing to price or the discount is not valid yet. */
+export function previewBody(rows: readonly LineRow[], discountText: string): { lines: LineBody[]; discount_bps: number } | null {
+  const lines = rows.flatMap((r) => {
+    const qty = parseQty(r.qty);
+    return r.productId !== "" && qty !== null ? [{ product_id: r.productId, qty }] : [];
+  });
+  if (lines.length === 0) return null;
+  const text = discountText.trim();
+  const bps = text === "" ? 0 : parsePercentToBps(text);
+  return bps === null ? null : { lines, discount_bps: bps };
 }

@@ -1,4 +1,6 @@
 import { permissionLabel } from "../roles/permission-labels";
+import { formatIsoDate } from "../../lib/vn-date";
+import { formatPlainMoney, vatLabel } from "../products/product-view";
 
 export type AuditTone = "neutral" | "danger" | "accent" | "ok" | "pending";
 
@@ -64,6 +66,12 @@ export const AUDIT_ACTIONS: Readonly<Record<string, Entry>> = {
   "review.opened": { icon: "🔍", tone: "accent", text: "mở đợt rà soát quyền" },
   "review.closed": { icon: "✓", tone: "ok", text: "kết thúc đợt rà soát quyền" },
   "review.item_decided": { icon: "🔍", tone: "neutral", text: "rà soát quyền" },
+  "product.created": { icon: "📦", tone: "neutral", text: "thêm sản phẩm" },
+  "product.updated": { icon: "✏️", tone: "neutral", text: "sửa sản phẩm" },
+  "product.deactivated": { icon: "⛔", tone: "neutral", text: "ngừng bán" },
+  "product.reactivated": { icon: "✓", tone: "ok", text: "bán lại" },
+  "price.added": { icon: "💲", tone: "accent", text: "đặt giá" },
+  "price.cancelled": { icon: "↩", tone: "neutral", text: "hủy mức giá" },
   "settings.update": { icon: "⚙️", tone: "neutral", text: "đổi cài đặt hệ thống" },
 };
 
@@ -137,6 +145,20 @@ function reviewText(action: string, metadata: Record<string, unknown> | null | u
   return period ? `${fallback} ${period}` : fallback;
 }
 
+/** product.* / price.*: the sentence names the code «G6»; price.* adds "1.100.000 đ + 10% từ 01/01/2027" (KCT: "… đ KCT từ …"). */
+function productText(action: string, metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const code = str(metadata?.["code"]);
+  if (code === null) return fallback;
+  const head = `${fallback} «${code}»`;
+  if (!action.startsWith("price.")) return head;
+  const ex = metadata?.["unit_price_ex_vat"];
+  const from = str(metadata?.["effective_from"]);
+  const rate = metadata?.["vat_rate_bps"];
+  if (typeof ex !== "number" || from === null || !(rate === null || typeof rate === "number")) return head;
+  const tax = rate === null ? "KCT" : `+ ${vatLabel(rate)}`;
+  return `${head} ${formatPlainMoney(ex)} đ ${tax} từ ${formatIsoDate(from)}`;
+}
+
 export function auditSentence(event: AuditEventLike): AuditSentence {
   const action = event.action.trim();
   const entry = AUDIT_ACTIONS[action];
@@ -149,6 +171,7 @@ export function auditSentence(event: AuditEventLike): AuditSentence {
       return { ...entry, text: "bị chặn: thử thao tác khi thiếu quyền", code: permission };
     }
   }
+  if (action.startsWith("product.") || action.startsWith("price.")) return { ...entry, text: productText(action, event.metadata, entry.text) };
   if (action.startsWith("role.change_")) return { ...entry, text: changeText(action, event.metadata, entry.text) };
   if (action.startsWith("sod.")) return { ...entry, text: sodText(event.metadata, entry.text) };
   if (action === "jit.granted") return { ...entry, text: jitGrantText(event.metadata, entry.text) };

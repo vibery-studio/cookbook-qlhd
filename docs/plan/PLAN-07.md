@@ -131,4 +131,13 @@ Thứ tự: 001 → 002 → (003 → 004) ∥ 005 ∥ 006 → 007 → 008 → 00
   - AC-12: 390px: ngăn/modal toàn màn, không cuộn ngang.
   - AC-13: khóa admin bằng SQL local → ngăn vai trò: nút Gửi 🔒 + câu cảnh báo trước khi bấm.
 - Attack: ẩn danh mọi endpoint mới → 401; NV gọi → 403 + `permission.denied`; người có JIT duyệt / cấp JIT / gán `admin` → 403; tự duyệt / tự cấp / tự rà → 403; `PATCH /roles` có `permissions` → 422; đoán id → 404.
-- Result: [ ]
+- Run 2026-10-01 (driver, HEAD 054f133 + C-08-007/008):
+  - `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · `openapi:export && client:generate` → `git diff packages/client` trống.
+  - `CI=true pnpm --filter @runway/api test` → `Test Files 54 passed (54) · Tests 362 passed | 2 skipped (364) · Duration 73.27s` (trước 604s: scrypt test-fast chỉ vitest).
+  - web unit `Test Files 22 passed · Tests 270 passed`.
+  - e2e một lần cho cả hàng 2b + 3 (`PROOF_SHOTS=1`): 5/6 desktop xanh (contracts, products, rbac-advanced, roles, shell.smoke) 34s; `contracts.mobile` đỏ vì products.spec để lại thêm nháp "Cửa hàng Seed" (strict mode 2 thẻ) → spec `.first()` (lỗi spec, không phải sản phẩm) → chạy lại riêng mobile: 1 passed 16.6s.
+  - Ảnh: `apps/web/e2e/shots/` (gitignored).
+  - Lỗi lộ ra khi suite nhanh hơn, đã sửa: hai admin duyệt cùng lúc → bên thua đôi khi `stale` thay `not-pending` (đọc yêu cầu và vai trò không cùng lúc) → `classifyApprove` đọc lại yêu cầu khi version lệch; AC-4 đỏ trong full run → 5/5 xanh.
+- Attack (curl vào `pnpm dev`, 4 tài khoản seed-team): ẩn danh `/role-change-requests`, `/sod-pairs`, `/access-reviews/current`, `/admin/jit-grants` → 401 · NV → 403 + `permission.denied` (`roles:write`/`jit:grant`, đã đọc trong `audit_events`) · GĐ tự cấp JIT → 403 `rule: self_grant` + audit · `PATCH /roles/{id}` có `permissions` → 422. Tự duyệt / JIT duyệt / tự rà / đoán id: suite `rbac-advanced-acceptance` 14/14.
+- Nits (để sau): nhật ký `jit.granted` chưa có tên người nhận (audit chỉ lưu id — web tra tên sau); số trên nav "Rà soát quyền" = số dòng chưa rà, chỉ khi quá hạn; câu 🔒 `not_reviewer` do agent viết.
+- Result: chờ bạn duyệt checklist trên.

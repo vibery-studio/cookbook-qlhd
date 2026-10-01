@@ -26,7 +26,7 @@ import { STEP_STATE_TEXT, buildFlow } from "./flow";
 import { lockReason, visibleActions, type ActionKey } from "./lock-reasons";
 import { PaperOverlay } from "./paper-overlay";
 import { parseSnapshot } from "./snapshot";
-import { bpsToPercentText } from "./values";
+import { vatRateText, TotalsBox } from "./totals-box";
 import { STATUS_TONE, numberLabel, statusLabel } from "./status";
 
 const ACTION_LABELS: Record<ActionKey, string> = {
@@ -214,30 +214,39 @@ export function ContractDrawer({
                   <InfoRow label="Mẫu">{templateName}{snap.templateVersionNo ? ` · v${snap.templateVersionNo}` : ""}</InfoRow>
                   <InfoRow label="Ngày lập">{formatIsoDate(contract.doc_date)}</InfoRow>
                   <InfoRow label="Thời hạn">{formatIsoDate(snap.start)} → {formatIsoDate(snap.end)}</InfoRow>
-                  <InfoRow label="Gói">{snap.packageName ?? "—"}</InfoRow>
+                  <InfoRow label="Gói">{snap.lines.find((l) => l.kind === "service")?.name ?? "—"}</InfoRow>
                   <InfoRow label="Người tạo">{creator ?? "—"}</InfoRow>
                 </dl>
               </Section>
 
               <Section title="Dòng hàng">
-                <ul className="grid">
-                  {snap.lines.map((l, i) => (
-                    <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-s3 border-b border-line py-s2 text-md">
-                      <span className="min-w-0 text-body">
-                        {l.description}
-                        <span className="block text-sm text-muted">
-                          {l.qty} × {formatVietnameseMoney(l.unitPrice)}
-                          {l.discountBps > 0 ? ` · giảm ${bpsToPercentText(l.discountBps)}%` : ""}
-                        </span>
-                      </span>
-                      <span className="font-mono text-right text-strong">{formatVietnameseMoney(l.amount)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-s3 py-s2">
-                  <span className="text-md font-bold text-strong">Tổng cộng (đã gồm VAT)</span>
-                  <span className="font-mono text-right text-lg font-bold text-strong">{formatVietnameseMoney(contract.total)}</span>
+                <div className="shell-scroll overflow-x-auto">
+                  <table aria-label="Dòng hàng" className="w-full text-left text-md">
+                    <thead>
+                      <tr className="border-b border-line text-sm text-muted">
+                        <th scope="col" className="py-s2 pr-s2 font-medium">Tên</th>
+                        <th scope="col" className="px-s2 py-s2 text-right font-medium">SL</th>
+                        <th scope="col" className="px-s2 py-s2 font-medium">ĐVT</th>
+                        <th scope="col" className="px-s2 py-s2 text-right font-medium">Đơn giá chưa VAT</th>
+                        <th scope="col" className="px-s2 py-s2 text-right font-medium">Thuế suất</th>
+                        <th scope="col" className="py-s2 pl-s2 text-right font-medium">Thành tiền chưa VAT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snap.lines.map((l, i) => (
+                        <tr key={i} data-testid="line-row" className="border-b border-line align-top">
+                          <td className="py-s2 pr-s2 text-body">{l.name}</td>
+                          <td className="font-mono px-s2 py-s2 text-right">{l.qty}</td>
+                          <td className="px-s2 py-s2 text-muted">{l.unit}</td>
+                          <td className="font-mono px-s2 py-s2 text-right">{formatVietnameseMoney(l.unitPriceExVat)}</td>
+                          <td className="px-s2 py-s2 text-right">{vatRateText(l.vatRateBps)}</td>
+                          <td className="font-mono py-s2 pl-s2 text-right text-strong">{formatVietnameseMoney(l.amountExVat)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+                <TotalsBox data={{ subtotalExVat: snap.subtotalExVat, discountAmount: snap.discountAmount, vatGroups: snap.vatGroups, total: snap.total }} />
                 {snap.totalWords ? <p className="text-md text-muted text-wrap-pretty">Bằng chữ: {snap.totalWords}</p> : null}
               </Section>
 

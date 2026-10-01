@@ -4,6 +4,7 @@ import { contractsNavItems } from "../features/contracts/nav";
 import { templatesNavItems } from "../features/templates/nav";
 import { approvalsNavItems } from "../features/approvals/nav";
 import { customersNavItems } from "../features/customers/nav";
+import { productsNavItems } from "../features/products/nav";
 import { rolesNavItems } from "../features/roles/nav";
 import { auditNavItems } from "../features/audit/nav";
 import { usersNavItems } from "../features/users/nav";
@@ -18,6 +19,7 @@ export const navRegistry: readonly NavItem[] = [
   ...templatesNavItems,
   ...approvalsNavItems,
   ...customersNavItems,
+  ...productsNavItems,
   ...rolesNavItems,
   ...accessReviewNavItems,
   ...auditNavItems,

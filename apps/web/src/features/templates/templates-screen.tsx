@@ -47,6 +47,7 @@ const FIELD_TYPE_LABELS: Record<string, string> = {
   percent: "Phần trăm",
   date: "Ngày",
   choice: "Chọn một",
+  lines: "Bảng dòng hàng",
 };
 
 function itemText(item: Record<string, unknown>): string {

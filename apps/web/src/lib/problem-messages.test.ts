@@ -106,7 +106,7 @@ describe("contract problem messages (SPEC-04b 3.5)", () => {
   });
 
   it("validation labels the values.* fields in Vietnamese and never leaks English", () => {
-    const keys = ["ma_goi", "so_cua_hang", "giam_gia", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia", "chuc_vu_nguoi_ky"];
+    const keys = ["giam_gia", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia", "chuc_vu_nguoi_ky"];
     const m = problemMessage(base("validation", 422, { errors: keys.map((k) => ({ path: `values.${k}`, message: "must be valid English" })) }));
     expect(m.message).toBe("Kiểm tra lại các ô đánh dấu.");
     expect(Object.keys(m.fieldErrors)).toHaveLength(keys.length);
@@ -115,8 +115,6 @@ describe("contract problem messages (SPEC-04b 3.5)", () => {
       expect(text).not.toContain("English");
     }
     expect(m.fieldErrors["values.giam_gia"]).toContain("Giảm giá");
-    expect(m.fieldErrors["values.so_cua_hang"]).toContain("Số cửa hàng");
-    expect(m.fieldErrors["values.ma_goi"]).toBe("Gói này không làm hợp đồng hoặc chưa có giá ngày hôm nay");
   });
 });
 
@@ -200,5 +198,44 @@ describe("SPEC-07 2b problem messages (C-07-007; 008 reuses them)", () => {
     for (const s of ["request-pending", "not-pending", "expired", "sod-conflict", "jit-active", "already-admin", "not-active", "item-changed", "review-closed", "review-incomplete"]) {
       expect(KNOWN_PROBLEM_SLUGS).toContain(s);
     }
+  });
+});
+
+describe("product, price and line-item problems (SPEC-08 §3.5, C-08-007)", () => {
+  const line = (slug: string, errors: Array<{ path: string; message: string }>, options = {}) =>
+    problemMessage(base(slug, 422, { errors }), {}, { resource: "contract", ...options });
+
+  it("no-price names the line number, never the server's English", () => {
+    const m = line("no-price", [{ path: "lines.1.product_id", message: "no price today" }, { path: "lines.3.product_id", message: "no price today" }]);
+    expect(m.fieldErrors["lines.1.product_id"]).toBe("Dòng 2: sản phẩm chưa có giá ngày lập");
+    expect(m.fieldErrors["lines.3.product_id"]).toBe("Dòng 4: sản phẩm chưa có giá ngày lập");
+    expect(m.message).not.toContain("Raw English");
+  });
+
+  it("product-inactive names the product when the form knows it", () => {
+    const m = line("product-inactive", [{ path: "lines.0.product_id", message: "inactive" }], { lineNames: ["Gói 14 tháng"] });
+    expect(m.fieldErrors["lines.0.product_id"]).toBe("Dòng 1: «Gói 14 tháng» đã ngừng bán");
+  });
+
+  it("the one-service-per-month rule hangs on path 'lines'", () => {
+    const m = line("validation", [{ path: "lines", message: "exactly one" }]);
+    expect(m.fieldErrors["lines"]).toBe("Hợp đồng cần đúng 1 gói dịch vụ theo tháng");
+  });
+
+  it("an unknown or duplicated product on a line is Vietnamese too", () => {
+    const m = line("validation", [{ path: "lines.2.product_id", message: "duplicate" }]);
+    expect(m.fieldErrors["lines.2.product_id"]).toBe("Dòng 3: chọn một sản phẩm khác (không có hoặc trùng dòng khác)");
+  });
+
+  it.each([
+    ["price-backdated", 422, undefined, "Ngày áp dụng phải từ ngày mai trở đi (mức đầu tiên của sản phẩm: từ hôm nay)."],
+    ["price-in-effect", 409, undefined, "Mức giá này đang áp dụng nên không hủy được. Đặt mức mới từ ngày mai."],
+    ["product-limit", 409, undefined, "Đã đủ 500 sản phẩm — ngừng bán bớt trước khi thêm."],
+    ["duplicate", 409, "product", "Mã sản phẩm này đã có. Đặt mã khác."],
+    ["duplicate", 409, "price", "Đã có mức giá áp dụng đúng ngày này. Chọn ngày khác."],
+    ["stale", 409, "product", "Người khác vừa sửa sản phẩm này."],
+  ] as const)("%s (%s, %s)", (slug, status, resource, expected) => {
+    const m = problemMessage(base(slug, status), {}, resource ? { resource } : {});
+    expect(m.message).toBe(expected);
   });
 });

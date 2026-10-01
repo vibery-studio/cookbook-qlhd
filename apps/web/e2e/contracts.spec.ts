@@ -7,8 +7,9 @@
  *   sidebar `data-testid="sidebar"` links "Hợp đồng" · "Mẫu hợp đồng" · "Chờ tôi duyệt" · "Khách hàng" (hidden without permission);
  *   nav pill `data-testid="nav-badge-approvals"` (text = count, absent at 0);
  *   h1 = screen name; "/mau-hop-dong" cards `data-testid="template-card"`, "Tạo hợp đồng từ mẫu này →" in the template drawer;
- *   button "+ Tạo hợp đồng" → dialog "Tạo hợp đồng": fields "Khách hàng" (combobox, search + "+ Thêm khách mới"), "Gói dịch vụ" (select, value G6),
- *     "Số cửa hàng", "Giảm giá (%)", "Chức vụ người ký", button "Tạo & xem văn bản"; error `role=alert` (missing fields → names the label);
+ *   button "+ Tạo hợp đồng" → dialog "Tạo hợp đồng": fields "Khách hàng" (combobox, search + "+ Thêm khách mới"), block `data-testid="line-items"` (C-08-008: replaces
+ *     "Gói dịch vụ" + "Số cửa hàng"; combobox "Sản phẩm dòng N", input "Số lượng dòng N", "+ Thêm dòng", "Xóa dòng N"; box `data-testid="totals"`),
+ *     "Giảm giá (%)", "Chức vụ người ký", button "Tạo & xem văn bản"; error `role=alert` (missing fields → names the label);
  *   drawer role=dialog name "Chi tiết hợp đồng" (header shows number or "Nháp · chưa có số", status pill text) with action buttons
  *     `data-testid="action-<edit|submit|approve|reject|issue|void|copy|withdraw|delete>"`; a locked action is aria-disabled, shows 🔒 and its reason
  *     as text in the drawer footer;
@@ -75,8 +76,9 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await expect(create.getByRole("combobox", { name: "Khách hàng" })).toContainText(CUSTOMER.name);
 
   // required field left empty → Vietnamese message names it, nothing created
-  await create.getByLabel("Gói dịch vụ").selectOption({ value: "G6" });
-  await create.getByLabel("Số cửa hàng").fill("1");
+  await create.getByRole("combobox", { name: "Sản phẩm dòng 1" }).fill("G6");
+  await create.getByRole("option", { name: /G6/ }).first().click();
+  await create.getByLabel("Số lượng dòng 1").fill("1");
   await create.getByLabel("Giảm giá (%)").fill("5");
   await create.getByRole("button", { name: "Tạo & xem văn bản" }).click();
   await expect(create.getByRole("alert")).toContainText("Chức vụ người ký");
@@ -128,8 +130,9 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await create2.getByRole("combobox", { name: "Khách hàng" }).click();
   await create2.getByRole("combobox", { name: "Khách hàng" }).fill("Cô Ba");
   await create2.getByRole("option", { name: new RegExp(CUSTOMER.name) }).click();
-  await create2.getByLabel("Gói dịch vụ").selectOption({ value: "G6" });
-  await create2.getByLabel("Số cửa hàng").fill("1");
+  await create2.getByRole("combobox", { name: "Sản phẩm dòng 1" }).fill("G6");
+  await create2.getByRole("option", { name: /G6/ }).first().click();
+  await create2.getByLabel("Số lượng dòng 1").fill("1");
   await create2.getByLabel("Chức vụ người ký").fill("Chủ hộ kinh doanh");
   await create2.getByRole("button", { name: "Tạo & xem văn bản" }).click();
   await nv.getByRole("dialog", { name: "Văn bản hợp đồng" }).getByRole("button", { name: "Đóng" }).click();

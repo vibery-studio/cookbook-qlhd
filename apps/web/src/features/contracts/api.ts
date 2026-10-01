@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { components, Problem } from "@runway/client";
 import { ApiProblemError, client } from "../../lib/client";
 import { problemMessage } from "../../lib/problem-messages";
@@ -11,6 +11,9 @@ export type ContractStatus = Contract["status"];
 export type TemplateListItem = components["schemas"]["TemplateListItem"];
 export type TemplateDetail = components["schemas"]["TemplateDetail"];
 export type TemplateField = components["schemas"]["TemplateField"];
+export type Product = components["schemas"]["Product"];
+export type PricingPreview = components["schemas"]["PricingPreview"];
+export type PricingPreviewBody = components["schemas"]["PricingPreviewBody"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
 
 export const CONTRACTS_KEY = ["contracts"] as const;
@@ -103,6 +106,28 @@ export function useTemplate(id: string | undefined) {
     queryKey: ["template", id],
     enabled: Boolean(id),
     queryFn: () => unwrap(client.typed.GET("/templates/{id}", { params: { path: { id: id as string } } }) as Raw<TemplateDetail>),
+  });
+}
+
+/** Products on sale (the line combobox); one without a price today comes with `price: null` and is shown locked. */
+export function useProducts() {
+  return useQuery({
+    queryKey: ["products", "active"],
+    queryFn: async () =>
+      (await unwrap(client.typed.GET("/products", { params: { query: { active: "true" } } }) as Raw<{ date: string; items: Product[] }>)).items,
+    staleTime: 30_000,
+  });
+}
+
+/** DEC-13 A: totals come from the server (one pricing function). Read-only POST; the previous result stays while the next one loads. */
+export function usePreview(body: PricingPreviewBody | null) {
+  return useQuery({
+    queryKey: ["pricing-preview", body],
+    enabled: body !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    staleTime: 0,
+    queryFn: () => unwrap(client.typed.POST("/pricing/preview", { body: body as PricingPreviewBody }) as Raw<PricingPreview>),
   });
 }
 

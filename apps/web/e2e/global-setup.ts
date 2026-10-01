@@ -75,9 +75,13 @@ async function seedContracts(): Promise<void> {
   });
   if (cu.status() !== 201) throw new Error(`seed customer: ${cu.status()} ${await cu.text()}`);
   const customerId = ((await cu.json()) as { id: string }).id;
+  const pr = await nv.get("/products?active=true");
+  if (pr.status() !== 200) throw new Error(`products: ${pr.status()} ${await pr.text()}`);
+  const g6 = ((await pr.json()) as { items: Array<{ id: string; code: string }> }).items.find((p) => p.code === "G6");
+  if (!g6) throw new Error("seed: product G6 not found");
   const c = await nv.post("/contracts", {
     headers: { "Idempotency-Key": generateUlid() },
-    data: { template_id: tpl.id, customer_id: customerId, values: { ma_goi: "G6", so_cua_hang: 1, giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" } },
+    data: { template_id: tpl.id, customer_id: customerId, lines: [{ product_id: g6.id, qty: 1 }], values: { giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" } },
   });
   if (c.status() !== 201) throw new Error(`seed contract: ${c.status()} ${await c.text()}`);
   await nv.dispose();

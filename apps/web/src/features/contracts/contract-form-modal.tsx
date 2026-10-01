@@ -15,6 +15,8 @@ import {
   errorMessage,
   updateContract,
   useContract,
+  usePreview,
+  useProducts,
   useTemplate,
   useTemplates,
   type Contract,
@@ -22,16 +24,23 @@ import {
 } from "./api";
 import { CustomerCombobox, type PickedCustomer } from "./customer-combobox";
 import { Dialog, DialogHeader } from "./dialog";
+import { LineItems, type KnownProduct } from "./line-items";
 import { parseSnapshot } from "./snapshot";
+import { TotalsBox } from "./totals-box";
 import {
   VALUE_LABELS,
   activeKeys,
+  buildLines,
   buildValues,
   emptyForm,
   formFromInputs,
   isValueKey,
+  newRow,
+  previewBody,
   requiredKeys,
+  rowsFromInputs,
   type FormState,
+  type LineRow,
   type ValueKey,
 } from "./values";
 
@@ -76,6 +85,9 @@ export function ContractFormModal(props: ContractFormProps) {
 
   const [customer, setCustomer] = useState<PickedCustomer | null>(editing ? { id: editing.customer_id, name: editing.customer_name } : null);
   const [form, setForm] = useState<FormState>(() => (editing ? formFromInputs(parseSnapshot(editing.snapshot).inputs) : emptyForm()));
+  const [rows, setRows] = useState<LineRow[]>(() => (editing ? rowsFromInputs(parseSnapshot(editing.snapshot).inputLines) : [newRow()]));
+  const [lineErrors, setLineErrors] = useState<Record<number, string>>({});
+  const [linesError, setLinesError] = useState<string | undefined>(undefined);
   const [version, setVersion] = useState(editing?.version ?? 0);
   const [errors, setErrors] = useState<Partial<Record<ValueKey | "customer" | "template", string>>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -89,6 +101,31 @@ export function ContractFormModal(props: ContractFormProps) {
   const newerTemplate = latest && pinnedVersionId && latest.id !== pinnedVersionId ? latest : undefined;
   const latestContract = useContract(editing?.id ?? "", false);
 
+  const products = useProducts();
+  const productList = useMemo(
+    () => ({ isPending: products.isPending, isError: products.isError, items: products.data ?? [], refetch: () => void products.refetch() }),
+    [products.isPending, products.isError, products.data, products.refetch],
+  );
+  // old drafts: names for products that are no longer on sale come from the snapshot the contract already holds
+  const known = useMemo(() => {
+    const m = new Map<string, KnownProduct>();
+    if (editing) for (const l of parseSnapshot(editing.snapshot).lines) m.set(l.productId, { id: l.productId, code: l.code, name: l.name, unit: l.unit });
+    return m;
+  }, [editing]);
+
+  // totals: POST /pricing/preview, debounced ~300 ms; an error shows its sentence and never blocks typing (DEC-13 A)
+  const wanted = useMemo(() => previewBody(rows, form.giam_gia), [rows, form.giam_gia]);
+  const [debounced, setDebounced] = useState(wanted);
+  const wantedKey = JSON.stringify(wanted);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(wanted), 300);
+    return () => clearTimeout(t);
+  }, [wantedKey]);
+  const preview = usePreview(debounced);
+  const previewData = wanted === null ? undefined : preview.data;
+  const previewError = wanted !== null && preview.isError ? errorMessage(preview.error).message : null;
+  const amounts = useMemo(() => new Map((previewData?.lines ?? []).map((l) => [l.product_id, l.amount_ex_vat] as const)), [previewData]);
+
   const canAddCustomer = me.permissions.includes("contract:write");
   const setField = useCallback((key: ValueKey, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -99,11 +136,20 @@ export function ContractFormModal(props: ContractFormProps) {
   function applyServerError(error: unknown) {
     const info = errorMessage(error);
     const next: Partial<Record<ValueKey | "customer" | "template", string>> = {};
+    const nextLines: Record<number, string> = {};
+    let block: string | undefined;
     for (const [path, text] of Object.entries(info.fieldErrors)) {
-      const key = path.replace(/^values\./, "");
-      if (isValueKey(key)) next[key] = text;
+      const row = /^lines\.(\d+)(\.|$)/.exec(path);
+      if (row) nextLines[Number(row[1])] = text;
+      else if (path === "lines") block = text;
+      else {
+        const key = path.replace(/^values\./, "");
+        if (isValueKey(key)) next[key] = text;
+      }
     }
     setErrors(next);
+    setLineErrors(nextLines);
+    setLinesError(block);
     setStale(error instanceof ApiProblemError && problemSlug(error.problem.type) === "stale");
     setMessage(info.message);
   }
@@ -121,24 +167,29 @@ export function ContractFormModal(props: ContractFormProps) {
       return;
     }
     const built = buildValues(form, fields);
-    if (!built.ok) {
-      setErrors(built.errors);
-      setMessage(built.message);
+    const builtLines = buildLines(rows);
+    if (!builtLines.ok || !built.ok) {
+      setErrors(built.ok ? {} : built.errors);
+      setLineErrors(builtLines.ok ? {} : builtLines.errors);
+      setLinesError(undefined);
+      setMessage(!builtLines.ok ? builtLines.message : !built.ok ? built.message : null);
       return;
     }
     setErrors({});
+    setLineErrors({});
+    setLinesError(undefined);
     setMessage(null);
     setPending(true);
     try {
       let contract: Contract;
       if (props.mode === "create") {
-        // C-08-005 shim (PLAN-08 R-2): the line block arrives in C-08-008 — until then creating from the web is refused (422).
-        const body = { template_id: templateId, customer_id: customer.id, lines: [], values: built.values };
+        const body = { template_id: templateId, customer_id: customer.id, lines: builtLines.lines, values: built.values };
         contract = await createContract(body, keeper.keyFor(JSON.stringify(body)));
       } else {
         contract = await updateContract(props.contract.id, {
           expected_version: version,
           customer_id: customer.id,
+          lines: builtLines.lines,
           values: built.values,
           ...(useLatest && newerTemplate ? { use_latest_template: true } : {}),
         });
@@ -160,7 +211,11 @@ export function ContractFormModal(props: ContractFormProps) {
     if (!editing) return;
     const result = await latestContract.refetch();
     if (!result.data) return;
-    setForm(formFromInputs(parseSnapshot(result.data.snapshot).inputs));
+    const snap = parseSnapshot(result.data.snapshot);
+    setForm(formFromInputs(snap.inputs));
+    setRows(rowsFromInputs(snap.inputLines));
+    setLineErrors({});
+    setLinesError(undefined);
     setCustomer({ id: result.data.customer_id, name: result.data.customer_name });
     setVersion(result.data.version);
     setStale(false);
@@ -228,6 +283,10 @@ export function ContractFormModal(props: ContractFormProps) {
           {loadingTemplate ? <Skeleton className="h-[calc(var(--row-h)*3)]" /> : null}
           {template.isError ? <p className="text-md text-danger">Không tải được mẫu. Đóng rồi mở lại.</p> : null}
 
+          {!loadingTemplate && templateId ? (
+            <LineItems rows={rows} onChange={setRows} products={productList} known={known} amounts={amounts} rowErrors={lineErrors} blockError={linesError} />
+          ) : null}
+
           {keys.map((k) => {
               if (loadingTemplate || !templateId) return null;
               const id = `cf-${k}`;
@@ -257,7 +316,21 @@ export function ContractFormModal(props: ContractFormProps) {
               );
             })}
 
-          {auto.length > 0 && !loadingTemplate ? <p className="text-sm text-muted text-wrap-pretty">Tự điền từ khách và bảng giá: {auto.join(", ")}.</p> : null}
+          {!loadingTemplate && templateId && previewData ? (
+            <TotalsBox
+              data={{
+                subtotalExVat: previewData.subtotal_ex_vat,
+                discountAmount: previewData.discount_amount,
+                vatGroups: previewData.vat_groups.map((g) => ({ vatRateBps: g.vat_rate_bps, vat: g.vat })),
+                total: previewData.total,
+              }}
+              busy={preview.isFetching}
+              note="Máy chủ tính lại khi lưu"
+            />
+          ) : null}
+          {previewError ? <p className="text-sm text-danger">{previewError}</p> : null}
+
+          {auto.length > 0 && !loadingTemplate ? <p className="text-sm text-muted text-wrap-pretty">Tự điền từ khách và dòng hàng: {auto.join(", ")}.</p> : null}
 
           {newerTemplate ? (
             <label className="flex min-h-[var(--row-h)] items-center gap-s3 text-md text-body">

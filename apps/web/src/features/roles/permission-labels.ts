@@ -6,6 +6,8 @@ export const PERMISSION_LABELS: Readonly<Record<string, string>> = {
   "contract:approve": "Duyệt / từ chối",
   "contract:issue": "Phát hành & hủy",
   "template:write": "Quản lý mẫu",
+  "product:write": "Sửa sản phẩm",
+  "price:write": "Đặt giá",
   "users:read": "Xem người dùng",
   "users:write": "Quản lý người dùng",
   "roles:write": "Quản lý vai trò",

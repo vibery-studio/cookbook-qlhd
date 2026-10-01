@@ -39,6 +39,11 @@ export const KNOWN_PROBLEM_SLUGS = [
   "item-changed",
   "review-closed",
   "review-incomplete",
+  "price-backdated",
+  "price-in-effect",
+  "no-price",
+  "product-inactive",
+  "product-limit",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -63,7 +68,9 @@ export type ProblemWithExtensions = Problem & {
 
 export type ProblemOptions = {
   /** "contract" switches on the contract-app wording (SPEC-04b 3.5) where it differs from the generic 4a copy. */
-  resource?: "contract" | "role";
+  resource?: "contract" | "role" | "product" | "price";
+  /** Product names by line index (the form knows them), for «tên» in line errors. */
+  lineNames?: readonly string[];
 };
 
 export type ProblemMessage = {
@@ -86,8 +93,6 @@ const fieldLabels: Record<string, string> = {
   phone: "Số điện thoại",
   tax_code: "Mã số thuế",
   token: "Liên kết kích hoạt",
-  ma_goi: "Gói dịch vụ",
-  so_cua_hang: "Số cửa hàng (1–999)",
   giam_gia: "Giảm giá (0–100%)",
   ngay_bat_dau: "Ngày bắt đầu",
   so_bao_gia: "Số báo giá",
@@ -104,8 +109,6 @@ export const CONTRACT_STATUS_LABELS: Readonly<Record<string, string>> = {
   voided: "Đã hủy",
 };
 
-const PACKAGE_UNAVAILABLE = "Gói này không làm hợp đồng hoặc chưa có giá ngày hôm nay";
-
 export function problemSlug(type: string): string {
   return type.replace(/\/+$/, "").split("/").pop() ?? "";
 }
@@ -115,11 +118,26 @@ function fieldLabel(path: string): string {
   return fieldLabels[normalized] ?? "Trường này";
 }
 
-function fieldErrorsFor(problem: ProblemWithExtensions, labels: Record<string, string>): Record<string, string> {
+/** SPEC-08 §3.5: line errors come as `lines` (rule) or `lines.i.product_id` / `lines.i.qty`; the slug says which. */
+function lineFieldError(path: string, slug: string, lineNames: readonly string[] | undefined): string | undefined {
+  if (path === "lines") return "Hợp đồng cần đúng 1 gói dịch vụ theo tháng";
+  const m = /^lines\.(\d+)\.(product_id|qty)$/.exec(path);
+  if (!m) return undefined;
+  const index = Number(m[1]);
+  const n = index + 1;
+  if (m[2] === "qty") return `Dòng ${n}: số lượng từ 1 đến 9.999`;
+  if (slug === "no-price") return `Dòng ${n}: sản phẩm chưa có giá ngày lập`;
+  if (slug === "product-inactive") return `Dòng ${n}: «${lineNames?.[index] ?? "sản phẩm này"}» đã ngừng bán`;
+  return `Dòng ${n}: chọn một sản phẩm khác (không có hoặc trùng dòng khác)`;
+}
+
+function fieldErrorsFor(problem: ProblemWithExtensions, labels: Record<string, string>, options: ProblemOptions = {}): Record<string, string> {
   const fieldErrors = new Map<string, string>();
+  const slug = problemSlug(problem.type);
   for (const error of problem.errors ?? []) {
-    if (error.path === "values.ma_goi") {
-      fieldErrors.set(error.path, PACKAGE_UNAVAILABLE);
+    const lineError = lineFieldError(error.path, slug, options.lineNames);
+    if (lineError) {
+      fieldErrors.set(error.path, lineError);
       continue;
     }
     const label = labels[error.path] ?? fieldLabel(error.path);
@@ -203,8 +221,11 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
     }
     case "stale":
       if (options.resource === "role") return "Người khác vừa sửa vai trò này.";
+      if (options.resource === "product") return "Người khác vừa sửa sản phẩm này.";
       return options.resource === "contract" ? "Người khác vừa sửa hợp đồng này." : undefined;
     case "duplicate":
+      if (options.resource === "product") return "Mã sản phẩm này đã có. Đặt mã khác.";
+      if (options.resource === "price") return "Đã có mức giá áp dụng đúng ngày này. Chọn ngày khác.";
       return options.resource === "role" ? "Đã có vai trò tên này. Đặt tên khác." : undefined;
     case "role-in-use":
       return typeof problem.holders === "number"
@@ -221,7 +242,7 @@ function baseMessage(slug: string, status: number): string {
   if (status === 401 || slug === "unauthorized") return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   if (status === 403 || slug === "forbidden") return "🔒 Bạn không có quyền thực hiện thao tác này.";
   if (status === 404 || slug === "not-found") return "Không tìm thấy nội dung bạn cần.";
-  const specific422 = slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role";
+  const specific422 = slug === "price-backdated" || slug === "no-price" || slug === "product-inactive" || slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role";
   if ((status === 422 && !specific422) || slug === "validation") return "Kiểm tra lại các ô đánh dấu.";
   if (status >= 500) return "Hệ thống đang bận, thử lại sau.";
 
@@ -263,6 +284,16 @@ function baseMessage(slug: string, status: number): string {
       return "Trạng thái đã thay đổi. Tải bản mới trước khi tiếp tục.";
     case "changed-after-approval":
       return "Nội dung đã đổi sau khi duyệt nên chưa phát hành được. Gửi duyệt lại.";
+    case "price-backdated":
+      return "Ngày áp dụng phải từ ngày mai trở đi (mức đầu tiên của sản phẩm: từ hôm nay).";
+    case "price-in-effect":
+      return "Mức giá này đang áp dụng nên không hủy được. Đặt mức mới từ ngày mai.";
+    case "product-limit":
+      return "Đã đủ 500 sản phẩm — ngừng bán bớt trước khi thêm.";
+    case "no-price":
+      return "Có dòng chưa có giá ngày lập — xem các dòng được đánh dấu.";
+    case "product-inactive":
+      return "Có dòng đã ngừng bán — xem các dòng được đánh dấu.";
     case "already-decided":
       return "Đã có người duyệt hoặc từ chối một bước nên không rút về nháp được. Đã tải lại.";
     case "would-block-later-step":
@@ -310,7 +341,7 @@ export function problemMessage(
   return {
     message: contextual ?? baseMessage(slug, problem.status),
     ...(reload ? { reload: true } : {}),
-    fieldErrors: fieldErrorsFor(problem, labels),
+    fieldErrors: fieldErrorsFor(problem, labels, options),
     ...(requestId ? { requestId } : {}),
     ...(problem.existing_id ? { existingId: problem.existing_id } : {}),
   };

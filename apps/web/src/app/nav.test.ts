@@ -8,8 +8,13 @@ const me = (permissions: string[]): Me => ({ id: "u", email: "a@b.c", display_na
 describe("nav registry", () => {
   it("orders items as the design says", () => {
     expect(navRegistry.map((i) => i.to)).toEqual([
-      "/hop-dong", "/mau-hop-dong", "/cho-toi-duyet", "/khach-hang", "/phan-quyen", "/ra-soat-quyen", "/nhat-ky", "/nguoi-dung",
+      "/hop-dong", "/mau-hop-dong", "/cho-toi-duyet", "/khach-hang", "/san-pham", "/phan-quyen", "/ra-soat-quyen", "/nhat-ky", "/nguoi-dung",
     ]);
+  });
+
+  it("shows Sản phẩm & giá to anyone with contract:read, and hides it from admin", () => {
+    expect(visibleNavItems(me(["contract:read"])).map((i) => i.to)).toContain("/san-pham");
+    expect(visibleNavItems(me(["users:read", "audit:read"])).map((i) => i.to)).not.toContain("/san-pham");
   });
 
   it("hides contract items from a user without contract permissions (admin)", () => {

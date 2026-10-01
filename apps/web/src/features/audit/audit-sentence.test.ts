@@ -98,4 +98,17 @@ describe("auditSentence", () => {
       expect(AUDIT_ACTIONS[a], a).toBeDefined();
     }
   });
+
+  it("product.* and price.* name the code, rate and date (SPEC-08 FR-8)", () => {
+    const price = { code: "DEMO-MIN-01", unit_price_ex_vat: 1_100_000, vat_rate_bps: 1000, effective_from: "2027-01-01" };
+    expect(auditSentence({ action: "price.added", metadata: price }).text).toBe("đặt giá «DEMO-MIN-01» 1.100.000 đ + 10% từ 01/01/2027");
+    expect(auditSentence({ action: "price.added", metadata: { ...price, vat_rate_bps: null } }).text).toBe("đặt giá «DEMO-MIN-01» 1.100.000 đ KCT từ 01/01/2027");
+    expect(auditSentence({ action: "price.cancelled", metadata: price }).text).toBe("hủy mức giá «DEMO-MIN-01» 1.100.000 đ + 10% từ 01/01/2027");
+    expect(auditSentence({ action: "product.created", metadata: { code: "G6", kind: "service" } }).text).toBe("thêm sản phẩm «G6»");
+    expect(auditSentence({ action: "product.updated", metadata: { code: "G6", fields: ["name"] } }).text).toBe("sửa sản phẩm «G6»");
+    expect(auditSentence({ action: "product.deactivated", metadata: { code: "G6" } }).text).toBe("ngừng bán «G6»");
+    expect(auditSentence({ action: "product.reactivated", metadata: { code: "G6" } }).text).toBe("bán lại «G6»");
+    expect(auditSentence({ action: "product.created" }).text).toBe("thêm sản phẩm");
+    expect(auditSentence({ action: "price.added" }).text).toBe("đặt giá");
+  });
 });

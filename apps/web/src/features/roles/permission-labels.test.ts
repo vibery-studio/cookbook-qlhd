@@ -6,7 +6,7 @@ import { roleLabels } from "../../app/me";
 const ALL_CODES = [
   "audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write",
   "flags:read", "flags:write", "notes:read", "notes:write", "roles:write", "settings:read", "settings:write",
-  "template:write", "users:read", "users:write", "jit:grant", "reviews:write",
+  "template:write", "users:read", "users:write", "jit:grant", "reviews:write", "product:write", "price:write",
 ];
 
 describe("permission labels", () => {
@@ -38,6 +38,13 @@ describe("permission labels", () => {
     expect(permissionLabel("reviews:write")).toBe("Rà soát quyền");
     expect(permissionGroup("jit:grant")).toBe("Quản trị");
     expect(permissionGroup("reviews:write")).toBe("Quản trị");
+  });
+
+  it("labels the product permissions (Hợp đồng group)", () => {
+    expect(permissionLabel("product:write")).toBe("Sửa sản phẩm");
+    expect(permissionLabel("price:write")).toBe("Đặt giá");
+    expect(permissionGroup("product:write")).toBe("Hợp đồng");
+    expect(permissionGroup("price:write")).toBe("Hợp đồng");
   });
 
   it("orders system roles first (member last of them), self-made roles by label after", () => {

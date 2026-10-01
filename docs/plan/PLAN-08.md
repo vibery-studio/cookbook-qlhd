@@ -153,4 +153,12 @@ Thứ tự: [C-07-001 + C-07-002 xong] → 001 ∥ 002 → 003 → 004 ∥ 005 �
   - AC-9: `RUNWAY_LOCAL=1 pnpm dev:seed-products` 2 lần → cùng bảng; sửa giá trong `scripts/data/products.demo.json` + `--replace` → giá mới trên màn.
   - AC-10: e2e + 390px: bảng sản phẩm thành thẻ, ngăn/modal toàn màn, không cuộn ngang.
 - Attack: ẩn danh mọi endpoint mới → 401; NV ghi → 403 + `permission.denied`; admin đọc/ghi sản phẩm → 403; gửi `unit_price`/`total` trong HĐ → 422; tên `<script>` trong bảng dòng → in thành chữ; đoán id → 404; SQL thẳng sửa/xóa mức đã hiệu lực → trigger chặn.
-- Result: [ ]
+- Run 2026-10-01 (driver, HEAD 054f133 + C-08-007/008):
+  - `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · `openapi:export && client:generate` → `git diff packages/client` trống.
+  - `CI=true pnpm --filter @runway/api test` → `Test Files 54 passed (54) · Tests 362 passed | 2 skipped (364) · Duration 73.27s` (trước 604s: scrypt test-fast chỉ vitest).
+  - web unit `Test Files 22 passed · Tests 270 passed`.
+  - e2e một lần cho cả hàng 2b + 3 (`PROOF_SHOTS=1`): 5/6 desktop xanh (contracts, products, rbac-advanced, roles, shell.smoke) 34s; `contracts.mobile` đỏ vì products.spec để lại thêm nháp "Cửa hàng Seed" (strict mode 2 thẻ) → spec `.first()` (lỗi spec, không phải sản phẩm) → chạy lại riêng mobile: 1 passed 16.6s.
+  - Ảnh: `apps/web/e2e/shots/` (gitignored).
+- Attack (curl vào `pnpm dev`): ẩn danh 7 endpoint `/products*`, `/pricing/preview` → 401 · NV đọc 200, ghi → 403 + `permission.denied` (`product:write`, `price:write`) · admin đọc/ghi → 403 (`contract:read`) · đoán id sản phẩm/mức → 404 · `unit_price` trong dòng → 422 · tên `<script>` trong bảng: test `contract-merge` (escape) · SQL sửa/xóa mức đã hiệu lực: trigger (test C-08-001).
+- Nits (để sau): pill "Hàng hóa" xuống 2 dòng ở cột Loại (1440px); tab "Tất cả" chỉ hiện đang bán (ngừng bán chỉ ở tab riêng); "Hủy" mức sắp áp dụng không hỏi xác nhận; combobox không chặn chọn trùng sản phẩm (server trả lỗi dưới dòng). Ngoài lề: `vite.config.ts` proxy thiếu `/contracts`, `/approvals`, 2b, sản phẩm → đã bổ sung.
+- Result: chờ bạn duyệt checklist trên.

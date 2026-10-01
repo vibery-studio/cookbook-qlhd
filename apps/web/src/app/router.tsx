@@ -4,6 +4,7 @@ import { contractsRoutes } from "../features/contracts/routes";
 import { templatesRoutes } from "../features/templates/routes";
 import { approvalsRoutes } from "../features/approvals/routes";
 import { customersRoutes } from "../features/customers/routes";
+import { productsRoutes } from "../features/products/routes";
 import { rolesRoutes } from "../features/roles/routes";
 import { auditRoutes } from "../features/audit/routes";
 import { usersRoutes } from "../features/users/routes";
@@ -16,6 +17,7 @@ const featureRoutes: RouteObject[] = [
   ...protectFeatureRoutes(templatesRoutes),
   ...protectFeatureRoutes(approvalsRoutes),
   ...protectFeatureRoutes(customersRoutes),
+  ...protectFeatureRoutes(productsRoutes),
   ...protectFeatureRoutes(rolesRoutes),
   ...protectFeatureRoutes(accessReviewRoutes),
   ...protectFeatureRoutes(auditRoutes),
