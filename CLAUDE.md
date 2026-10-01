@@ -65,4 +65,5 @@ Ports: 8788 belongs to another project on this machine — never stop it. Stop o
   bug-fix test must fail on the old code first. Browser tests follow `docs/cookbook/e2e-kit/README.md` (one red run,
   one PROOF run, API suite and e2e never at the same time).
 - Docs and replies in Vietnamese; product in Vietnamese. Address the human as "bạn", yourself as "mình".
+- Từ ngữ sản phẩm: "four-eyes" → **"cơ chế duyệt 2 lớp"** (ngắn: "duyệt 2 lớp") trong UI, tài liệu cho người dùng và câu trả lời; code giữ tên tiếng Anh.
 - Deploy: local only, by the human (`docs/deploy.md`). Never deploy or create Cloudflare resources yourself.
