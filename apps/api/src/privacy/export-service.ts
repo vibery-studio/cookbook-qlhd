@@ -64,7 +64,13 @@ export async function buildUserExport(
 
   for (const entry of DATA_INVENTORY) {
     if (!entry.exportable) continue;
-    const rows = await selectByOwner(deps.db, entry.table, entry.ownerColumn, userId);
+    const rows = await selectByOwner(
+      deps.db,
+      entry.table,
+      entry.ownerColumn,
+      userId,
+      entry.excludeColumns ?? [],
+    );
     tables[entry.table] = rows;
   }
 
@@ -110,12 +116,23 @@ async function selectByOwner(
   table: string,
   ownerColumn: string | null,
   userId: string,
+  excludeColumns: readonly string[],
 ): Promise<unknown[]> {
   // Table + column names come from the static DATA_INVENTORY and are
   // validated by `quoteIdent`. `userId` is a parameter bound via the
   // tagged template — never interpolated as raw text.
   const column = ownerColumn === null ? "id" : ownerColumn;
-  const query: SQL = sql`SELECT * FROM ${sql.identifier(quoteIdent(table))} WHERE ${sql.identifier(quoteIdent(column))} = ${userId}`;
+  // Explicit column list (table minus denylist) so credential columns are never read.
+  const info = await db.all<{ name: string }>(
+    sql`SELECT name FROM pragma_table_info(${quoteIdent(table)})`,
+  );
+  const cols = info.map((c) => c.name).filter((n) => !excludeColumns.includes(n));
+  if (cols.length === 0) return [];
+  const colList = sql.join(
+    cols.map((n) => sql.identifier(quoteIdent(n))),
+    sql`, `,
+  );
+  const query: SQL = sql`SELECT ${colList} FROM ${sql.identifier(quoteIdent(table))} WHERE ${sql.identifier(quoteIdent(column))} = ${userId}`;
   const rows = await db.all(query);
   return rows;
 }

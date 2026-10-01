@@ -32,6 +32,8 @@ export interface DataInventoryEntry {
   readonly personal: boolean;
   /** Included in `/me/export` archives. */
   readonly exportable: boolean;
+  /** Columns never put in an archive (credentials). Only meaningful when `exportable`. */
+  readonly excludeColumns?: readonly string[];
   /**
    * Erasure behavior on `/me/delete`:
    *   - "delete"    — row removed from the table
@@ -138,6 +140,7 @@ export const DATA_INVENTORY: readonly DataInventoryEntry[] = [
     ownerColumn: null,
     personal: true,
     exportable: true,
+    excludeColumns: ["password_hash"], // credential — never in an archive (FIX-08)
     onDelete: "anonymize",
   },
 ];

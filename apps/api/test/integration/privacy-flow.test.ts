@@ -12,7 +12,7 @@
  */
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../src/db/client";
 import {
   jwtRevocations,
@@ -186,6 +186,38 @@ describe("POST /me/export (integration)", () => {
     expect(
       verifyExportSignature(body.archive, env.TOKEN_PEPPER),
     ).toBe(true);
+  });
+
+  it("FIX-08: archive carries no credential columns (password_hash etc.)", async () => {
+    const { userId, cookie } = await signupVerifyLogin(
+      "exporter-secret@example.com",
+      "correct-horse-battery-staple",
+    );
+    const res = await SELF.fetch(`${ORIGIN}/me/export`, {
+      method: "POST",
+      headers: { ...CSRF_HEADERS, cookie: `runway_at=${cookie}` },
+    });
+    expect(res.status).toBe(200);
+    const body: { archive: { tables: Record<string, Record<string, unknown>[]> } } =
+      await res.json();
+    const json = JSON.stringify(body.archive);
+    expect(json).not.toContain("password_hash");
+
+    // Every column of every exportable table: none credential-like may appear in a row.
+    const SECRET = /password|secret|token|salt|pepper|api_key/i;
+    const db = getDb(env);
+    for (const entry of DATA_INVENTORY.filter((e) => e.exportable)) {
+      const cols = await db.all<{ name: string }>(
+        sql`SELECT name FROM pragma_table_info(${entry.table})`,
+  );
+      expect(cols.length).toBeGreaterThan(0);
+      const secretCols = cols.map((c) => c.name).filter((n) => SECRET.test(n));
+      for (const row of body.archive.tables[entry.table] ?? []) {
+        for (const n of secretCols) expect(Object.keys(row), `${entry.table}.${n}`).not.toContain(n);
+      }
+    }
+    // still exports the profile itself
+    expect(body.archive.tables["users"]?.[0]).toMatchObject({ id: userId });
   });
 
   it("second export within rate window → 429", async () => {
