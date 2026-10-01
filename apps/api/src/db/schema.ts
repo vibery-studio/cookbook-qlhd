@@ -485,6 +485,121 @@ export const approvalSteps = sqliteTable(
 );
 
 /**
+ * SoD pairs (SPEC-07 §3.1, DEC-9 B): no role may hold both permission keys. Keys are catalog codes (no FK — the
+ * catalog is closed); stored `perm_a < perm_b` so (A,B) and (B,A) hit the same UNIQUE. Independent of roles.
+ */
+export const sodPairs = sqliteTable(
+  "sod_pairs",
+  {
+    id: text("id").primaryKey(),
+    permA: text("perm_a").notNull(),
+    permB: text("perm_b").notNull(),
+    reason: text("reason"), // ≤200
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    check("ck_sod_pairs_distinct", sql`${table.permA} <> ${table.permB}`),
+    check("ck_sod_pairs_ordered", sql`${table.permA} < ${table.permB}`),
+    uniqueIndex("uq_sod_pairs_ab").on(table.permA, table.permB),
+  ],
+);
+
+/**
+ * Four-eyes role permission change requests (SPEC-07 §3.1, FR-3/4). `added`/`removed` = JSON arrays of keys;
+ * `base_version` pins `roles.version`. At most one pending per role (partial UNIQUE). `expired` is computed on
+ * read (`pending AND expires_at <= now`); the nightly cron writes it.
+ */
+export const roleChangeRequests = sqliteTable(
+  "role_change_requests",
+  {
+    id: text("id").primaryKey(),
+    roleId: text("role_id").notNull(),
+    baseVersion: integer("base_version").notNull(),
+    added: text("added").notNull(), // JSON string[]
+    removed: text("removed").notNull(), // JSON string[]
+    note: text("note"), // ≤500
+    status: text("status").notNull(), // pending | approved | rejected | withdrawn | expired | cancelled
+    requestedBy: text("requested_by").notNull(),
+    requestedAt: integer("requested_at").notNull(),
+    expiresAt: integer("expires_at").notNull(), // requested_at + 7 days
+    decidedBy: text("decided_by"),
+    decidedAt: integer("decided_at"),
+    decisionNote: text("decision_note"),
+  },
+  (table) => [
+    check(
+      "ck_role_change_requests_status",
+      sql`${table.status} IN ('pending','approved','rejected','withdrawn','expired','cancelled')`,
+    ),
+    uniqueIndex("uq_role_change_requests_pending").on(table.roleId).where(sql`status = 'pending'`),
+    index("idx_role_change_requests_status_expires").on(table.status, table.expiresAt),
+  ],
+);
+
+/**
+ * Just-in-time admin grants (SPEC-07 §3.1, FR-5/6, DEC-6): never written to `user_roles`. Active =
+ * `revoked_at IS NULL AND expires_at > now`. `expiry_logged_at` = the cron wrote `jit.expired` once.
+ */
+export const jitGrants = sqliteTable(
+  "jit_grants",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    roleName: text("role_name").notNull().default("admin"),
+    reason: text("reason").notNull(), // 10–500
+    grantedBy: text("granted_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    revokedAt: integer("revoked_at"),
+    revokedBy: text("revoked_by"),
+    expiryLoggedAt: integer("expiry_logged_at"),
+  },
+  (table) => [index("idx_jit_grants_user").on(table.userId)],
+);
+
+/**
+ * Quarterly access reviews (SPEC-07 §3.1, FR-7/8). `period` = 'YYYY-Qn' (Asia/Ho_Chi_Minh). `opened_by` =
+ * 'system:cron' or a user id. `due_at` = opened_at + 15 days.
+ */
+export const accessReviews = sqliteTable(
+  "access_reviews",
+  {
+    id: text("id").primaryKey(),
+    period: text("period").notNull().unique(),
+    status: text("status").notNull(), // open | closed
+    openedBy: text("opened_by").notNull(),
+    openedAt: integer("opened_at").notNull(),
+    dueAt: integer("due_at").notNull(),
+    closedBy: text("closed_by"),
+    closedAt: integer("closed_at"),
+  },
+  (table) => [check("ck_access_reviews_status", sql`${table.status} IN ('open','closed')`)],
+);
+
+/**
+ * Access review rows — snapshot of `user_roles` for active users when the review opened. "changed" is computed
+ * on read (current role ≠ `role_name`, or user no longer active).
+ */
+export const accessReviewItems = sqliteTable(
+  "access_review_items",
+  {
+    reviewId: text("review_id").notNull(),
+    userId: text("user_id").notNull(),
+    roleName: text("role_name").notNull(),
+    roleLabel: text("role_label"),
+    decision: text("decision"), // NULL | keep | remove
+    decidedBy: text("decided_by"),
+    decidedAt: integer("decided_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.reviewId, table.userId] }),
+    check("ck_access_review_items_decision", sql`${table.decision} IS NULL OR ${table.decision} IN ('keep','remove')`),
+    index("idx_access_review_items_review").on(table.reviewId),
+  ],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -510,4 +625,9 @@ export const schema = {
   templateVersions,
   contracts,
   approvalSteps,
+  sodPairs,
+  roleChangeRequests,
+  jitGrants,
+  accessReviews,
+  accessReviewItems,
 };

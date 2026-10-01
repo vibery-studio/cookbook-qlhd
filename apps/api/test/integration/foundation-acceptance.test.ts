@@ -118,8 +118,8 @@ describe("SPEC-01 foundation (acceptance)", () => {
     const gdMe = await me(gd.session);
     expect(gdMe.roles).toEqual(["giam_doc"]);
     expect([...gdMe.permissions].sort()).toEqual(
-      // SPEC-06 FR-1: giam_doc also carries `roles:write` (migration 0017)
-      [...APPROVER_PERMS, "roles:write", "template:write", "users:read", "users:write"].sort(),
+      // SPEC-06 FR-1: giam_doc also carries `roles:write` (migration 0017); SPEC-07 FR-10: `jit:grant`, `reviews:write` (0020)
+      [...APPROVER_PERMS, "jit:grant", "reviews:write", "roles:write", "template:write", "users:read", "users:write"].sort(),
     );
     const qlMe = await me(ql.session);
     expect(qlMe.roles).toEqual(["quan_ly"]);

@@ -35,7 +35,7 @@ const PASSWORD = "correct-horse-battery-staple";
 const fetcher = (input: string, init?: RequestInit) => SELF.fetch(input, init);
 const UNKNOWN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`. */
+/** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`; SPEC-07 FR-10: + `jit:grant`, `reviews:write` (18). */
 const CATALOG = [
   "audit:read",
   "contract:approve",
@@ -45,8 +45,10 @@ const CATALOG = [
   "contract:write",
   "flags:read",
   "flags:write",
+  "jit:grant",
   "notes:read",
   "notes:write",
+  "reviews:write",
   "roles:write",
   "settings:read",
   "settings:write",
@@ -55,7 +57,8 @@ const CATALOG = [
   "users:write",
 ];
 
-/** Seed grants of the system roles these tests edit (0010_seed_foundation.sql + SPEC-06 §3.1 roles:write for giam_doc). */
+/** Seed grants of the system roles these tests edit (0010_seed_foundation.sql + SPEC-06 §3.1 roles:write for giam_doc
+ * + SPEC-07 FR-10 jit:grant, reviews:write for giam_doc — 0020). */
 const SEED_GRANTS: Record<string, string[]> = {
   giam_doc: [
     "audit:read",
@@ -64,6 +67,8 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:read",
     "contract:submit",
     "contract:write",
+    "jit:grant",
+    "reviews:write",
     "roles:write",
     "template:write",
     "users:read",

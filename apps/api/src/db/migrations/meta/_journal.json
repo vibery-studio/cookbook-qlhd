@@ -134,6 +134,20 @@
       "when": 1790844851625,
       "tag": "0018_audit_events_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790851251096,
+      "tag": "0019_eminent_flatman",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790851259034,
+      "tag": "0020_seed_rbac_advanced",
+      "breakpoints": true
     }
   ]
 }

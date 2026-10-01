@@ -91,6 +91,32 @@ After a role's permission set commits, the service purges `session:<id>` for eve
 (`SELECT user_id FROM user_roles WHERE role_id = ?` → `Promise.all(invalidatePrincipalCache)`); cache TTL is 60s.
 R-1: one invocation may do ≤ 1,000 KV operations — above ~900 holders, split the purge via `waitUntil` batches (not built; small team).
 
+## Advanced controls (SPEC-07, row 2b)
+
+Tables `0019_*` (`sod_pairs`, `role_change_requests`, `jit_grants`, `access_reviews`, `access_review_items`); codes
+`jit:grant` (`01PERM00000000000JITGRANT0`), `reviews:write` (`01PERM000000REVIEWSWRITE00`) → `giam_doc` only (`0020`).
+
+- **SoD** = permission pairs (DEC-9 B: one role per person, so role pairs never bite). No role may hold both codes of
+  a pair. Checked when creating a role (`POST /roles`, clone), when creating a change request and again when applying
+  it — pure `sodViolations()` (`domain/sod.ts`) before the batch for the 409 `sod-conflict` + `pairs`, and
+  `sodClearSql(keys)` (`dao/sod-dao.ts`) inside the write WHERE. SoD runs BEFORE `grant_not_held` (PLAN-07 R-9).
+  Declaring a pair some role already violates → 409 + the roles (incl. `admin`, which changes by migration only).
+  Assigning a role / JIT needs no check (roles are already clean).
+- **Four-eyes**: `PATCH /roles` no longer takes `permissions`; a permission change = `POST /roles/{id}/change-requests`
+  (full new set, pins `version`, 1 pending per role via partial UNIQUE, expires in 7 days). Approve/reject by a
+  different person holding `roles:write` permanently (D1 `user_roles`), no active JIT; an approver carrying the role
+  may approve only removals. A pending request locks the role (`PATCH`/`DELETE`/new request → 409 `request-pending`).
+- **JIT admin**: `jit:grant` holder grants `admin` to someone else for 15–480 min with a reason. Stored in `jit_grants`
+  only — never `user_roles` — so every D1 guard (`admin_only`, `last-admin`, FR-12, approver, JIT grant, review) ignores
+  it (`jitActiveSql(userId, now)`, `dao/jit-dao.ts`). While active the principal is `admin` only (DEC-6); expiry cuts
+  at the next request via `valid_until` in the cached principal (DEC-8); the `*/5` cron only logs `jit.expired`.
+- **Quarterly review**: `0 3` cron opens `YYYY-Qn` (Asia/Ho_Chi_Minh) snapshotting active users × role; `reviews:write`
+  decides Keep / Remove (= disable via `updateUser`), never one's own row (`self_review`); the director's row is
+  decided by a permanent `roles:write` holder. Overdue after 15 days.
+- **Lockout (DEC-14)**: when nobody else is eligible to approve (e.g. admin disabled), creating a request → 409
+  `no-eligible-approver`; `GET /roles` shows `can.request=false` + `request_locked_reason:"no_approver"`. The only way
+  out is a migration (re-enable an approver or change `role_permissions` directly) — by the technical admin.
+
 ## Cache invalidation contract
 
 When a role assignment changes on a user, the OWNING SERVICE (admin-
