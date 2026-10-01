@@ -506,6 +506,14 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
         return fail(c, 409, "Contract changed after approval", ProblemType.ChangedAfterApproval, {
           detail: "Nội dung hợp đồng đã đổi sau khi được duyệt; cần gửi duyệt lại.",
         });
+      case "parent-not-issued":
+        return fail(c, 409, "Parent document is not issued", ProblemType.ParentNotIssued, {
+          detail: "Tài liệu gốc không còn ở trạng thái đã phát hành.",
+        });
+      case "quote-expired":
+        return fail(c, 409, "Quote has expired", ProblemType.QuoteExpired, {
+          detail: "Báo giá đã hết hạn hiệu lực.",
+        });
     }
   });
 
@@ -518,6 +526,11 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
         return notFound(c);
       case "state-conflict":
         return stateConflict(c, r.current);
+      case "has-children":
+        return fail(c, 409, "Document has live children", ProblemType.HasChildren, {
+          detail: "Còn tài liệu con đang hiệu lực; hãy rút hoặc hủy tài liệu con trước.",
+          children: r.children,
+        });
     }
   });
 

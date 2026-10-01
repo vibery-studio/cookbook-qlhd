@@ -20,7 +20,7 @@ export async function deleteDraft(db: Db, input: { id: string; actor: string; ip
           actor: sql<string>`${input.actor}`.as("actor"),
           action: sql<string>`${"contract.deleted"}`.as("action"),
           target: sql<string>`${`contract:${input.id}`}`.as("target"),
-          metadata: sql<string>`json_object('id', ${contracts.id})`.as("metadata"),
+          metadata: sql<string>`json_object('id', ${contracts.id}, 'type', ${contracts.type})`.as("metadata"),
           ip: sql<string | null>`${input.ip}`.as("ip"),
         })
         .from(contracts)

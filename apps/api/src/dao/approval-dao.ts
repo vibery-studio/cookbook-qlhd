@@ -179,7 +179,8 @@ export async function submitCas(db: Db, input: SubmitCasInput): Promise<boolean>
           actor: sql<string>`${input.actor}`.as("actor"),
           action: sql<string>`${"contract.submitted"}`.as("action"),
           target: sql<string>`${target}`.as("target"),
-          metadata: sql<string>`${metadata}`.as("metadata"),
+          // FR-14: `type` read from the row itself, never from the caller
+          metadata: sql<string>`json_set(${metadata}, '$.type', ${contracts.type})`.as("metadata"),
           ip: sql<string | null>`${input.ip}`.as("ip"),
         })
         .from(contracts)
@@ -268,7 +269,10 @@ export async function decideCas(db: Db, input: DecideCasInput): Promise<boolean>
           actor: sql<string>`${input.actor}`.as("actor"),
           action: sql<string>`${action}`.as("action"),
           target: sql<string>`${`contract:${cid}`}`.as("target"),
-          metadata: sql<string>`${metadata}`.as("metadata"),
+          // FR-14: `type` read from the contract row, never from the caller
+          metadata: sql<string>`json_set(${metadata}, '$.type', (SELECT c.type FROM contracts c WHERE c.id = ${cid}))`.as(
+            "metadata",
+          ),
           ip: sql<string | null>`${input.ip}`.as("ip"),
         })
         .from(approvalSteps)

@@ -44,7 +44,7 @@ export async function withdrawCas(db: Db, input: WithdrawCasInput): Promise<bool
           actor: sql<string>`${input.actor}`.as("actor"),
           action: sql<string>`${"contract.withdrawn"}`.as("action"),
           target: sql<string>`${`contract:${input.id}`}`.as("target"),
-          metadata: sql<string>`json_object('from', 'pending', 'to', 'draft')`.as("metadata"),
+          metadata: sql<string>`json_object('from', 'pending', 'to', 'draft', 'type', ${contracts.type})`.as("metadata"),
           ip: sql<string | null>`${input.ip}`.as("ip"),
         })
         .from(contracts)
