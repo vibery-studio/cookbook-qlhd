@@ -140,6 +140,53 @@ describe("checkTemplate", () => {
     ]);
   });
 
+  it("SPEC-09 §3.3: the new document sources resolve; unknown parent/creator refs do not", () => {
+    for (const s of [
+      "parent:number",
+      "parent:doc_date",
+      "derived:valid_until",
+      "derived:payment_due",
+      "derived:amount_requested",
+      "derived:amount_requested_in_words",
+      "creator:name",
+      "derived:goods_table",
+    ]) {
+      expect(isResolvableSource(s), s).toBe(true);
+    }
+    for (const s of ["parent:total", "parent:id", "creator:email", "derived:goods"]) expect(isResolvableSource(s), s).toBe(false);
+  });
+
+  it("a `goods` field ⇔ source derived:goods_table (02-VT trusted channel, like `lines`)", () => {
+    const ok = make({
+      body: "<p>{{so}} {{ngay}} {{nguoi}} {{han}}</p>{{bang}}",
+      fields: [
+        f("bang", { type: "goods", required: true, source: "derived:goods_table" }),
+        f("so", { source: "parent:number" }),
+        f("ngay", { type: "date", source: "parent:doc_date" }),
+        f("nguoi", { source: "creator:name" }),
+        f("han", { type: "date", source: "derived:payment_due" }),
+      ],
+    });
+    expect(codes(ok)).toEqual([]);
+    const e = checkTemplate(
+      make({
+        body: "<p>{{a}} {{b}} {{c}} {{d}}</p>",
+        fields: [
+          f("a", { type: "goods", source: "derived:lines_table" }),
+          f("b", { type: "goods", source: "manual" }),
+          f("c", { type: "text", source: "derived:goods_table" }),
+          f("d", { type: "lines", source: "derived:goods_table" }),
+        ],
+      }),
+    );
+    expect(e.map((x) => [x.code, x.key, x.source])).toEqual([
+      ["unresolvable_source", "a", "derived:lines_table"],
+      ["unresolvable_source", "b", "manual"],
+      ["unresolvable_source", "c", "derived:goods_table"],
+      ["unresolvable_source", "d", "derived:goods_table"],
+    ]);
+  });
+
   it("html attack list is refused (case-insensitive, fail-closed)", () => {
     const attacks = [
       "<SCRIPT>alert(1)</SCRIPT>",

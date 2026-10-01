@@ -1,5 +1,5 @@
 import { ROLE_NAMES, isPermission } from "@runway/rbac";
-import { LIMITS, LINES_TABLE_SOURCE, isResolvableSource } from "./template-sources";
+import { GOODS_TABLE_SOURCE, LIMITS, LINES_TABLE_SOURCE, isResolvableSource } from "./template-sources";
 
 export type TemplateCheckCode =
   | "placeholder_without_field"
@@ -225,6 +225,17 @@ export function checkTemplate(input: TemplateCheckInput): TemplateCheckError[] {
         }
       } else if (!isResolvableSource(src)) {
         push({ code: "unresolvable_source", key, source: String(src), message: `Trường ${label} có nguồn "${String(src)}" không tồn tại trong hệ thống.` });
+      } else if ((f.type === "goods") !== (src === GOODS_TABLE_SOURCE)) {
+        // SPEC-09 FR-12: the 02-VT goods table is the second trusted-HTML channel: `goods` ⇔ `derived:goods_table`.
+        push({
+          code: "unresolvable_source",
+          key,
+          source: String(src),
+          message:
+            f.type === "goods"
+              ? `Trường ${label} kiểu bảng hàng hóa (phiếu xuất kho) chỉ nhận nguồn "${GOODS_TABLE_SOURCE}".`
+              : `Nguồn "${GOODS_TABLE_SOURCE}" chỉ dùng cho trường kiểu bảng hàng hóa (goods).`,
+        });
       } else if ((f.type === "lines") !== (src === LINES_TABLE_SOURCE)) {
         // PLAN-08 R-5: the trusted-HTML table channel exists only for `lines` ⇔ `derived:lines_table`.
         push({

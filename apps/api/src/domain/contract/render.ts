@@ -1,7 +1,9 @@
 import { vatRatesLabel } from "../money/line-pricing";
+import type { DocType } from "./doc-types";
 import { formatMoney } from "./format";
+import { renderGoodsTable } from "./goods-table";
 import { escapeHtml, mergeFields } from "./merge";
-import type { Snapshot, SnapshotLine } from "./types";
+import type { GoodsSnapshotLine, Snapshot, SnapshotLine } from "./types";
 
 const PRINT_CSS = `
   @page { size: A4; margin: 20mm 18mm; }
@@ -42,12 +44,43 @@ export function renderLinesTable(lines: readonly SnapshotLine[]): string {
   return `<table class="lines">${head}${rows.join("")}</table>`;
 }
 
-/** Trusted-HTML values for the snapshot's `lines`-type fields. */
-export function lineTables(snapshot: Pick<Snapshot, "lines" | "line_table_fields">): Record<string, string> {
-  const keys = snapshot.line_table_fields ?? [];
-  if (keys.length === 0) return {};
-  const table = renderLinesTable(snapshot.lines ?? []);
-  return Object.fromEntries(keys.map((k) => [k, table]));
+function isPricedLine(line: SnapshotLine | GoodsSnapshotLine): line is SnapshotLine {
+  return typeof (line as Partial<SnapshotLine>).amount_ex_vat === "number";
+}
+
+/**
+ * Trusted-HTML values: the snapshot's `lines`-type fields get the priced table, its `goods`-type fields the 02-VT table
+ * (SPEC-09 FR-12). Both are built from snapshot data with every cell escaped; nothing else reaches the trusted channel.
+ */
+export function lineTables(
+  snapshot: Pick<Snapshot, "lines" | "line_table_fields"> & Partial<Pick<Snapshot, "goods_table_fields">>,
+): Record<string, string> {
+  const lineKeys = snapshot.line_table_fields ?? [];
+  const goodsKeys = snapshot.goods_table_fields ?? [];
+  if (lineKeys.length === 0 && goodsKeys.length === 0) return {};
+  const lines: ReadonlyArray<SnapshotLine | GoodsSnapshotLine> = snapshot.lines ?? [];
+  const out: Record<string, string> = {};
+  if (lineKeys.length > 0) {
+    const table = renderLinesTable(lines.filter(isPricedLine));
+    for (const k of lineKeys) out[k] = table;
+  }
+  if (goodsKeys.length > 0) {
+    const table = renderGoodsTable(lines);
+    for (const k of goodsKeys) out[k] = table;
+  }
+  return out;
+}
+
+const TITLE: Readonly<Record<DocType, string>> = {
+  quote: "Báo giá",
+  contract: "Hợp đồng",
+  payment_request: "Đề nghị thanh toán",
+  delivery_note: "Phiếu xuất kho",
+};
+
+/** The `issue:number` keys of a snapshot; an old snapshot (before SPEC-09) only ever had `so_hop_dong`. */
+export function numberFields(snapshot: Partial<Pick<Snapshot, "number_fields">>): string[] {
+  return snapshot.number_fields ?? ["so_hop_dong"];
 }
 
 export function renderHtml(
@@ -55,14 +88,17 @@ export function renderHtml(
   snapshot: Snapshot,
   number: string | null,
 ): { ok: true; html: string } | { ok: false; placeholders: string[] } {
-  const values: Record<string, string> = { ...snapshot.fields, so_hop_dong: number ?? "(chưa có số)" };
+  const printed = number ?? "(chưa có số)";
+  const values: Record<string, string> = { ...snapshot.fields };
+  for (const key of numberFields(snapshot)) values[key] = printed;
   const merged = mergeFields(body, values, lineTables(snapshot));
   if (merged.leftover.length > 0) return { ok: false, placeholders: merged.leftover };
 
+  const title = TITLE[snapshot.type] ?? TITLE.contract;
   const watermark = number === null ? '<div class="draft-watermark" aria-hidden="true">NHÁP</div>' : "";
   const html = `<!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><title>Hợp đồng</title><style>${PRINT_CSS}</style></head>
+<head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head>
 <body><main class="contract-document">${merged.html}</main>${watermark}</body>
 </html>`;
   return { ok: true, html };
