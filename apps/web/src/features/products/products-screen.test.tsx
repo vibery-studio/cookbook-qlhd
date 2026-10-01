@@ -84,9 +84,10 @@ describe("ProductsScreen (SPEC-08 §3.6)", () => {
     expect(row.textContent).toContain("2.700.000");
     expect(row.textContent).toContain("KCT");
     expect(row.textContent).toContain("2.600.000 từ 01/01/2027");
+    expect((get.mock.calls.at(-1)?.[1] as { params: { query: Record<string, unknown> } }).params.query).not.toHaveProperty("active"); // Tất cả = every product
     await userEvent.click(screen.getByRole("tab", { name: "Hàng hóa" }));
     const last = get.mock.calls.at(-1)?.[1] as { params: { query: Record<string, unknown> } };
-    expect(last.params.query).toMatchObject({ kind: "goods" });
+    expect(last.params.query).toMatchObject({ kind: "goods", active: "true" });
     await userEvent.click(screen.getByRole("tab", { name: "Ngừng bán" }));
     expect((get.mock.calls.at(-1)?.[1] as { params: { query: Record<string, unknown> } }).params.query).toMatchObject({ active: "false" });
   });
@@ -117,6 +118,24 @@ describe("ProductsScreen (SPEC-08 §3.6)", () => {
     const dlg = await screen.findByRole("dialog", { name: "Thêm mức giá" });
     expect(dlg.textContent).toContain("Tài liệu lập trước ngày này giữ giá cũ");
     expect(within(dlg).getByLabelText<HTMLInputElement>("Áp dụng từ ngày").min).toBe(tomorrowIso());
+  });
+
+  it("Hủy a scheduled level asks first; only 'Hủy mức giá' calls DELETE", async () => {
+    serve({ edit: true, price: true });
+    del.mockImplementation(() => ok({}));
+    renderScreen(manager);
+    await userEvent.click(await screen.findByTestId("product-row"));
+    const drawer = await screen.findByRole("dialog", { name: "Sản phẩm · G6" });
+    const scheduled = (await within(drawer).findAllByTestId("price-level"))[0] as HTMLElement;
+    await userEvent.click(within(scheduled).getByRole("button", { name: "Hủy" }));
+    expect(del).not.toHaveBeenCalled();
+    const confirm = await screen.findByRole("dialog", { name: "Xác nhận" });
+    expect(confirm.textContent).toContain("Hủy mức giá từ 01/01/2027?");
+    await userEvent.click(within(confirm).getByRole("button", { name: "Không" }));
+    expect(del).not.toHaveBeenCalled();
+    await userEvent.click(within(scheduled).getByRole("button", { name: "Hủy" }));
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Xác nhận" })).getByRole("button", { name: "Hủy mức giá" }));
+    expect(del).toHaveBeenCalledTimes(1);
   });
 
   it("add-product dialog: goods hide Thời hạn; live 'Giá gồm VAT' follows rate; POST sends the first price", async () => {

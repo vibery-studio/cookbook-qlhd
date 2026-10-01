@@ -7,6 +7,9 @@ export type ConfirmSpec = {
   askReason?: boolean;
   reasonRequired?: boolean;
   danger?: boolean;
+  /** Label of the confirm button (default "Xác nhận"). */
+  confirmLabel?: string;
+  cancelLabel?: string;
 };
 
 /** The single "Xác nhận" dialog for reject / issue / void / withdraw / delete. */
@@ -41,8 +44,8 @@ export function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onCancel}>Không</Button>
-          <Button type="button" variant={spec.danger ? "danger" : "primary"} loading={pending} onClick={submit}>Xác nhận</Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>{spec.cancelLabel ?? "Không"}</Button>
+          <Button type="button" variant={spec.danger ? "danger" : "primary"} loading={pending} onClick={submit}>{spec.confirmLabel ?? "Xác nhận"}</Button>
         </>
       }
     >

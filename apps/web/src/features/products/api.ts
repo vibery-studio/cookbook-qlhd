@@ -75,7 +75,7 @@ export function useProducts(tab: ProductTab, q: string) {
             query: {
               limit: 100,
               ...(tab === "service" || tab === "goods" ? { kind: tab } : {}),
-              active: tab === "inactive" ? "false" : "true",
+              ...(tab === "all" ? {} : { active: tab === "inactive" ? "false" : "true" }),
               ...(q ? { q } : {}),
             },
           },

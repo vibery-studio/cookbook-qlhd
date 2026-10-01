@@ -117,8 +117,8 @@ function ProductTable({ items, onOpen }: { items: Product[]; onOpen: (id: string
               <td className="truncate px-s3 font-mono text-strong">
                 <button type="button" className="hover:underline focus-visible:underline" onClick={(e) => { e.stopPropagation(); onOpen(p.id); }}>{p.code}</button>
               </td>
-              <td className="truncate px-s3 text-body" title={p.name}>{p.name}</td>
-              <td className="px-s3"><Pill tone={p.kind === "service" ? "accent" : "neutral"}>{KIND_LABEL[p.kind]}</Pill></td>
+              <td className="truncate px-s3 text-body" title={p.name}>{p.name}{p.active ? null : <Pill tone="neutral" className="ml-s2">Ngừng bán</Pill>}</td>
+              <td className="whitespace-nowrap px-s3"><Pill tone={p.kind === "service" ? "accent" : "neutral"}>{KIND_LABEL[p.kind]}</Pill></td>
               <td className="truncate px-s3 text-muted">{p.unit}</td>
               <td className="px-s3 text-muted">{durationLabel(p.duration_value, p.duration_unit)}</td>
               <td className="px-s3 text-right font-mono text-strong">{p.price ? formatPlainMoney(p.price.unit_price_ex_vat) : <span className="font-sans text-muted">Chưa có giá</span>}</td>
@@ -142,7 +142,7 @@ function ProductCards({ items, onOpen }: { items: Product[]; onOpen: (id: string
             <div className="flex items-start justify-between gap-s3">
               <div className="min-w-0">
                 <p className="font-mono text-md font-semibold text-strong">{p.code}</p>
-                <p className="truncate text-md text-body">{p.name}</p>
+                <p className="truncate text-md text-body">{p.name}{p.active ? null : <Pill tone="neutral" className="ml-s2">Ngừng bán</Pill>}</p>
               </div>
               <Pill tone={p.kind === "service" ? "accent" : "neutral"}>{KIND_LABEL[p.kind]}</Pill>
             </div>

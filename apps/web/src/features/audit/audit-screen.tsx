@@ -1,9 +1,11 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useCurrentUser } from "../../app/me";
 import { client } from "../../lib/client";
 import { problemMessage } from "../../lib/problem-messages";
 import { formatVietnamTimestamp } from "../../lib/vn-date";
 import { cn } from "../../lib/cn";
+import { useUsers } from "../users/api";
 import { Button, EmptyState, ErrorState, Skeleton } from "../../ui";
 import { AUDIT_ACTIONS, KNOWN_AUDIT_ACTIONS, auditSentence, type AuditTone } from "./audit-sentence";
 
@@ -45,6 +47,10 @@ export function AuditScreen() {
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   });
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  // Names for jit.granted targets: the audit metadata holds the user id only (no PII); resolve client-side when the viewer may read users.
+  const canReadUsers = useCurrentUser().permissions.includes("users:read");
+  const users = useUsers(canReadUsers);
+  const names = new Map((users.data?.pages.flatMap((p) => p.items) ?? []).map((u) => [u.id, u.display_name ?? u.email]));
 
   return (
     <section className="grid gap-s4">
@@ -88,7 +94,9 @@ export function AuditScreen() {
         <>
           <ul className="grid gap-[2px]">
             {items.map((ev) => {
-              const s = auditSentence(ev);
+              const targetId = ev.action === "jit.granted" ? ev.metadata?.["user"] : undefined;
+              const targetName = typeof targetId === "string" ? names.get(targetId) : undefined;
+              const s = auditSentence(targetName ? { ...ev, metadata: { ...ev.metadata, user_name: targetName } } : ev);
               const denied = ev.action === "permission.denied";
               const actor = ev.actor_name ?? "Hệ thống";
               return (

@@ -29,8 +29,9 @@ export function errorText(error: unknown, context?: "invite"): string {
   return networkProblemMessage();
 }
 
-export function useUsers() {
+export function useUsers(enabled = true) {
   return useInfiniteQuery({
+    enabled,
     queryKey: ["users"],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Button, Field, LockedNote, Pill, Skeleton, type PillTone } from "../../ui";
 import { formatIsoDate } from "../../lib/vn-date";
+import { ConfirmDialog } from "../contracts/confirm-dialog";
 import { Dialog, DialogHeader } from "../contracts/dialog";
 import { productError, useCancelPrice, usePatchProduct, useProduct, type PriceHistoryItem, type Product, type ProductError } from "./api";
 import { SELECT_CLASS } from "./price-fields";
@@ -25,6 +26,7 @@ export function ProductDrawer({ summary, onClose, notify }: { summary: Product; 
   const [edit, setEdit] = useState<Edit | null>(null); // null = follow the server product
   const [failure, setFailure] = useState<ProductError | null>(null);
   const [addLevel, setAddLevel] = useState(false);
+  const [confirmLevel, setConfirmLevel] = useState<PriceHistoryItem | null>(null);
 
   const product: Product = detail.data ?? summary;
   const levels = detail.data?.prices ?? [];
@@ -81,9 +83,11 @@ export function ProductDrawer({ summary, onClose, notify }: { summary: Product; 
     if (cancel.isPending || !level) return;
     try {
       await cancel.mutateAsync({ id: product.id, priceId: level.id });
+      setConfirmLevel(null);
       setFailure(null);
       notify("Đã hủy mức giá");
     } catch (error) {
+      setConfirmLevel(null);
       setFailure(productError(error, "price"));
     }
   }
@@ -144,7 +148,7 @@ export function ProductDrawer({ summary, onClose, notify }: { summary: Product; 
                   <div className="flex flex-wrap items-center justify-between gap-s2">
                     <Pill tone={STATUS_TONE[level.status]}>{LEVEL_STATUS_LABEL[level.status]}</Pill>
                     {canPrice && level.status === "scheduled" ? (
-                      <Button type="button" variant="ghost" loading={cancel.isPending} onClick={() => void cancelLevel(level)}>Hủy</Button>
+                      <Button type="button" variant="ghost" onClick={() => setConfirmLevel(level)}>Hủy</Button>
                     ) : null}
                   </div>
                   <p className="font-mono text-md text-strong">
@@ -186,6 +190,14 @@ export function ProductDrawer({ summary, onClose, notify }: { summary: Product; 
           </div>
         ) : null}
       </Dialog>
+      {confirmLevel ? (
+        <ConfirmDialog
+          spec={{ message: `Hủy mức giá từ ${formatIsoDate(confirmLevel.effective_from)}?`, danger: true, confirmLabel: "Hủy mức giá" }}
+          pending={cancel.isPending}
+          onCancel={() => setConfirmLevel(null)}
+          onConfirm={() => void cancelLevel(confirmLevel)}
+        />
+      ) : null}
       {addLevel ? (
         <PriceLevelModal
           productId={product.id}
