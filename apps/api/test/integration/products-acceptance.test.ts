@@ -836,10 +836,10 @@ describe("SPEC-08 products & prices (acceptance)", () => {
     const c = await customer(nv);
     const id = await ids(nv);
 
-    // DEC-8: v2 is current, v1 kept (append-only)
+    // DEC-8: the lines version is current (v2; SPEC-09 0026 adds v3 = v2 + parent:* sources), older ones kept (append-only)
     const seed: TemplateDetail = await (await nv.session.fetch(`/templates/${tpl}`)).json();
-    expect(seed.version.version_no).toBe(2);
-    expect(seed.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
+    expect(seed.version.version_no).toBe(3);
+    expect(seed.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
     const keys = new Map(seed.version.fields.map((f) => [f.key, f]));
     expect(keys.get("bang_hang")).toMatchObject({ type: "lines", source: "derived:lines_table" });
     for (const [key, source] of [

@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
+import { writeAuditEvent } from "../dao/audit-dao";
 import { getDb } from "../db/client";
 import { UlidSchema } from "../dto/common";
 import {
@@ -34,7 +35,7 @@ import { getContractPdf } from "../services/contract/pdf-service";
 import { selectPdfRenderer } from "../adapters/pdf-select";
 import { deepScrub } from "../observability/logger";
 import { submitContract } from "../services/contract/submit-service";
-import type { BuildFailure, CommandCtx } from "../services/contract/types";
+import type { BuildFailure, ChildCopyFailure, CommandCtx, DocTypeFailure } from "../services/contract/types";
 import { updateContract } from "../services/contract/update-service";
 import { voidContract } from "../services/contract/void-service";
 import { withdrawContract } from "../services/contract/withdraw-service";
@@ -109,6 +110,64 @@ function buildFailure(c: Ctx, r: BuildFailure) {
   }
 }
 
+/**
+ * DEC-10 B (R-4): the route gate is `contract:read`; the service found the actor lacks the write code of the document's type.
+ * Recorded like `require-permission.ts` (`permission.denied {permission, method, path}`, awaited before the 403).
+ */
+async function deniedByType(c: Ctx, permission: string) {
+  const principal = c.get("principal")!;
+  const metadata = { permission, method: c.req.method, path: c.req.path };
+  await writeAuditEvent(getDb(c.env), {
+    actor: principal.id,
+    action: "permission.denied",
+    target: c.req.path,
+    metadata,
+    ip: c.req.header("cf-connecting-ip") ?? null,
+  });
+  return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
+    detail: `Bạn không có quyền lập hoặc sửa loại tài liệu này (${permission}).`,
+  });
+}
+
+function docTypeFailure(c: Ctx, r: DocTypeFailure) {
+  switch (r.kind) {
+    case "parent-required":
+      return fail(c, 422, "Document needs a parent", ProblemType.ParentRequired, {
+        detail: "Đề nghị thanh toán chỉ lập từ hợp đồng đã phát hành.",
+      });
+    case "lines-locked":
+      return fail(c, 422, "Lines are locked", ProblemType.LinesLocked, {
+        detail: "Dòng hàng, giá, giảm giá và khách hàng của tài liệu con lấy từ tài liệu gốc, không sửa được.",
+      });
+    case "template-type":
+      return fail(c, 422, "Template is of another document type", ProblemType.TemplateType, {
+        detail: "Mẫu thuộc loại tài liệu khác.",
+      });
+    case "nothing-to-pay":
+      return fail(c, 422, "Nothing to pay", ProblemType.NothingToPay, { detail: "Hợp đồng có tổng tiền 0 đ." });
+    case "child-type":
+      return fail(c, 422, "Child type not allowed", ProblemType.ChildType, {
+        detail: "Loại tài liệu con không hợp với tài liệu gốc.",
+      });
+  }
+}
+
+function childCopyFailure(c: Ctx, r: ChildCopyFailure) {
+  switch (r.kind) {
+    case "child-exists":
+      return fail(c, 409, "A live child already exists", ProblemType.ChildExists, {
+        detail: "Tài liệu gốc đã có một tài liệu con loại này đang hiệu lực.",
+        ...(r.existingId === null ? {} : { existing_id: r.existingId }),
+      });
+    case "quote-expired":
+      return fail(c, 409, "Quote has expired", ProblemType.QuoteExpired, { detail: "Báo giá đã hết hạn hiệu lực." });
+    case "parent-not-issued":
+      return fail(c, 409, "Parent document is not issued", ProblemType.ParentNotIssued, {
+        detail: "Tài liệu gốc không còn ở trạng thái đã phát hành.",
+      });
+  }
+}
+
 function cmdCtx(c: Ctx): CommandCtx {
   return { actor: c.get("principal")!, ip: c.req.header("cf-connecting-ip") ?? null, now: new Date() };
 }
@@ -130,7 +189,7 @@ const createRouteDef = createRoute({
   responses: {
     201: json(ContractSchema, "Draft created (number = null)"),
     ...baseErrors,
-    403: problemResponse("Missing contract:write permission"),
+    403: problemResponse("Missing the write permission of the document type (contract:write · quote:write · payment_request:write · delivery_note:write) → permission.denied"),
     404: problemResponse("template or customer not found"),
     409: problemResponse("idempotency-conflict"),
     422: problemResponse(
@@ -182,7 +241,7 @@ const patchRouteDef = createRoute({
   responses: {
     200: json(ContractSchema, "Draft updated (version + 1)"),
     ...baseErrors,
-    403: problemResponse("Missing contract:write, or not the creator (permission.denied)"),
+    403: problemResponse("Missing the type's write permission, or not the creator (permission.denied)"),
     404: problemResponse("Contract not found"),
     409: problemResponse("state-conflict (current_status) | stale"),
     422: problemResponse("validation (lines / lines.<i>.product_id) | product-inactive | no-price | missing-fields | unresolved-placeholder"),
@@ -281,7 +340,7 @@ const copyRouteDef = createRoute({
   responses: {
     201: json(ContractSchema, "New draft (source_contract_id set)"),
     ...baseErrors,
-    403: problemResponse("Missing contract:write permission"),
+    403: problemResponse("Missing the write permission of the document type (contract:write · quote:write · payment_request:write · delivery_note:write) → permission.denied"),
     404: problemResponse("Contract not found"),
     409: problemResponse("state-conflict (source not rejected/voided, or voided already replaced)"),
     422: problemResponse("missing-fields | validation | product-inactive | no-price (today's data)"),
@@ -352,7 +411,7 @@ const deleteRouteDef = createRoute({
   responses: {
     204: { description: "Draft deleted" },
     ...baseErrors,
-    403: problemResponse("Missing contract:write permission, or not the creator (rule creator_only)"),
+    403: problemResponse("Missing the type's write permission, or not the creator (rule creator_only)"),
     404: problemResponse("Contract not found"),
     409: problemResponse("state-conflict (current_status) — only drafts can be deleted"),
   },
@@ -381,20 +440,23 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
     requireAuth(),
     requirePerm("contract:read"),
   );
-  app.on("post", "/contracts", requireAuth(), requirePerm("contract:write"), withIdempotency());
-  app.on("delete", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
-  app.on("patch", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
+  // DEC-10 B (R-4): write by type — the gate is read; the service checks WRITE_PERM[type], the handler records the denial.
+  app.on("post", "/contracts", requireAuth(), requirePerm("contract:read"), withIdempotency());
+  app.on("delete", "/contracts/:id", requireAuth(), requirePerm("contract:read"));
+  app.on("patch", "/contracts/:id", requireAuth(), requirePerm("contract:read"));
   app.on("post", "/contracts/:id/submit", requireAuth(), requirePerm("contract:submit"), withIdempotency());
   app.on("post", ["/contracts/:id/approve", "/contracts/:id/reject"], requireAuth(), requirePerm("contract:approve"), withIdempotency());
   app.on("post", ["/contracts/:id/issue", "/contracts/:id/void"], requireAuth(), requirePerm("contract:issue"), withIdempotency());
   app.on("post", "/contracts/:id/withdraw", requireAuth(), requirePerm("contract:submit"));
-  app.on("post", "/contracts/:id/copy", requireAuth(), requirePerm("contract:write"), withIdempotency());
+  app.on("post", "/contracts/:id/copy", requireAuth(), requirePerm("contract:read"), withIdempotency());
   app.on("get", "/contracts/:id/audit", requireAuth(), requirePerm("audit:read"));
 
   app.openapi(createRouteDef, async (c) => {
     const r = await createContract(getDb(c.env), cmdCtx(c), c.req.valid("json"));
     if (r.kind === "ok") return c.json(r.contract, 201);
     if (r.kind === "not-found") return notFound(c, r.what === "customer" ? "Customer" : "Template");
+    if (r.kind === "forbidden") return deniedByType(c, r.permission);
+    if (r.kind === "parent-required") return docTypeFailure(c, r);
     return buildFailure(c, r);
   });
 
@@ -417,6 +479,8 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
       case "not-found":
         return notFound(c);
       case "forbidden":
+        return deniedByType(c, r.permission);
+      case "not-creator":
         return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
           detail: "Chỉ người tạo mới được sửa hợp đồng nháp.",
           rule: "creator_only",
@@ -427,6 +491,12 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
         return fail(c, 409, "Contract was changed by someone else", ProblemType.Stale, {
           detail: "expected_version is out of date; reload the contract and retry.",
         });
+      case "parent-required":
+      case "lines-locked":
+      case "template-type":
+      case "nothing-to-pay":
+      case "child-type":
+        return docTypeFailure(c, r);
       default:
         return buildFailure(c, r);
     }
@@ -543,6 +613,18 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
         return notFound(c);
       case "state-conflict":
         return stateConflict(c, r.current);
+      case "forbidden":
+        return deniedByType(c, r.permission);
+      case "parent-required":
+      case "lines-locked":
+      case "template-type":
+      case "nothing-to-pay":
+      case "child-type":
+        return docTypeFailure(c, r);
+      case "child-exists":
+      case "quote-expired":
+      case "parent-not-issued":
+        return childCopyFailure(c, r);
       default:
         return buildFailure(c, r);
     }
@@ -556,6 +638,8 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
       case "not-found":
         return notFound(c);
       case "forbidden":
+        return deniedByType(c, r.permission);
+      case "not-creator":
         return fail(c, 403, "Forbidden", ProblemType.Forbidden, {
           detail: "Chỉ người tạo mới được xóa hợp đồng nháp.",
           rule: "creator_only",

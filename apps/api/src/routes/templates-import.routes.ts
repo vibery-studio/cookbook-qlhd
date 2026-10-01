@@ -46,7 +46,6 @@ const previewRoute = createRoute({
       "validation (lines_table beyond the table count) | docx-invalid with `reason` (not_docx | macro_enabled | no_document | xml_invalid | too_large_inflated | too_many_entries)",
     ),
     // TODO(driver): drop with the next `pnpm openapi:export && pnpm client:generate` (handler is live since C-10-003)
-    501: problemResponse("Not implemented"),
   },
 });
 

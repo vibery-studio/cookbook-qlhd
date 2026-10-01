@@ -3658,15 +3658,6 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Not implemented */
-                501: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
             };
         };
         delete?: never;
@@ -3773,7 +3764,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing contract:write permission */
+                /** @description Missing the write permission of the document type (contract:write · quote:write · payment_request:write · delivery_note:write) → permission.denied */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -3904,7 +3895,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing contract:write permission, or not the creator (rule creator_only) */
+                /** @description Missing the type's write permission, or not the creator (rule creator_only) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -3969,7 +3960,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing contract:write, or not the creator (permission.denied) */
+                /** @description Missing the type's write permission, or not the creator (permission.denied) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -4472,7 +4463,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing contract:write permission */
+                /** @description Missing the write permission of the document type (contract:write · quote:write · payment_request:write · delivery_note:write) → permission.denied */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -4893,15 +4884,6 @@ export interface paths {
                 };
                 /** @description validation (schema; errors[].path `lines` = the BG breaks the HĐ line rule, DEC-7) | child-type (pair not in CHILD_OF) | lines-locked (values.giam_gia sent) | template-type (template of another type) | nothing-to-pay (HĐ total 0) | missing-fields (missing_fields[]) */
                 422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
-                /** @description Not implemented */
-                501: {
                     headers: {
                         [name: string]: unknown;
                     };
