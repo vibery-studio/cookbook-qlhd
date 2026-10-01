@@ -1,6 +1,6 @@
 # PLAN-05: Xuất PDF tài liệu đã phát hành
 
-Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền)
+Status: Done 2026-10-01 (driver chốt — bạn ủy quyền)
 Spec: docs/spec/SPEC-05.md
 
 ## 0. Sửa đổi 2026-10-01 — PDF tạo khi bấm (SPEC-05 §0)
@@ -52,5 +52,11 @@ Spec: docs/spec/SPEC-05.md
 ## 5. Trace check
 - [x] mọi FR có AC (FR-1 AC-1/3 · FR-2 AC-2 · FR-3 AC-2/4 · FR-4 AC-6 · FR-5 AC-1/5 · FR-6 AC-1/2 · FR-7 AC-3 · FR-8 AC-6/7) · mọi AC có dòng §1 · mọi AC có card · mọi edge "now" có AC
 
-## 6. PROOF log
-(điền ở C-05-005)
+## 6. PROOF log (2026-10-01, bản "tạo khi bấm")
+- Checks: `CI=true pnpm --filter @runway/api test` → `Test Files 43 passed (43) · Tests 265 passed | 2 skipped (267)` (450s; trước bản vá vitest-pool-workers: 3–11 file đỏ `RangeError: Maximum call stack size exceeded` ở `new Class (test-internal.mjs)`) · web unit `14 passed · 131 passed` · `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · openapi có `GET /contracts/{id}/pdf` → 200/401/403/404/409/503.
+- e2e (một lần): `PROOF_SHOTS=1 CI=true pnpm --filter @runway/web e2e` → `3 passed (24.2s)`; bước Tải PDF: tải `HD-2026-001.pdf` bằng Chrome cục bộ thật.
+- File thật `apps/web/e2e/shots/HD-2026-001.pdf`: `pdffonts` → Arimo-Regular/Bold nhúng (emb yes, uni yes); A4 (594.96×841.92 pt), 2 trang; ảnh trang: dấu tiếng Việt đúng, nội dung khớp bản in.
+- Attack (API AC-5, chạy trong suite): không đăng nhập → 401; admin (không `contract:*`) → 403 + `permission.denied`, không render gì; id lạ → 404; nháp → 409 `state-conflict`.
+- Human checklist: đăng nhập Quản lý → hợp đồng đã phát hành → "Tải PDF" → file `HD-YYYY-NNN.pdf` tải về, mở thấy đúng nội dung bản in · bấm lần 2 → file y hệt · hợp đồng đã hủy → vẫn tải file gốc (không dải ĐÃ HỦY) · nháp → không có nút.
+- Phát hiện (không thuộc PDF, có sẵn từ 4b): bản in không định nghĩa class `.center`/`.b` mà mẫu dùng → tiêu đề không căn giữa/không đậm, khối chữ ký không chia 2 cột — cả bản in trình duyệt lẫn PDF. → FIX riêng.
+- Result: pass.
