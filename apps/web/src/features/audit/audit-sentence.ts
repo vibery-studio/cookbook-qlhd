@@ -1,3 +1,5 @@
+import { permissionLabel } from "../roles/permission-labels";
+
 export type AuditTone = "neutral" | "danger" | "accent" | "ok" | "pending";
 
 export type AuditEventLike = {
@@ -49,6 +51,19 @@ export const AUDIT_ACTIONS: Readonly<Record<string, Entry>> = {
   "role.updated": { icon: "🛡", tone: "neutral", text: "sửa vai trò" },
   "role.permissions_changed": { icon: "🛡", tone: "accent", text: "đổi quyền của vai trò" },
   "role.deleted": { icon: "🗑", tone: "neutral", text: "xóa vai trò" },
+  "sod.pair_added": { icon: "⚖️", tone: "accent", text: "khai cặp quyền xung đột" },
+  "sod.pair_removed": { icon: "⚖️", tone: "neutral", text: "xóa cặp quyền xung đột" },
+  "role.change_requested": { icon: "📨", tone: "pending", text: "gửi yêu cầu đổi quyền của vai trò" },
+  "role.change_approved": { icon: "✓", tone: "ok", text: "duyệt yêu cầu đổi quyền của vai trò" },
+  "role.change_rejected": { icon: "✕", tone: "danger", text: "từ chối yêu cầu đổi quyền của vai trò" },
+  "role.change_withdrawn": { icon: "↩", tone: "neutral", text: "rút yêu cầu đổi quyền của vai trò" },
+  "role.change_expired": { icon: "⏱", tone: "neutral", text: "yêu cầu đổi quyền của vai trò hết hạn" },
+  "jit.granted": { icon: "⏳", tone: "accent", text: "cấp quản trị tạm thời" },
+  "jit.revoked": { icon: "↩", tone: "neutral", text: "thu hồi quản trị tạm thời" },
+  "jit.expired": { icon: "⏱", tone: "neutral", text: "quản trị tạm thời hết hạn" },
+  "review.opened": { icon: "🔍", tone: "accent", text: "mở đợt rà soát quyền" },
+  "review.closed": { icon: "✓", tone: "ok", text: "kết thúc đợt rà soát quyền" },
+  "review.item_decided": { icon: "🔍", tone: "neutral", text: "rà soát quyền" },
   "settings.update": { icon: "⚙️", tone: "neutral", text: "đổi cài đặt hệ thống" },
 };
 
@@ -69,6 +84,59 @@ function roleText(action: string, metadata: Record<string, unknown> | null | und
   return `${fallback} «${label}»`;
 }
 
+const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+
+const hhmm = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** role.change_* : "gửi yêu cầu bật 2 · tắt 1 quyền của «Quản lý»" — without the role label, the table phrase. */
+function changeText(action: string, metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const label = str(metadata?.["label"]);
+  if (label === null) return fallback;
+  const on = count(metadata?.["added"]);
+  const off = count(metadata?.["removed"]);
+  const parts = [...(on > 0 ? [`bật ${on}`] : []), ...(off > 0 ? [`tắt ${off}`] : [])];
+  const what = parts.length > 0 ? `${parts.join(" · ")} quyền của «${label}»` : `đổi quyền của «${label}»`;
+  switch (action) {
+    case "role.change_requested": return `gửi yêu cầu ${what}`;
+    case "role.change_approved": return `duyệt yêu cầu ${what}`;
+    case "role.change_rejected": return `từ chối yêu cầu ${what}`;
+    case "role.change_withdrawn": return `rút yêu cầu ${what}`;
+    default: return `yêu cầu ${what} hết hạn`;
+  }
+}
+
+function sodText(metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const a = str(metadata?.["perm_a"]);
+  const b = str(metadata?.["perm_b"]);
+  return a !== null && b !== null ? `${fallback} «${permissionLabel(a)}» ⟷ «${permissionLabel(b)}»` : fallback;
+}
+
+/** jit.granted: "cấp quản trị tạm thời [cho «Bình»] tới 15:30 — lý do: …" (the event stores the user id; a name only if the API sends one). */
+function jitGrantText(metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const name = str(metadata?.["user_name"]);
+  const expires = metadata?.["expires_at"];
+  const reason = str(metadata?.["reason"]);
+  return [
+    fallback,
+    ...(name !== null ? [`cho «${name}»`] : []),
+    ...(typeof expires === "number" ? [`tới ${hhmm.format(new Date(expires * 1000))}`] : []),
+  ].join(" ") + (reason !== null ? ` — lý do: ${reason}` : "");
+}
+
+function reviewPeriod(metadata: Record<string, unknown> | null | undefined): string | null {
+  const m = /^(\d{4})-(Q[1-4])$/.exec(str(metadata?.["period"]) ?? "");
+  return m ? `${m[2]}/${m[1]}` : null;
+}
+
+function reviewText(action: string, metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  if (action === "review.item_decided") {
+    const d = metadata?.["decision"];
+    return d === "keep" ? "rà soát quyền: giữ một tài khoản" : d === "remove" ? "rà soát quyền: gỡ một tài khoản" : fallback;
+  }
+  const period = reviewPeriod(metadata);
+  return period ? `${fallback} ${period}` : fallback;
+}
+
 export function auditSentence(event: AuditEventLike): AuditSentence {
   const action = event.action.trim();
   const entry = AUDIT_ACTIONS[action];
@@ -81,6 +149,10 @@ export function auditSentence(event: AuditEventLike): AuditSentence {
       return { ...entry, text: "bị chặn: thử thao tác khi thiếu quyền", code: permission };
     }
   }
+  if (action.startsWith("role.change_")) return { ...entry, text: changeText(action, event.metadata, entry.text) };
+  if (action.startsWith("sod.")) return { ...entry, text: sodText(event.metadata, entry.text) };
+  if (action === "jit.granted") return { ...entry, text: jitGrantText(event.metadata, entry.text) };
+  if (action.startsWith("review.")) return { ...entry, text: reviewText(action, event.metadata, entry.text) };
   if (action.startsWith("role.")) return { ...entry, text: roleText(action, event.metadata, entry.text) };
   return entry;
 }

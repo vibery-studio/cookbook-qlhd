@@ -33,6 +33,7 @@
     "dev:reset": "tsx scripts/dev-reset.ts",
     "dev:seed-admin": "tsx scripts/dev-seed-admin.ts",
     "dev:seed-team": "tsx scripts/dev-seed-team.ts",
+    "dev:seed-products": "tsx scripts/dev-seed-products.ts",
     "deploy:preflight": "tsx scripts/deploy-preflight.ts",
     "deploy:verify": "tsx scripts/deploy-verify.ts",
     "deploy:rollback": "tsx scripts/deploy-rollback.ts",

@@ -8,12 +8,14 @@ export function roleDiff(oldPerms: readonly string[], newPerms: readonly string[
   };
 }
 
-/** Save-button text: "Lưu", "Lưu (−1 quyền)", "Lưu (+2 quyền · −1 quyền)" (U+2212 minus). */
-export function roleDiffLabel(oldPerms: readonly string[], newPerms: readonly string[]): string {
+/** Counts as "+2 · −1" (added first, U+2212 minus); "" with no change. */
+export function diffCounts(added: number, removed: number): string {
+  return [...(added > 0 ? [`+${added}`] : []), ...(removed > 0 ? [`−${removed}`] : [])].join(" · ");
+}
+
+/** Submit-button text of a permission edit (SPEC-07 DEC-1: sent, not saved): "Gửi yêu cầu", "Gửi yêu cầu (−1)", "Gửi yêu cầu (+2 · −1)". */
+export function requestDiffLabel(oldPerms: readonly string[], newPerms: readonly string[]): string {
   const { added, removed } = roleDiff(oldPerms, newPerms);
-  const parts = [
-    ...(added.length > 0 ? [`+${added.length} quyền`] : []),
-    ...(removed.length > 0 ? [`−${removed.length} quyền`] : []),
-  ];
-  return parts.length > 0 ? `Lưu (${parts.join(" · ")})` : "Lưu";
+  const counts = diffCounts(added.length, removed.length);
+  return counts === "" ? "Gửi yêu cầu" : `Gửi yêu cầu (${counts})`;
 }

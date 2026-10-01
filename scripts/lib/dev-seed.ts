@@ -52,3 +52,27 @@ export function execLocalD1(script: string, sql: string): void {
   );
   if (r.status !== 0) refuse(script, `local D1 update failed:\n${r.stderr || r.stdout}`);
 }
+
+/** Always `--local`; returns the rows of ONE read-only statement (wrangler `--json`). */
+export function execLocalD1Json<T = Record<string, unknown>>(script: string, sql: string): T[] {
+  const r = spawnSync(
+    "pnpm",
+    ["exec", "wrangler", "--config", "apps/api/wrangler.toml", "d1", "execute", LOCAL_DB_NAME, "--local", "--json", "--command", sql],
+    { stdio: "pipe", encoding: "utf8" },
+  );
+  if (r.status !== 0) refuse(script, `local D1 read failed:\n${r.stderr || r.stdout}`);
+  try {
+    const out = r.stdout.slice(r.stdout.indexOf("["));
+    return (JSON.parse(out) as { results: T[] }[])[0]?.results ?? [];
+  } catch {
+    return refuse(script, `cannot parse wrangler --json output:\n${r.stdout}`);
+  }
+}
+
+/** Triggers of a table, exactly as stored (the SQL lives only in the migration — same idea as clearAuditEvents). */
+export function readTriggerSql(script: string, table: string): { name: string; sql: string }[] {
+  return execLocalD1Json<{ name: string; sql: string }>(
+    script,
+    `SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = '${table}' ORDER BY name`,
+  );
+}

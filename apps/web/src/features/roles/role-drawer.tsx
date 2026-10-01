@@ -4,11 +4,14 @@ import type { Role } from "../../app/roles-query";
 import { Alert, Button, Field, LockedNote } from "../../ui";
 import { ConfirmDialog } from "../contracts/confirm-dialog";
 import { Dialog, DialogHeader } from "../contracts/dialog";
-import { roleError, useDeleteRole, useUpdateRole, type RoleError } from "./api";
+import { asPerms, roleError, useDeleteRole, useSendChangeRequest, useUpdateRole, type RoleError } from "./api";
 import { PermissionChecklist } from "./permission-checklist";
-import { roleDiffLabel } from "./role-diff";
+import { permissionLabel } from "./permission-labels";
+import { requestDiffLabel, roleDiff } from "./role-diff";
+import { RequestActions } from "./request-actions";
+import { diffText, formatDayMonth, useChangeRequests, useSodPairs, violatedPairs } from "./requests";
 
-type Edits = { label: string; description: string; permissions: Set<string> };
+type Meta = { label: string; description: string };
 
 export const SYSTEM_REASON = "Vai trò hệ thống — không xóa/đổi tên";
 const LOCK_TEXT = {
@@ -16,10 +19,15 @@ const LOCK_TEXT = {
   own_role: "Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
   system: SYSTEM_REASON,
 } as const;
+export const NO_APPROVER_TEXT =
+  "Không còn người nào khác có quyền Quản lý vai trò để duyệt — đổi quyền phải qua người quản trị kỹ thuật (migration).";
 
-const fromRole = (r: Role): Edits => ({ label: r.label, description: r.description ?? "", permissions: new Set(r.permissions) });
+const metaOf = (r: Role): Meta => ({ label: r.label, description: r.description ?? "" });
 
-/** SPEC-06 DEC-3: the 560px role drawer. Edits are local until Lưu (one PATCH, one CAS, one audit line). */
+/**
+ * SPEC-06 DEC-3 + SPEC-07 DEC-1: the 560px role drawer. Label/description save with Lưu (one PATCH); permission edits
+ * are SENT as a change request that another roles:write holder approves (band + Duyệt/Từ chối/Rút while it waits).
+ */
 export function RoleDrawer({
   role,
   catalog,
@@ -39,36 +47,48 @@ export function RoleDrawer({
   onReload: () => void;
 }) {
   // null = untouched: the drawer follows the server role (so a fresh version shows without a reset effect).
-  const [edits, setEdits] = useState<Edits | null>(null);
+  const [metaEdit, setMetaEdit] = useState<Meta | null>(null);
+  const [permEdit, setPermEdit] = useState<Set<string> | null>(null);
   const [error, setError] = useState<RoleError | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const update = useUpdateRole();
+  const send = useSendChangeRequest();
   const remove = useDeleteRole();
+  const requests = useChangeRequests(true);
+  const sod = useSodPairs();
 
-  const value = edits ?? fromRole(role);
+  const meta = metaEdit ?? metaOf(role);
+  const perms = permEdit ?? new Set(role.permissions);
   const canEdit = role.can.edit;
+  const pending = role.pending_request;
+  const noApprover = role.request_locked_reason === "no_approver";
+  const canEditPerms = role.can.request || noApprover;
   const isSystem = role.is_system;
-  const permsChanged = value.permissions.size !== role.permissions.length || role.permissions.some((c) => !value.permissions.has(c));
-  const dirty = permsChanged || value.label.trim() !== role.label || value.description.trim() !== (role.description ?? "");
-  const saveLabel = roleDiffLabel(role.permissions, [...value.permissions]);
+  const metaDirty = meta.label.trim() !== role.label || meta.description.trim() !== (role.description ?? "");
+  const { added, removed } = roleDiff(role.permissions, [...perms]);
+  const permsChanged = added.length + removed.length > 0;
+  const broken = violatedPairs(perms, sod.data ?? []);
+  const request = pending ? (requests.data ?? []).find((r) => r.id === pending.id) : undefined;
 
-  function change(next: Partial<Edits>) {
-    setEdits({ ...value, ...next });
+  function changeMeta(next: Partial<Meta>) {
+    setMetaEdit({ ...meta, ...next });
     setError(null);
-    setSaved(false);
+    setNotice(null);
   }
 
   function toggle(code: string) {
-    const next = new Set(value.permissions);
+    const next = new Set(perms);
     if (next.has(code)) next.delete(code);
     else next.add(code);
-    change({ permissions: next });
+    setPermEdit(next);
+    setError(null);
+    setNotice(null);
   }
 
   async function save() {
-    if (update.isPending || !dirty) return;
-    const label = value.label.trim();
+    if (update.isPending || !metaDirty) return;
+    const label = meta.label.trim();
     if (!isSystem && (label === "" || label.length > 60)) {
       setError({ slug: "validation", message: "Tên vai trò từ 1 đến 60 ký tự.", fieldErrors: { label: "Tên vai trò từ 1 đến 60 ký tự" } });
       return;
@@ -79,15 +99,27 @@ export function RoleDrawer({
         body: {
           expected_version: role.version,
           ...(!isSystem && label !== role.label ? { label } : {}),
-          ...(value.description.trim() !== (role.description ?? "") ? { description: value.description.trim() } : {}),
-          // SPEC-07 DEC-1: PATCH carries no permissions; the permission change request UI lands in C-07-007.
+          ...(meta.description.trim() !== (role.description ?? "") ? { description: meta.description.trim() } : {}),
         },
       });
-      setEdits(null);
+      setMetaEdit(null);
       setError(null);
-      setSaved(true);
+      setNotice("Đã lưu.");
     } catch (e) {
-      setSaved(false);
+      setNotice(null);
+      setError(roleError(e));
+    }
+  }
+
+  async function sendRequest() {
+    if (send.isPending || !permsChanged || broken.length > 0 || !role.can.request) return;
+    try {
+      await send.mutateAsync({ id: role.id, body: { expected_version: role.version, permissions: asPerms([...perms].sort()) } });
+      setPermEdit(null);
+      setError(null);
+      setNotice(null);
+    } catch (e) {
+      setNotice(null);
       setError(roleError(e));
     }
   }
@@ -104,6 +136,7 @@ export function RoleDrawer({
   }
 
   const deleteReason = role.locked_reason ? LOCK_TEXT[role.locked_reason] : null;
+  const sendLabel = requestDiffLabel(role.permissions, [...perms]);
 
   return (
     <>
@@ -117,37 +150,67 @@ export function RoleDrawer({
         <div className="shell-scroll grid min-h-0 flex-1 content-start gap-s5 overflow-y-auto px-s5 py-s5">
           {role.locked_reason ? <LockedNote>{LOCK_TEXT[role.locked_reason]}</LockedNote> : null}
 
+          {pending ? (
+            <div data-testid="pending-band" className="grid gap-s3 border border-st-pending bg-st-pending-bg px-s4 py-s3">
+              <p className="text-md font-semibold text-st-pending text-wrap-pretty">
+                Đang chờ duyệt: {diffText(pending.added, pending.removed)} — do «{pending.requested_by_name ?? "người dùng đã xóa"}» gửi, hết hạn{" "}
+                {formatDayMonth(pending.expires_at)}
+              </p>
+              {pending.added.length + pending.removed.length > 0 ? (
+                <ul className="grid gap-[2px] text-md text-body">
+                  {pending.added.map((c) => (
+                    <li key={`+${c}`}>+ {permissionLabel(c)}</li>
+                  ))}
+                  {pending.removed.map((c) => (
+                    <li key={`-${c}`}>− {permissionLabel(c)}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {request ? <RequestActions request={request} onError={setError} /> : null}
+            </div>
+          ) : null}
+
+          {noApprover ? <LockedNote>{NO_APPROVER_TEXT}</LockedNote> : null}
+
           <div className="grid gap-s4">
             <Field
               id="role-label"
               label="Tên vai trò"
               name="label"
-              value={value.label}
+              value={meta.label}
               maxLength={60}
               autoComplete="off"
               disabled={!canEdit || isSystem}
-              onChange={(e) => change({ label: e.target.value })}
+              onChange={(e) => changeMeta({ label: e.target.value })}
               {...(error?.fieldErrors["label"] ? { error: error.fieldErrors["label"] } : {})}
             />
             <Field
               id="role-description"
               label="Mô tả"
               name="description"
-              value={value.description}
+              value={meta.description}
               maxLength={200}
               autoComplete="off"
               disabled={!canEdit}
-              onChange={(e) => change({ description: e.target.value })}
+              onChange={(e) => changeMeta({ description: e.target.value })}
             />
           </div>
 
-          <PermissionChecklist
-            catalog={catalog}
-            selected={value.permissions}
-            lockedAll={!canEdit}
-            cannotGrant={(code) => !holds(code) && !role.permissions.includes(code)}
-            onToggle={toggle}
-          />
+          <div className="grid gap-s2">
+            {pending ? <p className="text-sm text-muted">🔒 Đang có yêu cầu chờ duyệt</p> : null}
+            <PermissionChecklist
+              catalog={catalog}
+              selected={perms}
+              lockedAll={!canEditPerms}
+              cannotGrant={(code) => !holds(code) && !role.permissions.includes(code)}
+              onToggle={toggle}
+            />
+            {broken.map(([a, b]) => (
+              <p key={`${a}|${b}`} className="text-sm text-danger">
+                «{permissionLabel(a)}» xung đột với «{permissionLabel(b)}» — bỏ một trong hai
+              </p>
+            ))}
+          </div>
 
           {error ? (
             <Alert tone="danger">
@@ -175,9 +238,9 @@ export function RoleDrawer({
               {error.requestId ? <p className="font-mono text-sm">Mã yêu cầu: {error.requestId}</p> : null}
             </Alert>
           ) : null}
-          {saved ? (
+          {notice ? (
             <p role="status" className="text-md text-ok">
-              Đã lưu.
+              {notice}
             </p>
           ) : null}
         </div>
@@ -197,8 +260,18 @@ export function RoleDrawer({
               Clone
             </Button>
             {canEdit ? (
-              <Button type="button" loading={update.isPending} disabled={!dirty} onClick={() => void save()}>
-                {saveLabel}
+              <Button type="button" variant={canEditPerms ? "secondary" : "primary"} loading={update.isPending} disabled={!metaDirty} onClick={() => void save()}>
+                Lưu
+              </Button>
+            ) : null}
+            {canEditPerms ? (
+              <Button
+                type="button"
+                loading={send.isPending}
+                disabled={!role.can.request || !permsChanged || broken.length > 0}
+                onClick={() => void sendRequest()}
+              >
+                {noApprover ? `🔒 ${sendLabel}` : sendLabel}
               </Button>
             ) : null}
           </div>

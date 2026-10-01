@@ -26,6 +26,7 @@ pnpm db:generate                           # drizzle-kit, generate only — neve
 pnpm db:migrate:local                      # apply migrations to local D1
 RUNWAY_LOCAL=1 pnpm dev:seed-admin         # with pnpm dev up: admin@runway.local / correct-horse-battery-staple (local D1)
 RUNWAY_LOCAL=1 pnpm dev:seed-team          # admin + giám đốc + quản lý + nhân viên (local D1), same password, no server needed
+RUNWAY_LOCAL=1 pnpm dev:seed-products [--replace]   # DEMO sản phẩm + mức giá từ scripts/data/products.demo.json (local D1); --replace = reset về file
 pnpm openapi:export && pnpm client:generate   # after any API change (CI fails on drift); generate alone reuses a STALE dist/openapi.json
 ```
 

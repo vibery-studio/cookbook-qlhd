@@ -102,6 +102,12 @@ export const ProblemType = {
   ItemChanged: "item-changed",
   ReviewClosed: "review-closed",
   ReviewIncomplete: "review-incomplete",
+  // SPEC-08 (row 3)
+  PriceBackdated: "price-backdated",
+  PriceInEffect: "price-in-effect",
+  NoPrice: "no-price",
+  ProductInactive: "product-inactive",
+  ProductLimit: "product-limit",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];

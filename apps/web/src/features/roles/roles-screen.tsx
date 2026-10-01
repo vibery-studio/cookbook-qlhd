@@ -3,9 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../../app/me";
 import { ROLES_KEY, RolesLoadError, useRoles } from "../../app/roles-query";
 import { Alert, Button, EmptyState, ErrorState, Skeleton } from "../../ui";
+import { cn } from "../../lib/cn";
 import { groupCatalog, permissionLabel, sortRoles } from "./permission-labels";
 import { cloneSeed, RoleFormModal, type RoleSeed } from "./role-form-modal";
 import { RoleDrawer } from "./role-drawer";
+import { PairsTab } from "./pairs-tab";
+import { RequestsTab } from "./requests-tab";
+import { useChangeRequests } from "./requests";
+
+type Tab = "matrix" | "requests" | "pairs";
 
 export function RolesScreen() {
   const me = useCurrentUser();
@@ -14,6 +20,7 @@ export function RolesScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<RoleSeed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("matrix");
 
   const canWrite = me.permissions.includes("roles:write");
   // Hint only (the API checks again): the admin role is exempt from "only grant what you hold".
@@ -24,6 +31,13 @@ export function RolesScreen() {
   const groups = groupCatalog(catalog);
   const selected = roles.find((r) => r.id === selectedId) ?? null;
   const colCount = roles.length + 1;
+  const requests = useChangeRequests(canWrite);
+  const pendingCount = (requests.data ?? []).filter((r) => r.status === "pending").length;
+  const tabs: Array<{ id: Tab; label: string; count?: number }> = [
+    { id: "matrix", label: "Ma trận" },
+    ...(canWrite ? [{ id: "requests" as const, label: "Yêu cầu đổi quyền", ...(pendingCount > 0 ? { count: pendingCount } : {}) }] : []),
+    { id: "pairs", label: "Cặp xung đột" },
+  ];
 
   return (
     <section className="grid gap-s4">
@@ -55,7 +69,45 @@ export function RolesScreen() {
         </div>
       ) : null}
 
-      {query.isPending ? (
+      <div role="tablist" aria-label="Phân quyền" className="flex flex-wrap gap-s1 border-b border-line">
+        {tabs.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "motion-colors -mb-px min-h-[var(--row-h)] border-b-2 px-s3 text-md font-semibold hover:text-strong",
+                active ? "border-accent text-accent" : "border-transparent text-muted",
+              )}
+            >
+              {t.label}
+              {t.count !== undefined ? (
+                <>
+                  {" "}
+                  <span className="ml-s2 font-mono text-sm font-medium text-muted">{t.count}</span>
+                </>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "requests" && canWrite ? (
+        <RequestsTab />
+      ) : tab === "pairs" ? (
+        <PairsTab
+          canWrite={canWrite}
+          catalog={catalog}
+          onOpenRole={(id) => {
+            setNotice(null);
+            setSelectedId(id);
+          }}
+        />
+      ) : query.isPending ? (
         <div className="grid gap-s1" aria-busy="true">
           {[0, 1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-row w-full" />

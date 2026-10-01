@@ -85,7 +85,7 @@ function matches(patterns: string[], path: string): boolean {
   return hit && !denied;
 }
 
-const SPA_URLS = ["/", "/login", "/activate", "/khach-hang", "/phan-quyen", "/nhat-ky", "/nguoi-dung"];
+const SPA_URLS = ["/", "/login", "/activate", "/khach-hang", "/phan-quyen", "/nhat-ky", "/nguoi-dung", "/san-pham"];
 const ALWAYS_WORKER = ["/docs", "/openapi.json", "/healthz", "/readyz"];
 
 describe("SPEC-04a web shell (acceptance, API half)", () => {

@@ -153,3 +153,52 @@ describe("role problem messages (SPEC-06)", () => {
     expect(problemMessage(base("duplicate", 409)).message).toBe("Khách này đã có (trùng SĐT/MST).");
   });
 });
+
+describe("SPEC-07 2b problem messages (C-07-007; 008 reuses them)", () => {
+  const cases: Array<[string, ProblemWithExtensions, string]> = [
+    ["request-pending", base("request-pending", 409), "Vai trò này đang có yêu cầu đổi quyền chờ duyệt. Duyệt, từ chối hoặc rút yêu cầu đó trước."],
+    ["not-pending", base("not-pending", 409), "Yêu cầu này không còn chờ duyệt nữa. Đã tải lại."],
+    ["expired", base("expired", 409), "Yêu cầu này đã hết hạn. Gửi yêu cầu mới."],
+    [
+      "sod-conflict pairs",
+      base("sod-conflict", 409, { pairs: [["contract:write", "contract:approve"]] }),
+      "«Tạo & sửa nháp» xung đột với «Duyệt / từ chối» — bỏ một trong hai.",
+    ],
+    [
+      "sod-conflict roles",
+      base("sod-conflict", 409, { roles: [{ id: "1", name: "quan_ly", label: "Quản lý" }, { id: "2", name: "giam_doc", label: "Giám đốc" }] }),
+      "Đang có vai trò chứa cả hai quyền: «Quản lý», «Giám đốc» — bỏ một quyền khỏi các vai trò đó trước.",
+    ],
+    [
+      "no-eligible-approver (role)",
+      base("no-eligible-approver", 409),
+      "Không còn người nào khác có quyền Quản lý vai trò để duyệt — đổi quyền phải qua người quản trị kỹ thuật (migration).",
+    ],
+    ["jit-active", base("jit-active", 409), "Người này đang có quyền quản trị tạm thời. Thu hồi trước khi cấp lại."],
+    ["already-admin", base("already-admin", 409), "Người này đã là Quản trị hệ thống thường trực — không cần cấp tạm."],
+    ["not-active", base("not-active", 409), "Quyền tạm này đã hết hạn hoặc đã thu hồi. Đã tải lại."],
+    ["item-changed", base("item-changed", 409), "Tài khoản này vừa thay đổi sau khi mở đợt rà soát nên không quyết được dòng này. Đã tải lại."],
+    ["review-closed", base("review-closed", 409), "Đợt rà soát đã kết thúc."],
+    ["review-incomplete", base("review-incomplete", 409), "Còn dòng chưa rà soát. Quyết hết các dòng rồi kết thúc đợt."],
+    ["self_approve", base("forbidden", 403, { rule: "self_approve" }), "🔒 Bạn gửi yêu cầu này nên không tự duyệt được. Nhờ người khác duyệt."],
+    ["jit_actor", base("forbidden", 403, { rule: "jit_actor" }), "🔒 Bạn đang có quyền quản trị tạm thời nên không làm được việc này."],
+    ["self_grant", base("forbidden", 403, { rule: "self_grant" }), "🔒 Không tự cấp quản trị tạm thời cho mình."],
+    ["self_review", base("forbidden", 403, { rule: "self_review" }), "🔒 Không tự rà soát chính mình — người quản trị xác nhận."],
+  ];
+  it.each(cases)("%s", (_name, problem, expected) => {
+    const m = problemMessage(problem, {}, { resource: "role" });
+    expect(m.message).toBe(expected);
+    expect(m.message).not.toContain("Raw English");
+    expect(m.message).not.toMatch(/self_approve|jit_actor|self_grant|self_review/);
+  });
+
+  it("no-eligible-approver keeps the contract wording outside the role context", () => {
+    expect(problemMessage(base("no-eligible-approver", 409, { label: "Quản lý duyệt" }), {}, { resource: "contract" }).message).toContain("Bước «Quản lý duyệt»");
+  });
+
+  it("every new slug is known", () => {
+    for (const s of ["request-pending", "not-pending", "expired", "sod-conflict", "jit-active", "already-admin", "not-active", "item-changed", "review-closed", "review-incomplete"]) {
+      expect(KNOWN_PROBLEM_SLUGS).toContain(s);
+    }
+  });
+});

@@ -29,6 +29,16 @@ export const KNOWN_PROBLEM_SLUGS = [
   "role-in-use",
   "role-limit",
   "unknown-role",
+  "request-pending",
+  "not-pending",
+  "expired",
+  "sod-conflict",
+  "jit-active",
+  "already-admin",
+  "not-active",
+  "item-changed",
+  "review-closed",
+  "review-incomplete",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -45,6 +55,10 @@ export type ProblemWithExtensions = Problem & {
   holders?: number;
   /** grant_not_held: the codes the caller lacks. */
   permissions?: string[];
+  /** sod-conflict on a role write: the permission pairs the set would hold together. */
+  pairs?: string[][];
+  /** sod-conflict on POST /sod-pairs: the roles that already hold both permissions. */
+  roles?: Array<{ id: string; name: string; label: string }>;
 };
 
 export type ProblemOptions = {
@@ -134,7 +148,28 @@ const RULE_MESSAGES: Record<string, string> = {
   own_role: "🔒 Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
   admin_role: "🔒 Quản trị hệ thống luôn đủ quyền — không sửa hay xóa được.",
   system_role: "🔒 Vai trò hệ thống — không xóa/đổi tên.",
+  // SPEC-07: four-eyes, JIT admin, access review
+  self_approve: "🔒 Bạn gửi yêu cầu này nên không tự duyệt được. Nhờ người khác duyệt.",
+  jit_actor: "🔒 Bạn đang có quyền quản trị tạm thời nên không làm được việc này.",
+  self_grant: "🔒 Không tự cấp quản trị tạm thời cho mình.",
+  self_review: "🔒 Không tự rà soát chính mình — người quản trị xác nhận.",
 };
+
+const SOD_ROLES_PREFIX = "Đang có vai trò chứa cả hai quyền: ";
+const SOD_ROLES_SUFFIX = " — bỏ một quyền khỏi các vai trò đó trước.";
+export const SOD_ROLES_TEXT = { prefix: SOD_ROLES_PREFIX, suffix: SOD_ROLES_SUFFIX } as const;
+
+function sodMessage(problem: ProblemWithExtensions): string | undefined {
+  if (problem.pairs && problem.pairs.length > 0) {
+    return problem.pairs
+      .map(([a, b]) => `«${permissionLabel(a ?? "")}» xung đột với «${permissionLabel(b ?? "")}» — bỏ một trong hai.`)
+      .join(" ");
+  }
+  if (problem.roles && problem.roles.length > 0) {
+    return `${SOD_ROLES_PREFIX}${problem.roles.map((r) => `«${r.label}»`).join(", ")}${SOD_ROLES_SUFFIX}`;
+  }
+  return undefined;
+}
 
 /** Messages that need the problem's extension members (rule, label, current_status). */
 function contextMessage(slug: string, problem: ProblemWithExtensions, options: ProblemOptions): string | undefined {
@@ -153,7 +188,12 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
     }
     case "missing-fields":
       return missingFieldsMessage(problem);
+    case "sod-conflict":
+      return sodMessage(problem);
     case "no-eligible-approver":
+      if (options.resource === "role") {
+        return "Không còn người nào khác có quyền Quản lý vai trò để duyệt — đổi quyền phải qua người quản trị kỹ thuật (migration).";
+      }
       return `Bước ${step} chưa có ai duyệt được — người tạo không tự duyệt và một người không duyệt hai bước. Nhờ người khác tạo hợp đồng này, hoặc nhờ Giám đốc thêm một người có vai trò đó.`;
     case "would-block-later-step":
       return `Chưa duyệt được: nếu bạn quyết bước này, bước ${step} sẽ không còn ai duyệt. Nhờ Giám đốc thêm người duyệt, hoặc để người khác duyệt bước này.`;
@@ -233,6 +273,26 @@ function baseMessage(slug: string, status: number): string {
       return "Đã đủ 50 vai trò tự tạo. Xóa bớt vai trò không dùng rồi thêm.";
     case "unknown-role":
       return "Vai trò này không còn nữa. Tải lại danh sách rồi chọn lại.";
+    case "request-pending":
+      return "Vai trò này đang có yêu cầu đổi quyền chờ duyệt. Duyệt, từ chối hoặc rút yêu cầu đó trước.";
+    case "not-pending":
+      return "Yêu cầu này không còn chờ duyệt nữa. Đã tải lại.";
+    case "expired":
+      return "Yêu cầu này đã hết hạn. Gửi yêu cầu mới.";
+    case "sod-conflict":
+      return "Tập quyền này xung đột với một cặp quyền đã khai. Bỏ một quyền trong cặp.";
+    case "jit-active":
+      return "Người này đang có quyền quản trị tạm thời. Thu hồi trước khi cấp lại.";
+    case "already-admin":
+      return "Người này đã là Quản trị hệ thống thường trực — không cần cấp tạm.";
+    case "not-active":
+      return "Quyền tạm này đã hết hạn hoặc đã thu hồi. Đã tải lại.";
+    case "item-changed":
+      return "Tài khoản này vừa thay đổi sau khi mở đợt rà soát nên không quyết được dòng này. Đã tải lại.";
+    case "review-closed":
+      return "Đợt rà soát đã kết thúc.";
+    case "review-incomplete":
+      return "Còn dòng chưa rà soát. Quyết hết các dòng rồi kết thúc đợt.";
     default:
       return fallbackMessage;
   }
@@ -246,7 +306,7 @@ export function problemMessage(
   const slug = problemSlug(problem.type);
   const requestId = problem.status >= 500 ? problem.request_id : undefined;
   const contextual = contextMessage(slug, problem, options);
-  const reload = slug === "already-decided" || (slug === "state-conflict" && contextual !== undefined);
+  const reload = slug === "already-decided" || slug === "not-pending" || slug === "not-active" || slug === "item-changed" || (slug === "state-conflict" && contextual !== undefined);
   return {
     message: contextual ?? baseMessage(slug, problem.status),
     ...(reload ? { reload: true } : {}),

@@ -6,7 +6,7 @@ import { roleLabels } from "../../app/me";
 const ALL_CODES = [
   "audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write",
   "flags:read", "flags:write", "notes:read", "notes:write", "roles:write", "settings:read", "settings:write",
-  "template:write", "users:read", "users:write",
+  "template:write", "users:read", "users:write", "jit:grant", "reviews:write",
 ];
 
 describe("permission labels", () => {
@@ -29,8 +29,15 @@ describe("permission labels", () => {
     expect(permissionLabel("roles:write")).toBe("Quản lý vai trò");
     const groups = groupCatalog(ALL_CODES);
     expect(groups.map((g) => g.group)).toEqual(["Hợp đồng", "Quản trị", "Hạ tầng (nền hệ thống)"]);
-    expect(groups[1]?.codes).toEqual(["users:read", "users:write", "roles:write", "audit:read"]);
+    expect(groups[1]?.codes).toEqual(["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write"]);
     expect(groups[0]?.codes).toContain("template:write");
+  });
+
+  it("labels the 2b permissions (Quản trị group)", () => {
+    expect(permissionLabel("jit:grant")).toBe("Cấp quản trị tạm thời");
+    expect(permissionLabel("reviews:write")).toBe("Rà soát quyền");
+    expect(permissionGroup("jit:grant")).toBe("Quản trị");
+    expect(permissionGroup("reviews:write")).toBe("Quản trị");
   });
 
   it("orders system roles first (member last of them), self-made roles by label after", () => {

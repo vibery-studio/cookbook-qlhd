@@ -34,7 +34,7 @@ directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/role-change-requests", "/role-change-requests/*",
   "/sod-pairs", "/sod-pairs/*", "/access-reviews", "/access-reviews/*", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/products", "/products/*", "/pricing/*", "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [[d1_databases]]
 binding = "DB"
@@ -131,7 +131,7 @@ directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/role-change-requests", "/role-change-requests/*",
   "/sod-pairs", "/sod-pairs/*", "/access-reviews", "/access-reviews/*", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/products", "/products/*", "/pricing/*", "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.preview.vars]
 APP_ENV = "preview"
@@ -224,7 +224,7 @@ directory = "../web/dist"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/auth/*", "/me", "/me/*", "/roles", "/roles/*", "/role-change-requests", "/role-change-requests/*",
   "/sod-pairs", "/sod-pairs/*", "/access-reviews", "/access-reviews/*", "/audit", "/customers", "/customers/*",
-  "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
+  "/products", "/products/*", "/pricing/*", "/price-list", "/admin/*", "/templates", "/templates/*", "/contracts", "/contracts/*", "/approvals/*", "/demo/*", "/healthz", "/readyz", "/docs", "/openapi.json" ]
 
 [env.production.vars]
 APP_ENV = "production"

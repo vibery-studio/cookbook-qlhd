@@ -10,6 +10,8 @@ export const PERMISSION_LABELS: Readonly<Record<string, string>> = {
   "users:write": "Quản lý người dùng",
   "roles:write": "Quản lý vai trò",
   "audit:read": "Xem nhật ký",
+  "jit:grant": "Cấp quản trị tạm thời",
+  "reviews:write": "Rà soát quyền",
   // Base RUNWAY permissions (no contract-app screen uses them): DEC-2.
   "flags:read": "Xem cờ tính năng",
   "flags:write": "Đổi cờ tính năng",
@@ -27,9 +29,9 @@ export const PERMISSION_GROUP_ADMIN = "Quản trị";
 export const PERMISSION_GROUPS = [PERMISSION_GROUP_APP, PERMISSION_GROUP_ADMIN, PERMISSION_GROUP_INFRA] as const;
 
 const INFRA_RESOURCES = ["flags", "notes", "settings"];
-const ADMIN_CODES = ["users:read", "users:write", "roles:write", "audit:read"];
+const ADMIN_CODES = ["users:read", "users:write", "roles:write", "audit:read", "jit:grant", "reviews:write"];
 
-/** Group heading for a permission code: Hợp đồng · Quản trị (users:*, roles:write, audit:read) · Hạ tầng (base RUNWAY). */
+/** Group heading for a permission code: Hợp đồng · Quản trị (users:*, roles:write, audit:read, jit:grant, reviews:write) · Hạ tầng (base RUNWAY). */
 export function permissionGroup(code: string): string {
   const resource = code.split(":")[0] ?? "";
   if (INFRA_RESOURCES.includes(resource)) return PERMISSION_GROUP_INFRA;

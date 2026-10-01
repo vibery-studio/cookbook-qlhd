@@ -1,7 +1,7 @@
 /**
  * SPEC-06 desktop e2e — the ONE spec of ROADMAP-02 row 2 (PLAN-06 §1, e2e-kit UI proof budget): AC-8 + the clone flow
  * (DEC-6). Runs once at PROOF (C-06-006), after the API suite, on the real build via wrangler (:8791). Written before the
- * UI: it FIXES the UI contract cards C-06-004 / C-06-005 must honour. Races (AC-3, AC-6) stay in the API suite.
+ * UI: it FIXES the UI contract cards C-06-004 / C-06-005 must honour. Races (AC-3, AC-6) stay in the API suite. The four-eyes flow (SPEC-07) is proven in rbac-advanced.spec.ts.
  *
  * UI contract (/phan-quyen):
  *   h1 "Phân quyền"; intro contains "Bấm tên vai trò để sửa." with roles:write, "Bảng chỉ để xem." without;
@@ -10,7 +10,8 @@
  *     (no such buttons without roles:write); page button "+ Thêm vai trò" (absent without roles:write);
  *   role drawer role=dialog, accessible name "Vai trò · <label>": checkbox per permission, accessible name contains its
  *     Vietnamese label (permission-labels.ts); holders "n người đang mang"; footer buttons "Lưu" · "Clone" · "Xóa";
- *     the save button's name carries the diff: "Lưu (−1 quyền)" / "Lưu (+2 quyền · −1 quyền)" (U+2212 minus);
+ *     permission edits are SENT (SPEC-07 DEC-1): the submit button's name carries the diff, "Gửi yêu cầu (−1)" /
+ *     "Gửi yêu cầu (+2 · −1)" (U+2212 minus); a pending request shows `pending-band` and "Rút yêu cầu"; label/description keep "Lưu";
  *     a locked drawer shows 🔒 + reason text ("Bạn đang mang vai trò này", "Vai trò hệ thống — không xóa/đổi tên",
  *     "Bạn không có quyền này nên không cấp được", "Quản trị hệ thống luôn đủ quyền"); locked controls are disabled;
  *   add / clone modal role=dialog name "Thêm vai trò": field "Tên vai trò" (clone prefill "Bản sao của <label>"),
@@ -55,23 +56,27 @@ test("SPEC-06: Giám đốc edits Quản lý in the drawer, own role is 🔒, cl
   await expect(matrix.getByText("roles:write")).toBeVisible();
   const col = (label: string) => matrix.getByTestId("role-col").filter({ hasText: new RegExp(`^${label}`) });
 
-  // AC-8: Quản lý → drawer → drop one permission → "Lưu (−1 quyền)" → saved
+  // AC-8 + SPEC-07 DEC-1: Quản lý → drawer → drop one permission → "Gửi yêu cầu (−1)" (a REQUEST, never a direct save)
   await col("Quản lý").click();
   const qlDrawer = gd.getByRole("dialog", { name: "Vai trò · Quản lý" });
   await expect(qlDrawer).toBeVisible();
   await expect(qlDrawer).toContainText("1 người đang mang");
   await qlDrawer.getByRole("checkbox", { name: /Xem nhật ký/ }).uncheck();
-  const save = qlDrawer.getByRole("button", { name: "Lưu (−1 quyền)" });
-  await expect(save).toBeEnabled();
+  await expect(qlDrawer.getByRole("button", { name: /^Lưu \(/ })).toHaveCount(0);
+  const send = qlDrawer.getByRole("button", { name: "Gửi yêu cầu (−1)" });
+  await expect(send).toBeEnabled();
   if (SHOTS) await gd.screenshot({ path: "e2e/shots/phan-quyen-ngan.png" });
-  await save.click();
-  await expect(qlDrawer.getByRole("button", { name: "Lưu (−1 quyền)" })).toHaveCount(0);
+  await send.click();
+  await expect(qlDrawer.getByTestId("pending-band")).toContainText("Đang chờ duyệt: −1");
+  // the request waits: nothing changed; withdraw it so no pending request is left behind (rbac-advanced.spec.ts sends its own)
+  await qlDrawer.getByRole("button", { name: "Rút yêu cầu" }).click();
+  await expect(qlDrawer.getByTestId("pending-band")).toHaveCount(0);
   const qlPerms = await gd.evaluate(async () => {
     const r = await fetch("/roles");
     const body = (await r.json()) as { items: Array<{ name: string; permissions: string[] }> };
     return body.items.find((x) => x.name === "quan_ly")?.permissions ?? [];
   });
-  expect(qlPerms).not.toContain("audit:read");
+  expect(qlPerms).toContain("audit:read");
   expect(qlPerms).toContain("contract:issue");
   await gd.keyboard.press("Escape");
   await expect(qlDrawer).toBeHidden();
@@ -132,7 +137,7 @@ test("SPEC-06: Giám đốc edits Quản lý in the drawer, own role is 🔒, cl
 
   // Nhật ký
   await openScreen(gd, "Nhật ký");
-  for (const a of ["role.created", "role.permissions_changed", "user.role_changed"]) {
+  for (const a of ["role.created", "role.change_requested", "role.change_withdrawn", "user.role_changed"]) {
     await expect(gd.getByTestId("audit-row").filter({ hasText: a }).first(), a).toBeVisible();
   }
   if (SHOTS) await gd.screenshot({ path: "e2e/shots/nhat-ky-vai-tro.png" });

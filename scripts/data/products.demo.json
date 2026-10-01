@@ -1,0 +1,14 @@
+[
+  { "code": "G3", "kind": "service", "name": "Gói 3 tháng", "unit": "cửa hàng", "duration_value": 3, "duration_unit": "month", "active": true, "demo": true,
+    "prices": [ { "effective_from": "2025-01-01", "unit_price_ex_vat": 1350000, "vat_rate_bps": null }, { "effective_from": "2026-01-01", "unit_price_ex_vat": 1500000, "vat_rate_bps": null } ] },
+  { "code": "G6", "kind": "service", "name": "Gói 6 tháng", "unit": "cửa hàng", "duration_value": 6, "duration_unit": "month", "active": true, "demo": true,
+    "prices": [ { "effective_from": "2025-01-01", "unit_price_ex_vat": 2400000, "vat_rate_bps": null }, { "effective_from": "2026-07-01", "unit_price_ex_vat": 2700000, "vat_rate_bps": null } ] },
+  { "code": "G12", "kind": "service", "name": "Gói 12 tháng", "unit": "cửa hàng", "duration_value": 12, "duration_unit": "month", "active": true, "demo": true,
+    "prices": [ { "effective_from": "2025-01-01", "unit_price_ex_vat": 4500000, "vat_rate_bps": null }, { "effective_from": "2026-01-01", "unit_price_ex_vat": 4800000, "vat_rate_bps": null } ] },
+  { "code": "DT14", "kind": "service", "name": "Dùng thử 14 ngày", "unit": "cửa hàng", "duration_value": 14, "duration_unit": "day", "active": false, "demo": true,
+    "prices": [ { "effective_from": "2025-01-01", "unit_price_ex_vat": 0, "vat_rate_bps": null } ] },
+  { "code": "DEMO-MIN-01", "kind": "goods", "name": "Máy in hóa đơn (DEMO)", "unit": "cái", "active": true, "demo": true,
+    "prices": [ { "effective_from": "2026-01-01", "unit_price_ex_vat": 1000000, "vat_rate_bps": 1000 } ] },
+  { "code": "DEMO-GIAY-01", "kind": "goods", "name": "Giấy in nhiệt (DEMO)", "unit": "cuộn", "active": true, "demo": true,
+    "prices": [ { "effective_from": "2026-01-01", "unit_price_ex_vat": 20000, "vat_rate_bps": 1000 } ] }
+]
