@@ -12,12 +12,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cloudflare/puppeteer": "1.4.0",
     "@hono/swagger-ui": "0.5.2",
     "@hono/zod-openapi": "1.1.4",
+    "@noble/hashes": "1.7.0",
     "@runway/auth": "workspace:*",
     "@runway/email-templates": "workspace:*",
     "@runway/rbac": "workspace:*",
-    "@noble/hashes": "1.7.0",
     "drizzle-orm": "0.45.2",
     "hono": "4.13.8",
     "zod": "4.1.11"

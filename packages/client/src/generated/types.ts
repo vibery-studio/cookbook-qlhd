@@ -2622,6 +2622,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contracts/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the issued PDF (made once after issue; voided keeps the original file) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PDF bytes; Content-Disposition attachment; filename="<number>.pdf"; ETag = sha256 of the file */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing contract:read permission */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Contract not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description state-conflict (not issued; current_status) | pdf-not-ready (pdf_status pending|failed; Retry-After: 60) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contracts/{id}/audit": {
         parameters: {
             query?: never;
@@ -3320,6 +3394,8 @@ export interface components {
             step_no?: number;
             label?: string;
             current_status?: string;
+            /** @enum {string} */
+            pdf_status?: "pending" | "failed";
             rule?: string;
         };
         SignupRequest: {
@@ -3641,6 +3717,12 @@ export interface components {
             voided_by: string | null;
             voided_at: number | null;
             void_reason: string | null;
+            /**
+             * @description SPEC-05: none = not issued · pending = queued · ready = GET /contracts/{id}/pdf · failed = last try failed, retried hourly
+             * @enum {string}
+             */
+            pdf_status: "none" | "pending" | "ready" | "failed";
+            pdf_size: number | null;
             created_at: number;
             updated_at: number;
             steps: components["schemas"]["ContractStep"][];

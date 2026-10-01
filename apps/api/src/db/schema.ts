@@ -421,6 +421,13 @@ export const contracts = sqliteTable(
     voidedAt: integer("voided_at"),
     voidReason: text("void_reason"),
     replacedById: text("replaced_by_id"),
+    // SPEC-05 §3.1: the issued PDF in R2. pdf_key/hash/size/at are written once (CAS WHERE pdf_key IS NULL).
+    pdfKey: text("pdf_key"),
+    pdfHash: text("pdf_hash"),
+    pdfSize: integer("pdf_size"),
+    pdfAt: integer("pdf_at"),
+    pdfAttempts: integer("pdf_attempts").notNull().default(0),
+    pdfFailedAt: integer("pdf_failed_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -439,6 +446,7 @@ export const contracts = sqliteTable(
     index("idx_contracts_type_status_updated").on(table.type, table.status, table.updatedAt),
     index("idx_contracts_customer").on(table.customerId),
     index("idx_contracts_created_by").on(table.createdBy),
+    index("idx_contracts_pdf_sweep").on(table.pdfKey, table.status),
   ],
 );
 

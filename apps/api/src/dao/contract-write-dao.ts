@@ -3,6 +3,7 @@ import type { Db } from "../db/client";
 import { auditEvents, contracts } from "../db/schema";
 import type { ContractDto } from "../dto/contracts";
 import { generateUlid } from "../utils/id";
+import { pdfStatusOf } from "../domain/contract/pdf";
 import { auditInsert } from "./audit-dao";
 
 export interface ContractInsertRow {
@@ -92,6 +93,8 @@ function toDto(row: typeof contracts.$inferSelect): ContractDto {
     voided_by: row.voidedBy,
     voided_at: row.voidedAt,
     void_reason: row.voidReason,
+    pdf_status: pdfStatusOf(row),
+    pdf_size: row.pdfSize,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
     steps: [],

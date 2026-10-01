@@ -30,6 +30,7 @@ import { decideContract } from "../services/contract/decide-service";
 import { issueContract } from "../services/contract/issue-service";
 import { contractAudit, contractDetail, listContracts } from "../services/contract/read-service";
 import { renderContract } from "../services/contract/render-service";
+import { downloadContractPdf } from "../services/contract/pdf-download-service";
 import { submitContract } from "../services/contract/submit-service";
 import type { BuildFailure, CommandCtx } from "../services/contract/types";
 import { updateContract } from "../services/contract/update-service";
@@ -282,6 +283,25 @@ const renderRouteDef = createRoute({
   },
 });
 
+const pdfRouteDef = createRoute({
+  method: "get",
+  path: "/contracts/{id}/pdf",
+  tags: ["contracts"],
+  summary: "Download the issued PDF (made once after issue; voided keeps the original file)",
+  security,
+  request: { params: IdParam },
+  responses: {
+    200: {
+      description: 'PDF bytes; Content-Disposition attachment; filename="<number>.pdf"; ETag = sha256 of the file',
+      content: { "application/pdf": { schema: z.string().openapi({ type: "string", format: "binary" }) } },
+    },
+    ...baseErrors,
+    403: problemResponse("Missing contract:read permission"),
+    404: problemResponse("Contract not found"),
+    409: problemResponse("state-conflict (not issued; current_status) | pdf-not-ready (pdf_status pending|failed; Retry-After: 60)"),
+  },
+});
+
 const withdrawRouteDef = createRoute({
   method: "post",
   path: "/contracts/{id}/withdraw",
@@ -331,7 +351,12 @@ const auditRouteDef = createRoute({
 });
 
 export function contractsRoutes(app: OpenAPIHono<Env>): void {
-  app.on("get", ["/contracts", "/contracts/:id", "/contracts/:id/render"], requireAuth(), requirePerm("contract:read"));
+  app.on(
+    "get",
+    ["/contracts", "/contracts/:id", "/contracts/:id/render", "/contracts/:id/pdf"],
+    requireAuth(),
+    requirePerm("contract:read"),
+  );
   app.on("post", "/contracts", requireAuth(), requirePerm("contract:write"), withIdempotency());
   app.on("delete", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
   app.on("patch", "/contracts/:id", requireAuth(), requirePerm("contract:write"));
@@ -534,6 +559,30 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
     };
     if (r.etag !== null) headers.etag = `"${r.etag}"`;
     return c.body(r.html, 200, headers) as never;
+  });
+
+  app.openapi(pdfRouteDef, async (c) => {
+    const r = await downloadContractPdf(getDb(c.env), c.env.FILES, c.req.valid("param").id);
+    switch (r.kind) {
+      case "not-found":
+        return notFound(c);
+      case "state-conflict":
+        return stateConflict(c, r.current);
+      case "not-ready":
+        c.header("retry-after", "60");
+        return fail(c, 409, "PDF is not ready yet", ProblemType.PdfNotReady, {
+          detail: r.pdfStatus === "failed" ? "Chưa tạo được PDF, hệ thống sẽ tự thử lại." : "PDF đang được tạo, thử lại sau ít phút.",
+          pdf_status: r.pdfStatus,
+        });
+      case "ok":
+        return c.body(r.body, 200, {
+          "content-type": "application/pdf",
+          "content-disposition": `attachment; filename="${r.filename}"`,
+          "content-length": String(r.size),
+          etag: `"${r.etag}"`,
+          "cache-control": "private, no-cache",
+        }) as never;
+    }
   });
 
   app.openapi(auditRouteDef, async (c) => {

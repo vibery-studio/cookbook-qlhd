@@ -12,6 +12,7 @@ import type { ApprovalQueueDto, ContractDto, ContractListDto } from "../../dto/c
 import { CONTRACT_ACTIONS, type RequiredStep } from "../../domain/contract/types";
 import { isEligible } from "../../domain/contract/assignment";
 import type { Principal } from "../../openapi";
+import { pdfStatusOf } from "../../domain/contract/pdf";
 import type { ValidationErrors } from "./types";
 
 export type ListResult = ({ kind: "ok" } & ContractListDto) | { kind: "invalid"; errors: ValidationErrors };
@@ -164,6 +165,8 @@ export async function contractDetail(db: Db, actor: Principal, id: string): Prom
     voided_by: c.voidedBy,
     voided_at: c.voidedAt,
     void_reason: c.voidReason,
+    pdf_status: pdfStatusOf(c),
+    pdf_size: c.pdfSize,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
     steps: d.steps.map((s) => ({

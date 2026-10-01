@@ -1,6 +1,6 @@
 # PLAN-05: Xuất PDF tài liệu đã phát hành
 
-Status: Draft
+Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền)
 Spec: docs/spec/SPEC-05.md
 
 ## 1. Acceptance tests — written first, seen failing
