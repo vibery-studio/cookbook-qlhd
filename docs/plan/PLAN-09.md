@@ -1,6 +1,6 @@
 # PLAN-09: Nhiều loại tài liệu — Báo giá → Hợp đồng → Đề nghị thanh toán, mỗi loại số riêng (+ Phiếu xuất kho DEMO)
 
-Status: Approved 2026-10-01 (driver chốt theo pattern bạn ủy quyền)
+Status: Done 2026-10-01 (PROOF — driver chốt theo pattern bạn ủy quyền)
 Spec: docs/spec/SPEC-09.md (Approved 2026-10-01; DEC-10 = B, còn lại A) · Intent: docs/intent/INTENT-09.md · Roadmap: ROADMAP-02 row 4
 Chạy song song row 5 (SPEC-10, nhập mẫu .docx). Chỗ nối duy nhất: `templates.type` + `CreateTemplateBody.type` (C-09-002 nới). File dùng chung → §4 R-6.
 Repo commit thẳng `main`, không remote → `pnpm check:migrations` so `HEAD~1...HEAD` = **từng commit**. "PR riêng" của SPEC = **commit riêng**.
@@ -176,5 +176,11 @@ Thứ tự + nhóm song song (touches rời nhau trong cùng nhóm; driver chạ
   - AC-9: hủy BG có HĐ chờ duyệt → lỗi nêu HĐ con.
   - AC-10: "+ Tạo" → "Phiếu xuất kho": chỉ hàng hóa, không giảm giá; bản in 02-VT, cột đơn giá trống, nhãn DEMO.
   - AC-12: tab "Báo giá" chỉ BG; drawer HĐ có "Tài liệu liên quan" ↑ BG ↓ DNTT; 390 px: tab cuộn được, không cuộn ngang.
-- Attack: ẩn danh `/children` → 401 · Kế toán DEMO lập BG → 403 + `permission.denied` · đoán id cha → 404 · gửi `lines`/`giam_gia`/`total` khi sửa con → 422 · tên `<script>` trong bảng 02-VT → in thành chữ · lập con từ HĐ đã hủy → 409.
-- Result: [ ]
+- Run 2026-10-01 (driver, HEAD 8c6a83e):
+  - `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · `openapi:export && client:generate` không lệch (đã bỏ 501 còn sót ở `/children`, `/templates/import/preview`) · `check:migrations` OK trên commit A/B của 0024.
+  - `CI=true pnpm --filter @runway/api test` → `Test Files 59 passed (59) · Tests 435 passed | 2 skipped (437) · 64.97s`.
+  - web unit `Tests 353 passed (353)`.
+  - e2e (`PROOF_SHOTS=1`, sau `pnpm build`): lần 1 quên build → server phục vụ web cũ, đỏ hàng loạt (không tính). Lần 2: 5/8 xanh; 3 đỏ do selector cũ (sidebar "Tài liệu", 4 mẫu seed → `.first()` sai mẫu, nút "Xem văn bản") → sửa spec; `templates-import` lộ **lỗi thật**: form tài liệu chỉ hiện 8 khóa manual cố định → mẫu nhập từ Word có `nv_phu_trach` không điền được; API `ContractValues.strict()` chặn khóa lạ → sửa: form hiện mọi trường manual theo kiểu, DTO `.catchall(string|number)` (builder vẫn chặn khóa không thuộc mẫu + kiểm theo kiểu). Lần chạy đủ: 7/8 xanh + mobile đỏ do thẻ "Cửa hàng Seed" đầu tiên giờ là BG → lọc theo tên mẫu HĐ → chạy lại mobile: xanh. Ảnh: `apps/web/e2e/shots/` (tai-lieu, phieu-xuat-kho, hd-tu-bao-gia, nhap-mau-buoc-2, nhap-mau-nhap-tai-lieu).
+- Attack (curl vào `pnpm dev`, seed-team): ẩn danh `/contracts/{id}/children`, `/contracts?type=` → 401 · admin (không `contract:read`) đọc/lập con → 403 · đoán id cha → 404 · `?type=invoice` → 422. Quyền lập theo loại, `lines-locked`, `child-exists` đua, `quote-expired`, `has-children`, XSS bảng 02-VT: `doc-types-acceptance` 13/13 + domain `contract-merge`.
+- Nits (để sau): pill "Phiếu xuất kho"/"Đã phát hành" xuống 2 dòng ở bảng 1440; drawer PXK vẫn hiện cột giá + khối tiền 0 ₫ (bản in đúng: cột 2–4 trống); sidebar "Mẫu hợp đồng" nên thành "Mẫu tài liệu"; nhãn 02-VT chưa đối chiếu từng chữ với Phụ lục I TT 99 (TODO DEMO); TT 99 hay 133 — hỏi kế toán.
+- Result: pass — driver chốt theo pattern bạn ủy quyền (2026-10-01).

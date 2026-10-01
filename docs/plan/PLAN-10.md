@@ -1,6 +1,6 @@
 # PLAN-10: Nhập mẫu từ Word (.docx) — xem trước không lưu trạng thái, lưu qua /templates hiện có
 
-Status: Approved 2026-10-01 (driver chốt theo pattern bạn ủy quyền)
+Status: Done 2026-10-01 (PROOF — driver chốt theo pattern bạn ủy quyền)
 Spec: docs/spec/SPEC-10.md (Approved 2026-10-01) · Intent: docs/intent/INTENT-10.md · Roadmap: ROADMAP-02 row 5
 **Chạy song song row 4 (PLAN-09).** Code mới của row 5 nằm trong file mới (`domain/docx/*`, `domain/template-import/*`,
 `dao/template-suggest-dao.ts`, `services/template-import-service.ts`, `routes/templates-import.routes.ts`, `dto/template-import.ts`,
@@ -122,7 +122,7 @@ Thứ tự: 001 ∥ 002 → 003 → 004 → [row 4 có khóa loại trên `templ
 - Checks: `pnpm lint && pnpm typecheck && pnpm build` · `pnpm openapi:export && pnpm client:generate && git diff --exit-code packages/client` · `CI=true pnpm test` · `pnpm tsx scripts/bench-docx-import.ts` (trung vị ms × 3 file box) · `wrangler deploy --dry-run --outdir /tmp/w` (kích thước bundle trước/sau) · TUẦN TỰ sau đó `bash docs/cookbook/e2e-kit/free-ports.sh 8791` rồi `PROOF_SHOTS=1 CI=true pnpm --filter @runway/web e2e` (một lần).
 - Swagger `/docs`: `POST /templates/import/preview` hiện body binary, 200 schema `TemplateImportPreview`, đủ mã lỗi.
 - Human checklist (làm → phải thấy):
-  - AC-1/AC-8: GĐ → "Mẫu hợp đồng" → "Nhập từ Word" → `Bao_Gia.docx` → "Đã có 15 trường", bản xem trước "BÁO GIÁ" → "Đây là bảng dòng hàng" → 11 trường, `bang_hang` kiểu bảng dòng → Lưu → "Đã lưu phiên bản 1", mẫu mới trong danh sách.
+  - AC-1/AC-8: GĐ → "Mẫu hợp đồng" → "Nhập từ Word" → `Bao_Gia.docx` → "Đã có 15 trường", bản xem trước "BÁO GIÁ" → "Đây là bảng dòng hàng" → 12 trường (P-7), `bang_hang` kiểu bảng dòng → Lưu → "Đã lưu phiên bản 1", mẫu mới trong danh sách.
   - AC-2: file Word bạn tự sửa (gõ lại `{{ten_khach}}` có bôi đậm nửa chừng) → vẫn 1 trường; gõ `{{Tên khách}}` → key `ten_khach`, cảnh báo "đã đổi".
   - AC-3: chi tiết mẫu seed → "Nhập phiên bản mới từ Word" → `Hop_Dong_Dich_Vu.docx` → ô "Đã bỏ" có ghi chú nội bộ; trường cũ "gợi ý từ: phiên bản hiện tại" → Lưu → v3, ghi chú "Nhập từ Hop_Dong_Dich_Vu.docx". Mở 2 tab, lưu cả hai → tab sau "Mẫu vừa có phiên bản mới, đọc lại".
   - AC-4: chọn file PDF / `.docm` / file 3 MB → câu tiếng Việt, không mẫu nào được tạo.
@@ -131,6 +131,11 @@ Thứ tự: 001 ∥ 002 → 003 → 004 → [row 4 có khóa loại trên `templ
   - AC-7: NV/QL mở "Mẫu hợp đồng" → không có nút, 🔒 "Chỉ Giám đốc nhập mẫu (cần quyền template:write)".
   - P-7: mẫu BG nhập kiểu bảng dòng hàng vẫn có ô "Giảm giá" (dưới bảng).
   - 390px: hộp thoại nhập thành trang toàn màn, bảng trường thành thẻ, không cuộn ngang.
-- Attack: ẩn danh → 401 · NV/QL → 403 + `permission.denied` · thiếu `X-Requested-With`/Origin → 403 · `template_id` đoán bừa → 404 · `<script>`/`javascript:` trong file → chữ thường, không link · DOCTYPE/bomb/1001 mục → 422 không treo · file 3 MB → 413 trước khi parse · sửa body trước khi Lưu (thêm `<img>`) → 422 `html_not_allowed`.
-- CPU: [số bench] · gói Workers: [bạn xác nhận].
-- Result: [pass | what failed → back to the plan]
+- Run 2026-10-01 (driver, HEAD 8c6a83e):
+  - `pnpm lint` 2/2 · `pnpm typecheck` 7/7 · `pnpm build` 2/2 · `openapi:export && client:generate` không lệch (đã bỏ 501 còn sót ở `/children`, `/templates/import/preview`) · `check:migrations` OK trên commit A/B của 0024.
+  - `CI=true pnpm --filter @runway/api test` → `Test Files 59 passed (59) · Tests 435 passed | 2 skipped (437) · 64.97s`.
+  - web unit `Tests 353 passed (353)`.
+  - e2e (`PROOF_SHOTS=1`, sau `pnpm build`): lần 1 quên build → server phục vụ web cũ, đỏ hàng loạt (không tính). Lần 2: 5/8 xanh; 3 đỏ do selector cũ (sidebar "Tài liệu", 4 mẫu seed → `.first()` sai mẫu, nút "Xem văn bản") → sửa spec; `templates-import` lộ **lỗi thật**: form tài liệu chỉ hiện 8 khóa manual cố định → mẫu nhập từ Word có `nv_phu_trach` không điền được; API `ContractValues.strict()` chặn khóa lạ → sửa: form hiện mọi trường manual theo kiểu, DTO `.catchall(string|number)` (builder vẫn chặn khóa không thuộc mẫu + kiểm theo kiểu). Lần chạy đủ: 7/8 xanh + mobile đỏ do thẻ "Cửa hàng Seed" đầu tiên giờ là BG → lọc theo tên mẫu HĐ → chạy lại mobile: xanh. Ảnh: `apps/web/e2e/shots/` (tai-lieu, phieu-xuat-kho, hd-tu-bao-gia, nhap-mau-buoc-2, nhap-mau-nhap-tai-lieu).
+- Attack (curl vào `pnpm dev`): ẩn danh → 401 · NV, QL → 403 · GĐ: `Bao_Gia.docx` → 200 · file 3 MB → 413 `payload-too-large` · `Content-Type: application/pdf` → 415 · file không phải zip → 422 `docx-invalid`. Bomb/DOCTYPE/macro/1001 mục/`<script>`/`javascript:`: `templates-import-acceptance` 7/7 + `docx-convert` 26/26. Bench: median 0,36–0,63 ms/file (Free 10 ms CPU).
+- Nits (để sau): cột "Kiểu" trong bảng trường hẹp ("Văn b…"); preview: gõ lại chữ "Tổng cộng (đã gồm VAT)" của file gốc vẫn hiện (nội dung của người nhập, không phải app).
+- Result: pass — driver chốt theo pattern bạn ủy quyền (2026-10-01).
