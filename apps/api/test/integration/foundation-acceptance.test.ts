@@ -195,8 +195,11 @@ describe("SPEC-01 foundation (acceptance)", () => {
     expect(off.status).toBe(409);
     const offBody: { type: string } = await off.json();
     expect(offBody.type).toContain("last-admin");
+    // FIX-03 (SPEC-06 DEC-5): changing your own role is refused before the last-admin guard → 403 self_role
     const rerole = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ role: "giam_doc" }) });
-    expect(rerole.status).toBe(409);
+    expect(rerole.status).toBe(403);
+    const reroleBody: { rule?: string } = await rerole.json();
+    expect(reroleBody.rule).toBe("self_role");
   });
 
   it("AC-5: a refused call is written to the audit log and readable, newest first", async () => {

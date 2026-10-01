@@ -22,11 +22,26 @@ import {
   reinviteUser,
   updateUser,
   type AdminUserView,
+  type EscalationRule,
   type UserAdminDeps,
 } from "../services/user-admin-service";
 
 
 type Env = { Bindings: Bindings; Variables: Variables };
+
+const ESCALATION_DETAIL: Record<EscalationRule, string> = {
+  self_role: "Không tự đổi vai trò của mình.",
+  admin_only: "Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị.",
+};
+
+function escalationProblem(rule: EscalationRule, instance: string, requestId: string | undefined) {
+  return problem(403, "Forbidden", ProblemType.Forbidden, {
+    detail: ESCALATION_DETAIL[rule],
+    rule,
+    instance,
+    request_id: requestId,
+  });
+}
 
 const IdParam = z.object({ id: UlidSchema });
 const security = [{ cookieAuth: [] }];
@@ -55,7 +70,7 @@ const createUserRoute = createRoute({
       content: { "application/json": { schema: InviteUserResponse } },
     },
     401: problemResponse("Not authenticated"),
-    403: problemResponse("Missing users:write permission"),
+    403: problemResponse("Missing users:write permission, or rule admin_only (only an admin assigns the admin role)"),
     409: problemResponse("Email already registered"),
     422: problemResponse("Validation failed"),
   },
@@ -77,7 +92,9 @@ const updateUserRoute = createRoute({
       content: { "application/json": { schema: AdminUserSchema } },
     },
     401: problemResponse("Not authenticated"),
-    403: problemResponse("Missing users:write permission"),
+    403: problemResponse(
+      "Missing users:write permission, or rule self_role (own role) | admin_only (only an admin assigns the admin role or edits an admin user)",
+    ),
     404: problemResponse("User not found"),
     409: problemResponse("last_admin: cannot disable or demote the last active admin"),
     422: problemResponse("Validation failed"),
@@ -122,7 +139,13 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
       email: body.email,
       displayName: body.display_name,
       role: body.role,
+      ip: c.req.header("cf-connecting-ip") ?? null,
     });
+    if (res.kind === "forbidden") {
+      return c.json(escalationProblem(res.rule, c.req.path, c.get("requestId")), 403, {
+        "content-type": "application/problem+json",
+      });
+    }
     if (res.kind === "duplicate-email") {
       return c.json(
         problem(409, "Email already registered", ProblemType.Conflict, {
@@ -153,11 +176,15 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
       role: body.role,
       status: body.status,
       displayName: body.display_name,
+      ip: c.req.header("cf-connecting-ip") ?? null,
     });
     const opts = { instance: c.req.path, request_id: c.get("requestId") };
     const hdr = { "content-type": "application/problem+json" };
     if (res.kind === "not-found") {
       return c.json(problem(404, "User not found", ProblemType.NotFound, opts), 404, hdr);
+    }
+    if (res.kind === "forbidden") {
+      return c.json(escalationProblem(res.rule, c.req.path, c.get("requestId")), 403, hdr);
     }
     if (res.kind === "last-admin") {
       return c.json(

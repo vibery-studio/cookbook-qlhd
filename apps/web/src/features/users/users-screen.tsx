@@ -5,11 +5,11 @@ import type { PillTone } from "../../ui";
 import { errorText, useInviteUser, useReinvite, useUpdateUser, useUsers } from "./api";
 import type { ActivationLink, AdminUser, AssignableRole, InviteRole } from "./api";
 import { LinkBox } from "./link-box";
+import { ADMIN_TARGET_REASON, adminTargetLocked, assignableRoles, SELF_DISABLE_REASON, SELF_ROLE_REASON } from "./role-locks";
 
 const statusLabel: Record<AdminUser["status"], string> = { pending: "Chưa kích hoạt", active: "Đang hoạt động", disabled: "Đã khóa" };
 const statusTone: Record<AdminUser["status"], PillTone> = { pending: "pending", active: "success", disabled: "danger" };
 const inviteRoles: InviteRole[] = ["giam_doc", "quan_ly", "nhan_vien"];
-const assignRoles: AssignableRole[] = ["giam_doc", "quan_ly", "nhan_vien", "admin"];
 
 const selectClass =
   "min-h-[var(--row-h)] w-full rounded-r2 border border-line-strong bg-surface px-s3 text-md text-body outline-none focus:border-accent focus:ring-3 focus:ring-accent-soft";
@@ -82,7 +82,7 @@ export function UsersScreen() {
                   <Pill tone="accent">{roleText(user)}</Pill>
                   <Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill>
                 </div>
-                {canWrite ? <Actions user={user} isSelf={user.id === me.id} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
+                {canWrite ? <Actions user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
               </li>
             ))}
           </ul>
@@ -106,7 +106,7 @@ export function UsersScreen() {
                     <td className="px-s4 py-s3"><Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill></td>
                     {canWrite ? (
                       <td className="px-s4 py-s3">
-                        <Actions user={user} isSelf={user.id === me.id} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
+                        <Actions user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
                       </td>
                     ) : null}
                   </tr>
@@ -128,7 +128,7 @@ export function UsersScreen() {
           <LinkBox link={dialog.link} name={dialog.name} />
         </Modal>
       ) : null}
-      {dialog?.kind === "role" ? <RoleDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "role" ? <RoleDialog user={dialog.user} roles={assignableRoles(me.roles)} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "status" ? <StatusDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
     </section>
   );
@@ -137,35 +137,65 @@ export function UsersScreen() {
 function Actions({
   user,
   isSelf,
+  adminLocked,
   busy,
   onReinvite,
   onDialog,
 }: {
   user: AdminUser;
   isSelf: boolean;
+  adminLocked: boolean;
   busy: boolean;
   onReinvite: (user: AdminUser) => void | Promise<void>;
   onDialog: (dialog: Dialog) => void;
 }) {
-  const selfReason = "Bạn không thể tự khóa hoặc đổi vai trò tài khoản của chính mình.";
+  const locked = (label: string, reason: string, testId: string) => (
+    <Button
+      variant="secondary"
+      data-testid={testId}
+      aria-disabled="true"
+      title={reason}
+      className="cursor-not-allowed opacity-60"
+      onClick={(event) => event.preventDefault()}
+    >
+      🔒 {label}
+    </Button>
+  );
   return (
     <div className="grid justify-items-start gap-s2">
       <div className="flex flex-wrap gap-s2">
         {user.status === "pending" ? (
           <Button variant="secondary" disabled={busy} onClick={() => void onReinvite(user)}>Tạo lại link</Button>
         ) : null}
-        <Button variant="secondary" disabled={isSelf} title={isSelf ? selfReason : undefined} onClick={() => onDialog({ kind: "role", user })}>
-          Đổi vai trò
-        </Button>
-        {user.status === "disabled" ? (
-          <Button variant="secondary" onClick={() => onDialog({ kind: "status", user })}>Mở khóa</Button>
+        {adminLocked ? (
+          locked("Đổi vai trò", ADMIN_TARGET_REASON, "action-role")
+        ) : isSelf ? (
+          locked("Đổi vai trò", SELF_ROLE_REASON, "action-role")
         ) : (
-          <Button variant="danger" disabled={isSelf} title={isSelf ? selfReason : undefined} onClick={() => onDialog({ kind: "status", user })}>
+          <Button variant="secondary" data-testid="action-role" onClick={() => onDialog({ kind: "role", user })}>
+            Đổi vai trò
+          </Button>
+        )}
+        {adminLocked ? (
+          locked(user.status === "disabled" ? "Mở khóa" : "Khóa", ADMIN_TARGET_REASON, "action-status")
+        ) : user.status === "disabled" ? (
+          <Button variant="secondary" onClick={() => onDialog({ kind: "status", user })}>Mở khóa</Button>
+        ) : isSelf ? (
+          locked("Khóa", SELF_DISABLE_REASON, "action-status")
+        ) : (
+          <Button variant="danger" data-testid="action-status" onClick={() => onDialog({ kind: "status", user })}>
             Khóa
           </Button>
         )}
       </div>
-      {isSelf ? <p className="text-sm text-muted">{selfReason}</p> : null}
+      {adminLocked ? (
+        <p className="text-sm text-muted">🔒 {ADMIN_TARGET_REASON}</p>
+      ) : isSelf ? (
+        <ul className="grid gap-s1 text-sm text-muted">
+          <li>🔒 {SELF_ROLE_REASON}</li>
+          {user.status !== "disabled" ? <li>🔒 {SELF_DISABLE_REASON}</li> : null}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -223,10 +253,10 @@ function InviteDialog({ onClose, onDone }: { onClose: () => void; onDone: (link:
   );
 }
 
-function RoleDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+function RoleDialog({ user, roles, onClose }: { user: AdminUser; roles: AssignableRole[]; onClose: () => void }) {
   const update = useUpdateUser();
   const current = (user.roles[0] as AssignableRole | undefined) ?? "nhan_vien";
-  const [role, setRole] = useState<AssignableRole>(assignRoles.includes(current) ? current : "nhan_vien");
+  const [role, setRole] = useState<AssignableRole>(roles.includes(current) ? current : "nhan_vien");
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
@@ -255,7 +285,7 @@ function RoleDialog({ user, onClose }: { user: AdminUser; onClose: () => void })
         <div className="grid gap-s2">
           <label htmlFor="role-select" className="text-md font-semibold leading-head text-body">Vai trò mới</label>
           <select id="role-select" data-autofocus className={selectClass} value={role} onChange={(e) => setRole(e.target.value as AssignableRole)}>
-            {assignRoles.map((r) => <option key={r} value={r}>{roleLabels[r]}</option>)}
+            {roles.map((r) => <option key={r} value={r}>{roleLabels[r]}</option>)}
           </select>
         </div>
         <p className="text-sm text-muted">Quyền mới có hiệu lực từ lần tải lại kế tiếp của người này.</p>

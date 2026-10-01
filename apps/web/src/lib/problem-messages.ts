@@ -119,6 +119,9 @@ const RULE_MESSAGES: Record<string, string> = {
   creator_only: "Chỉ người tạo mới làm được việc này.",
   creator_cannot_approve: "Bạn là người tạo hợp đồng này nên không tự duyệt được. Nhờ người khác duyệt.",
   one_person_one_step: "Bạn đã quyết một bước của hợp đồng này; bước tiếp theo cần người khác.",
+  // FIX-03 (SPEC-06 DEC-5): PATCH/POST /admin/users
+  self_role: "🔒 Không tự đổi vai trò của mình. Nhờ người khác có quyền quản lý người dùng đổi giúp.",
+  admin_only: "🔒 Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị.",
 };
 
 /** Messages that need the problem's extension members (rule, label, current_status). */

@@ -661,7 +661,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission */
+                /** @description Missing users:write permission, or rule admin_only (only an admin assigns the admin role) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -743,7 +743,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission */
+                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin assigns the admin role or edits an admin user) */
                 403: {
                     headers: {
                         [name: string]: unknown;

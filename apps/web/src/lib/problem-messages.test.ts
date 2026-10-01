@@ -58,6 +58,15 @@ describe("contract problem messages (SPEC-04b 3.5)", () => {
     expect(m.message).not.toMatch(/creator_only|creator_cannot_approve|one_person_one_step|placeholders|x\.y/);
   });
 
+  it.each([
+    ["self_role", "🔒 Không tự đổi vai trò của mình. Nhờ người khác có quyền quản lý người dùng đổi giúp."],
+    ["admin_only", "🔒 Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị."],
+  ])("users rule %s (FIX-03) has its own Vietnamese message", (rule, expected) => {
+    const m = problemMessage(base("forbidden", 403, { rule }));
+    expect(m.message).toBe(expected);
+    expect(m.message).not.toContain("Raw English");
+  });
+
   it("forbidden without rule", () => {
     expect(problemMessage(base("forbidden", 403), {}, { resource: "contract" }).message).toBe("🔒 Bạn không có quyền hoặc vai trò cho bước này.");
   });

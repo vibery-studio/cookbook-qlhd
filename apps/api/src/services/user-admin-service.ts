@@ -6,6 +6,11 @@
  *   activate     → CAS-consume invite token, set password, status active, audit, ONE db.batch
  *   updateUser   → role swap / disable / enable / rename; last-admin guard inside the write
  *
+ * Escalation guards (FIX-03, SPEC-06 DEC-5): nobody changes their OWN role (`self_role`), and only an
+ * admin assigns the `admin` role or touches a user who holds it (`admin_only`: invite, role, status,
+ * name). The actor's roles are read from D1 in the same request (read-then-write, accepted in FIX-03),
+ * not the principal cache. Each refusal writes one `permission.denied` row before the caller sees 403.
+ *
  * No Hono, no HTTP. Routes translate the typed outcomes.
  *
  * Last-admin guard design: the check is an SQL predicate (`notLastActiveAdmin`) placed in the
@@ -20,7 +25,7 @@ import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { Bindings } from "../env";
-import { auditInsert } from "../dao/audit-dao";
+import { auditInsert, writeAuditEvent } from "../dao/audit-dao";
 import { invalidatePrincipalCache } from "../dao/session-cache";
 import {
   activateUserStmt,
@@ -84,9 +89,31 @@ export function activationUrl(env: Bindings, rawToken: string): string {
 
 // ------------------------------- invite ------------------------------------
 
+export type EscalationRule = "self_role" | "admin_only";
+
 export type InviteResult =
   | { kind: "ok"; user: AdminUserView; rawToken: string; expiresAt: number }
-  | { kind: "duplicate-email" };
+  | { kind: "duplicate-email" }
+  | { kind: "forbidden"; rule: EscalationRule };
+
+/** Writes the `permission.denied` row for an escalation refusal and returns the typed outcome. */
+async function denyEscalation(
+  db: Db,
+  input: { actorId: string; target: string; rule: EscalationRule; role: string; ip?: string | null },
+): Promise<{ kind: "forbidden"; rule: EscalationRule }> {
+  await writeAuditEvent(db, {
+    actor: input.actorId,
+    action: "permission.denied",
+    target: input.target,
+    metadata: { rule: input.rule, permission: "users:write", role: input.role },
+    ip: input.ip ?? null,
+  });
+  return { kind: "forbidden", rule: input.rule };
+}
+
+async function actorIsAdmin(db: Db, actorId: string): Promise<boolean> {
+  return (await listRoleNamesForUser(db, actorId)).includes("admin");
+}
 
 /**
  * Email is NOT sent: EmailPort has only `verify-email` / `password-reset` templates and neither
@@ -94,9 +121,12 @@ export type InviteResult =
  */
 export async function inviteUser(
   deps: UserAdminDeps,
-  input: { actorId: string; email: string; displayName: string; role: string },
+  input: { actorId: string; email: string; displayName: string; role: string; ip?: string | null },
 ): Promise<InviteResult> {
   const email = input.email.trim().toLowerCase();
+  if (input.role === "admin" && !(await actorIsAdmin(deps.db, input.actorId))) {
+    return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "admin_only", role: input.role, ip: input.ip });
+  }
   if ((await findUserByEmail(deps.db, email)) !== null) return { kind: "duplicate-email" };
 
   const now = deps.now();
@@ -218,7 +248,8 @@ export type UpdateUserResult =
   | { kind: "ok"; user: AdminUserView }
   | { kind: "not-found" }
   | { kind: "last-admin" }
-  | { kind: "pending" };
+  | { kind: "pending" }
+  | { kind: "forbidden"; rule: EscalationRule };
 
 const and = (...parts: Array<SQL | undefined>): SQL => {
   const list = parts.filter((p): p is SQL => p !== undefined);
@@ -233,6 +264,7 @@ export async function updateUser(
     role?: string;
     status?: "active" | "disabled";
     displayName?: string;
+    ip?: string | null;
   },
 ): Promise<UpdateUserResult> {
   const { db } = deps;
@@ -241,10 +273,22 @@ export async function updateUser(
   if (user === null) return { kind: "not-found" };
   const currentRoles = await listRoleNamesForUser(db, id);
 
-  if (input.status !== undefined && user.status === "pending") return { kind: "pending" };
-
   const roleChange =
     input.role !== undefined && !(currentRoles.length === 1 && currentRoles[0] === input.role);
+  const deny = { actorId: input.actorId, target: `user:${id}`, role: input.role ?? currentRoles[0] ?? "", ip: input.ip };
+  // Any PATCH on a user who holds `admin` (role, status, name) needs an admin caller.
+  if (currentRoles.includes("admin") && !(await actorIsAdmin(db, input.actorId))) {
+    return denyEscalation(db, { ...deny, rule: "admin_only" });
+  }
+  if (roleChange && input.role !== undefined) {
+    if (input.actorId === id) return denyEscalation(db, { ...deny, rule: "self_role" });
+    if (input.role === "admin" && !(await actorIsAdmin(db, input.actorId))) {
+      return denyEscalation(db, { ...deny, rule: "admin_only" });
+    }
+  }
+
+  if (input.status !== undefined && user.status === "pending") return { kind: "pending" };
+
   const statusChange = input.status !== undefined && input.status !== user.status;
   const renameChange = input.displayName !== undefined && input.displayName !== user.displayName;
   if (!roleChange && !statusChange && !renameChange) return { kind: "ok", user: await view(db, user) };
