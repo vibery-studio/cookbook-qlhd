@@ -51,6 +51,19 @@ export const ProblemDto = z
     pairs: z.array(z.array(z.string())).optional(),
     /** 422 `docx-invalid` (SPEC-10): not_docx | macro_enabled | no_document | xml_invalid | too_large_inflated | too_many_entries */
     reason: z.string().optional(),
+    /** 409 `has-children` (SPEC-09 FR-9): the parent's live children */
+    children: z
+      .array(
+        z.object({
+          id: z.string(),
+          type: z.string(),
+          number: z.string().nullable(),
+          status: z.string(),
+          total: z.number().int(),
+          doc_date: z.string(),
+        }),
+      )
+      .optional(),
     /** 409 `sod-conflict` (SPEC-07) on a new pair: roles already holding both codes */
     roles: z.array(z.object({ id: z.string(), name: z.string(), label: z.string() })).optional(),
   })
@@ -114,6 +127,16 @@ export const ProblemType = {
   DocxInvalid: "docx-invalid",
   PayloadTooLarge: "payload-too-large",
   UnsupportedMediaType: "unsupported-media-type",
+  // SPEC-09 (row 4) — PLAN-09 §2b
+  ParentNotIssued: "parent-not-issued",
+  ChildExists: "child-exists",
+  QuoteExpired: "quote-expired",
+  ChildType: "child-type",
+  LinesLocked: "lines-locked",
+  HasChildren: "has-children",
+  ParentRequired: "parent-required",
+  TemplateType: "template-type",
+  NothingToPay: "nothing-to-pay",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -137,6 +160,7 @@ export interface ProblemOptions {
   pairs?: string[][];
   roles?: { id: string; name: string; label: string }[];
   reason?: string;
+  children?: Problem["children"];
 }
 
 /**
@@ -174,6 +198,7 @@ export function problem(
     ...(options.pairs !== undefined && { pairs: options.pairs }),
     ...(options.roles !== undefined && { roles: options.roles }),
     ...(options.reason !== undefined && { reason: options.reason }),
+    ...(options.children !== undefined && { children: options.children }),
   };
 }
 

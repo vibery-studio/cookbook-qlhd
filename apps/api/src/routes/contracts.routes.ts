@@ -143,7 +143,7 @@ const listRouteDef = createRoute({
   method: "get",
   path: "/contracts",
   tags: ["contracts"],
-  summary: "List contracts (team-wide) with status counts",
+  summary: "List documents (team-wide, `?type` = one doc type) with status counts under the same filters",
   security,
   request: { query: ContractListQuery },
   responses: {
@@ -158,7 +158,7 @@ const getRouteDef = createRoute({
   method: "get",
   path: "/contracts/{id}",
   tags: ["contracts"],
-  summary: "Contract detail: snapshot, steps, timeline, can{}",
+  summary: "Document detail: snapshot, steps, timeline, parent/children refs, can{} (+ create_child reasons)",
   security,
   request: { params: IdParam },
   responses: {
@@ -405,7 +405,7 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
   });
 
   app.openapi(getRouteDef, async (c) => {
-    const d = await contractDetail(getDb(c.env), c.get("principal")!, c.req.valid("param").id);
+    const d = await contractDetail(getDb(c.env), c.get("principal")!, c.req.valid("param").id, new Date());
     return d === null ? notFound(c) : c.json(d, 200);
   });
 

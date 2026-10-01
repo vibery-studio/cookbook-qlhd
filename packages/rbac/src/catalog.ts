@@ -11,7 +11,9 @@
  *
  * `audit:read` reads the in-app `audit_events` table (SPEC-01 FR-4). `contract:*` and
  * `template:write` are the contract app's permissions (documents.workbook §3, the mockup's matrix). `product:write`,
- * `price:write` = products & dated price levels (SPEC-08 FR-7; reading products uses `contract:read`).
+ * `price:write` = products & dated price levels (SPEC-08 FR-7; reading products uses `contract:read`). `quote:write`,
+ * `payment_request:write`, `delivery_note:write` = making a document of that type (SPEC-09 DEC-10 B; `contract:write` makes a
+ * HĐ); reading/submitting/approving/issuing every type stays on the shared `contract:*` codes.
  */
 export const PERMISSIONS = [
   "audit:read",
@@ -20,13 +22,16 @@ export const PERMISSIONS = [
   "contract:read",
   "contract:submit",
   "contract:write",
+  "delivery_note:write",
   "flags:read",
   "flags:write",
   "jit:grant",
   "notes:read",
   "notes:write",
+  "payment_request:write",
   "price:write",
   "product:write",
+  "quote:write",
   "reviews:write",
   "roles:write",
   "settings:read",

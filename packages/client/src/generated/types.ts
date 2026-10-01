@@ -3282,10 +3282,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List contract templates with their current version (cursor-paginated) */
+        /** List templates with their current version (cursor-paginated; `?type` = one doc type) */
         get: {
             parameters: {
                 query?: {
+                    type?: components["schemas"]["DocType"];
                     cursor?: string;
                     limit?: number;
                 };
@@ -3681,10 +3682,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List contracts (team-wide) with status counts */
+        /** List documents (team-wide, `?type` = one doc type) with status counts under the same filters */
         get: {
             parameters: {
                 query?: {
+                    type?: components["schemas"]["DocType"];
                     status?: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
                     customer_id?: string;
                     created_by?: string;
@@ -3822,7 +3824,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Contract detail: snapshot, steps, timeline, can{} */
+        /** Document detail: snapshot, steps, timeline, parent/children refs, can{} (+ create_child reasons) */
         get: {
             parameters: {
                 query?: never;
@@ -4817,6 +4819,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contracts/{id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a child document from an issued parent (BG → HĐ, HĐ → DNTT); lines + prices frozen from the parent */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateChildRequest"];
+                };
+            };
+            responses: {
+                /** @description Child draft created (number = null) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Contract"];
+                    };
+                };
+                /** @description Not authenticated */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Missing contract:read, or the child type's write code (quote:write | contract:write | payment_request:write | delivery_note:write; permission.denied audited) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Parent (or template_id) not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description parent-not-issued | quote-expired | child-exists (existing_id = the live child) | idempotency-conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description validation (schema; errors[].path `lines` = the BG breaks the HĐ line rule, DEC-7) | child-type (pair not in CHILD_OF) | lines-locked (values.giam_gia sent) | template-type (template of another type) | nothing-to-pay (HĐ total 0) | missing-fields (missing_fields[]) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not implemented */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/approvals/mine": {
         parameters: {
             query?: never;
@@ -5443,6 +5543,14 @@ export interface components {
             holders?: number;
             pairs?: string[][];
             reason?: string;
+            children?: {
+                id: string;
+                type: string;
+                number: string | null;
+                status: string;
+                total: number;
+                doc_date: string;
+            }[];
             roles?: {
                 id: string;
                 name: string;
@@ -5571,7 +5679,7 @@ export interface components {
         CreateRoleRequest: {
             label: string;
             description?: string;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
         };
         PatchRoleRequest: {
             expected_version: number;
@@ -5608,7 +5716,7 @@ export interface components {
         };
         CreateChangeRequest: {
             expected_version: number;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
             note?: string;
         };
         ChangeRequestList: {
@@ -5637,9 +5745,9 @@ export interface components {
         };
         CreateSodPair: {
             /** @enum {string} */
-            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             /** @enum {string} */
-            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "delivery_note:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "payment_request:write" | "price:write" | "product:write" | "quote:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             reason?: string;
         };
         JitGrantList: {
@@ -5891,6 +5999,8 @@ export interface components {
             required_fields: string[];
             steps_summary: string[];
         };
+        /** @enum {string} */
+        DocType: "quote" | "contract" | "payment_request" | "delivery_note";
         TemplateDetail: {
             id: string;
             type: string;
@@ -5921,7 +6031,7 @@ export interface components {
             key: string;
             label: string;
             /** @enum {string} */
-            type: "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice" | "lines";
+            type: "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice" | "lines" | "goods";
             required: boolean;
             source: string;
             options?: string[];
@@ -5962,8 +6072,7 @@ export interface components {
             note: string | null;
         };
         CreateTemplateRequest: {
-            /** @enum {string} */
-            type: "contract";
+            type: components["schemas"]["DocType"];
             name: string;
             /** @enum {string} */
             subject_type: "customer";
@@ -6058,7 +6167,7 @@ export interface components {
         };
         Contract: {
             id: string;
-            type: string;
+            type: components["schemas"]["DocType"];
             /** @enum {string} */
             status: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
             number: string | null;
@@ -6078,6 +6187,9 @@ export interface components {
             snapshot_hash: string;
             source_contract_id: string | null;
             replaced_by_id: string | null;
+            valid_until: string | null;
+            parent: components["schemas"]["ContractRef"];
+            children: components["schemas"]["ContractRef"][];
             submitted_at: number | null;
             decided_at: number | null;
             issued_by: string | null;
@@ -6098,6 +6210,15 @@ export interface components {
             timeline: components["schemas"]["ContractTimelineItem"][];
             can: components["schemas"]["ContractCan"];
         };
+        ContractRef: {
+            id: string;
+            type: components["schemas"]["DocType"];
+            number: string | null;
+            /** @enum {string} */
+            status: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
+            total: number;
+            doc_date: string;
+        } | null;
         ContractStep: {
             id: string;
             step_no: number;
@@ -6127,6 +6248,12 @@ export interface components {
             copy: boolean;
             withdraw: boolean;
             delete: boolean;
+            create_child: {
+                type: components["schemas"]["DocType"];
+                allowed: boolean;
+                /** @enum {string|null} */
+                reason_code: "parent-not-issued" | "quote-expired" | "child-exists" | "forbidden" | null;
+            }[];
         };
         CreateContractRequest: {
             template_id: string;
@@ -6140,6 +6267,9 @@ export interface components {
             ngay_bat_dau?: string;
             so_bao_gia?: string;
             ngay_bao_gia?: string;
+            ly_do_xuat_kho?: string;
+            xuat_tai_kho?: string;
+            dia_diem?: string;
         };
         ContractList: {
             items: components["schemas"]["ContractListItem"][];
@@ -6148,6 +6278,9 @@ export interface components {
         };
         ContractListItem: {
             id: string;
+            type: components["schemas"]["DocType"];
+            parent_id: string | null;
+            valid_until: string | null;
             number: string | null;
             /** @enum {string} */
             status: "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
@@ -6183,12 +6316,18 @@ export interface components {
         VoidRequest: {
             reason: string;
         };
+        CreateChildRequest: {
+            type: components["schemas"]["DocType"];
+            template_id?: string;
+            values?: components["schemas"]["ContractValues"];
+        };
         ApprovalQueue: {
             items: components["schemas"]["ApprovalQueueItem"][];
             next_cursor: string | null;
         };
         ApprovalQueueItem: {
             contract_id: string;
+            type: components["schemas"]["DocType"];
             step_no: number;
             label: string;
             customer_name: string;

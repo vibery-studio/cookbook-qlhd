@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, gt, or } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { templates, templateVersions, users } from "../db/schema";
+import type { DocType } from "../domain/contract/doc-types";
 import {
   toDetailDto,
   toListItemDto,
@@ -42,22 +43,23 @@ export function decodeTemplateCursor(cursor: string): TemplateCursor | null {
   return null;
 }
 
-/** Templates with their current version, ordered by name then id (keyset). No `body` in list rows. */
+/** Templates with their current version, ordered by name then id (keyset), optionally of one `type`. No `body` in list rows. */
 export async function listTemplates(
   db: Db,
-  input: { after?: TemplateCursor; limit: number },
+  input: { type?: DocType; after?: TemplateCursor; limit: number },
 ): Promise<{ items: TemplateListItemDto[]; next_cursor: string | null }> {
   const after = input.after;
   const keyset =
     after === undefined
       ? undefined
       : or(gt(templates.name, after.name), and(eq(templates.name, after.name), gt(templates.id, after.id)));
+  const byType = input.type === undefined ? undefined : eq(templates.type, input.type);
   const rows = await db
     .select({ t: templates, v: templateVersions, authorName: users.displayName })
     .from(templates)
     .innerJoin(templateVersions, eq(templateVersions.id, templates.currentVersionId))
     .leftJoin(users, eq(users.id, templateVersions.createdBy))
-    .where(keyset)
+    .where(and(byType, keyset))
     .orderBy(asc(templates.name), asc(templates.id))
     .limit(input.limit + 1);
   const hasMore = rows.length > input.limit;

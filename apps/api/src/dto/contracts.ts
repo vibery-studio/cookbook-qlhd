@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { DOC_TYPES } from "../domain/contract/doc-types";
 import { MAX_LINES } from "../domain/money/line-pricing";
 import { TimestampSchema, UlidSchema } from "./common";
 import { LineInput } from "./products";
@@ -7,6 +8,21 @@ const trimmedNonEmpty = (max: number) => z.string().trim().min(1).max(max);
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
 export const ContractStatusEnum = z.enum(["draft", "pending", "approved", "rejected", "issued", "voided"]);
+
+/** SPEC-09 FR-1 (PLAN-09 §2b): BG · HĐ · DNTT · PXK. Unknown → 422 `validation`. */
+export const DocTypeEnum = z.enum(DOC_TYPES).openapi("DocType");
+
+/** A related document (parent or child) as shown in the drawer's "Tài liệu liên quan". */
+export const ContractRef = z
+  .object({
+    id: UlidSchema,
+    type: DocTypeEnum,
+    number: z.string().nullable(),
+    status: ContractStatusEnum,
+    total: z.number().int(),
+    doc_date: z.string(),
+  })
+  .openapi("ContractRef");
 
 /**
  * `values` keys = template manual field `key`s (SPEC-02). Products + quantities travel in `lines` (SPEC-08 FR-4); prices and
@@ -19,6 +35,10 @@ export const ContractValues = z
     ngay_bat_dau: IsoDate.optional(),
     so_bao_gia: z.string().optional(),
     ngay_bao_gia: IsoDate.optional(),
+    /** PXK (P-7): `ly_do_xuat_kho` required by the PXK template (422 missing-fields), the other two optional */
+    ly_do_xuat_kho: z.string().trim().max(200).optional(),
+    xuat_tai_kho: z.string().trim().max(200).optional(),
+    dia_diem: z.string().trim().max(200).optional(),
   })
   .strict()
   .openapi("ContractValues");
@@ -42,6 +62,15 @@ export const UpdateContractBody = z
   })
   .strict()
   .openapi("UpdateContractRequest");
+
+/**
+ * `POST /contracts/{id}/children` (FR-4, P-2/P-5): `type` = any doc type (a wrong pair → 422 `child-type`); `template_id`
+ * omitted → the seed template of the child type. Lines, prices, discount come frozen from the parent — never from here.
+ */
+export const CreateChildBody = z
+  .object({ type: DocTypeEnum, template_id: UlidSchema.optional(), values: ContractValues.optional() })
+  .strict()
+  .openapi("CreateChildRequest");
 
 export const ApproveBody = z.object({ note: z.string().trim().max(1000).optional() }).strict().openapi("ApproveRequest");
 export const RejectBody = z.object({ note: trimmedNonEmpty(1000) }).strict().openapi("RejectRequest");
@@ -79,13 +108,21 @@ export const ContractCan = z
     copy: z.boolean(),
     withdraw: z.boolean(),
     delete: z.boolean(),
+    /** FR-10 / P-9: one entry per type in CHILD_OF[type] (`[]` for DNTT/PXK); first reason wins in this order */
+    create_child: z.array(
+      z.object({
+        type: DocTypeEnum,
+        allowed: z.boolean(),
+        reason_code: z.enum(["parent-not-issued", "quote-expired", "child-exists", "forbidden"]).nullable(),
+      }),
+    ),
   })
   .openapi("ContractCan");
 
 export const ContractSchema = z
   .object({
     id: UlidSchema,
-    type: z.string(),
+    type: DocTypeEnum,
     status: ContractStatusEnum,
     number: z.string().nullable(),
     seq: z.number().int().nullable(),
@@ -102,6 +139,12 @@ export const ContractSchema = z
     snapshot_hash: z.string(),
     source_contract_id: z.string().nullable(),
     replaced_by_id: z.string().nullable(),
+    /** BG only: in date through this VN day (doc_date + 15, DEC-5) */
+    valid_until: z.string().nullable(),
+    /** the business parent (BG of a HĐ, HĐ of a DNTT) — not the copy source */
+    parent: ContractRef.nullable(),
+    /** children of this document, oldest first */
+    children: z.array(ContractRef),
     submitted_at: TimestampSchema.nullable(),
     decided_at: TimestampSchema.nullable(),
     issued_by: z.string().nullable(),
@@ -123,6 +166,7 @@ export const ContractSchema = z
   .openapi("Contract");
 
 export const ContractListQuery = z.object({
+  type: DocTypeEnum.optional(),
   status: ContractStatusEnum.optional(),
   customer_id: z.string().optional(),
   created_by: z.string().optional(),
@@ -134,6 +178,9 @@ export const ContractListQuery = z.object({
 export const ContractListItem = z
   .object({
     id: z.string(),
+    type: DocTypeEnum,
+    parent_id: z.string().nullable(),
+    valid_until: z.string().nullable(),
     number: z.string().nullable(),
     status: ContractStatusEnum,
     customer_name: z.string(),
@@ -170,6 +217,7 @@ export const ApprovalQueueQuery = ContractAuditQuery;
 export const ApprovalQueueItem = z
   .object({
     contract_id: z.string(),
+    type: DocTypeEnum,
     step_no: z.number().int(),
     label: z.string(),
     customer_name: z.string(),
@@ -189,3 +237,5 @@ export type ContractListDto = z.infer<typeof ContractListResponse>;
 export type ApprovalQueueDto = z.infer<typeof ApprovalQueueResponse>;
 export type CreateContractInput = z.infer<typeof CreateContractBody>;
 export type UpdateContractInput = z.infer<typeof UpdateContractBody>;
+export type CreateChildInput = z.infer<typeof CreateChildBody>;
+export type ContractRefDto = z.infer<typeof ContractRef>;

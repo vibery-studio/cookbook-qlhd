@@ -6,19 +6,20 @@ import {
 } from "../dao/template-dao";
 import type { TemplateDetailDto, TemplateListItemDto } from "../dao/template-types";
 import type { Db } from "../db/client";
+import type { DocType } from "../domain/contract/doc-types";
 
 export type InvalidCursor = { kind: "invalid"; errors: Array<{ path: string; message: string }> };
 
 export async function listTemplatePage(
   db: Db,
-  input: { cursor?: string; limit: number },
+  input: { type?: DocType; cursor?: string; limit: number },
 ): Promise<{ kind: "ok"; items: TemplateListItemDto[]; next_cursor: string | null } | InvalidCursor> {
   let after;
   if (input.cursor !== undefined) {
     after = decodeTemplateCursor(input.cursor) ?? undefined;
     if (after === undefined) return { kind: "invalid", errors: [{ path: "cursor", message: "malformed cursor" }] };
   }
-  const page = await listTemplates(db, { after, limit: Math.min(input.limit, 50) });
+  const page = await listTemplates(db, { type: input.type, after, limit: Math.min(input.limit, 50) });
   return { kind: "ok", ...page };
 }
 

@@ -102,7 +102,8 @@ async function me(s: RunwaySession): Promise<{ roles: string[]; permissions: str
   return res.json();
 }
 
-const CONTRACT_PERMS = ["contract:read", "contract:write", "contract:submit"];
+// SPEC-09 DEC-10 B (0025): every role holding contract:write also makes BG / DNTT / PXK
+const CONTRACT_PERMS = ["contract:read", "contract:write", "contract:submit", "delivery_note:write", "payment_request:write", "quote:write"];
 const APPROVER_PERMS = [...CONTRACT_PERMS, "contract:approve", "contract:issue", "audit:read"];
 
 describe("SPEC-01 foundation (acceptance)", () => {
@@ -143,7 +144,7 @@ describe("SPEC-01 foundation (acceptance)", () => {
     expect(adminMe.roles).toEqual(["admin"]);
     expect(adminMe.permissions).toContain("users:write");
     expect(adminMe.permissions).toContain("audit:read");
-    expect(adminMe.permissions.filter((p) => p.startsWith("contract:") || p === "template:write")).toEqual([]);
+    expect(adminMe.permissions.filter((p) => p.startsWith("contract:") || p === "template:write" || CONTRACT_PERMS.includes(p))).toEqual([]);
 
     const roles = await nv.session.fetch("/roles");
     expect(roles.status).toBe(200);

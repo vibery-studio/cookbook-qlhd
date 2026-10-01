@@ -125,6 +125,16 @@ Codes `product:write` (`01PERM000000PRODUCTWRITE00`, "Sửa sản phẩm"), `pri
 `first_price` also needs `price:write` (403 + `permission.denied`). `product_prices` is append-only by D1 triggers
 (`0022`: no UPDATE, no DELETE of a level in effect, no backdated INSERT) — the API's rules are the first lock.
 
+## Document types (SPEC-09, row 4)
+
+Making a document is gated per type (DEC-10 B): `quote:write` (`01PERM0000000000QUOTEWRITE`), `payment_request:write`
+(`01PERM00000PAYMENTREQWRITE`), `delivery_note:write` (`01PERM000DELIVERYNOTEWRITE`); a HĐ stays `contract:write`
+(`WRITE_PERM`, `domain/contract/doc-types.ts`) → `nhan_vien` + `quan_ly` + `giam_doc` (`0025`), not `admin`. Route gate
+of `POST /contracts` + `/contracts/{id}/children` = `contract:read`; the service checks `WRITE_PERM[type]` (route writes
+`permission.denied {permission}` then 403). PATCH / DELETE / copy use the write code of the document's type. Reading,
+submitting, approving, issuing, voiding every type stay on the shared `contract:read/submit/approve/issue` (one SoD, I9).
+`can.create_child[].reason_code = "forbidden"` when the caller lacks the child type's write code.
+
 ## Cache invalidation contract
 
 When a role assignment changes on a user, the OWNING SERVICE (admin-

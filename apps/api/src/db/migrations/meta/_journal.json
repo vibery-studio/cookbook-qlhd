@@ -176,6 +176,13 @@
       "when": 1790859089663,
       "tag": "0024_bouncy_typhoid_mary",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1790859486203,
+      "tag": "0025_seed_doc_type_perms",
+      "breakpoints": true
     }
   ]
 }

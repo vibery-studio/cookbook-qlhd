@@ -12,6 +12,7 @@ import { adminUsersRoutes } from "./admin-users.routes";
 import { auditRoutes } from "./audit.routes";
 import { approvalsRoutes } from "./approvals.routes";
 import { contractsRoutes } from "./contracts.routes";
+import { contractChildrenRoutes } from "./contract-children.routes";
 import { customersRoutes } from "./customers.routes";
 import { productsRoutes } from "./products.routes";
 import { pricingRoutes } from "./pricing.routes";
@@ -53,6 +54,7 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   templatesWriteRoutes(app);
   templatesImportRoutes(app);
   contractsRoutes(app);
+  contractChildrenRoutes(app);
   approvalsRoutes(app);
   adminSettingsRoutes(app);
   adminFlagsRoutes(app);

@@ -38,7 +38,8 @@ const fetcher = (input: string, init?: RequestInit) => SELF.fetch(input, init);
 const UNKNOWN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /** SPEC-06 AC-1: 15 codes of today's catalog + `roles:write`; SPEC-07 FR-10: + `jit:grant`, `reviews:write` (18);
- * SPEC-08 FR-7: + `price:write`, `product:write` (20). */
+ * SPEC-08 FR-7: + `price:write`, `product:write` (20); SPEC-09 DEC-10 B: + `delivery_note:write`, `payment_request:write`,
+ * `quote:write` (23). */
 const CATALOG = [
   "audit:read",
   "contract:approve",
@@ -46,13 +47,16 @@ const CATALOG = [
   "contract:read",
   "contract:submit",
   "contract:write",
+  "delivery_note:write",
   "flags:read",
   "flags:write",
   "jit:grant",
   "notes:read",
   "notes:write",
+  "payment_request:write",
   "price:write",
   "product:write",
+  "quote:write",
   "reviews:write",
   "roles:write",
   "settings:read",
@@ -64,7 +68,7 @@ const CATALOG = [
 
 /** Seed grants of the system roles these tests edit (0010_seed_foundation.sql + SPEC-06 §3.1 roles:write for giam_doc
  * + SPEC-07 FR-10 jit:grant, reviews:write for giam_doc — 0020; SPEC-08 FR-7 price:write, product:write for giam_doc +
- * quan_ly — 0022). */
+ * quan_ly — 0022; SPEC-09 DEC-10 B quote/payment_request/delivery_note:write for giam_doc + quan_ly + nhan_vien — 0025). */
 const SEED_GRANTS: Record<string, string[]> = {
   giam_doc: [
     "audit:read",
@@ -73,9 +77,12 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:read",
     "contract:submit",
     "contract:write",
+    "delivery_note:write",
     "jit:grant",
+    "payment_request:write",
     "price:write",
     "product:write",
+    "quote:write",
     "reviews:write",
     "roles:write",
     "template:write",
@@ -89,10 +96,13 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:read",
     "contract:submit",
     "contract:write",
+    "delivery_note:write",
+    "payment_request:write",
     "price:write",
     "product:write",
+    "quote:write",
   ],
-  nhan_vien: ["contract:read", "contract:submit", "contract:write"],
+  nhan_vien: ["contract:read", "contract:submit", "contract:write", "delivery_note:write", "payment_request:write", "quote:write"],
 };
 
 interface Person {

@@ -25,7 +25,7 @@ const listRoute = createRoute({
   method: "get",
   path: "/templates",
   tags: ["templates"],
-  summary: "List contract templates with their current version (cursor-paginated)",
+  summary: "List templates with their current version (cursor-paginated; `?type` = one doc type)",
   security,
   request: { query: TemplateListQuery },
   responses: {

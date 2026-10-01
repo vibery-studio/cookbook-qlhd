@@ -62,13 +62,13 @@ function insertValues(row: ContractInsertRow) {
 }
 
 function emptyCan(): ContractDto["can"] {
-  return { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false };
+  return { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
 }
 
 function toDto(row: typeof contracts.$inferSelect): ContractDto {
   return {
     id: row.id,
-    type: row.type,
+    type: row.type as ContractDto["type"], // CHECK ck_contracts_type
     status: row.status as ContractDto["status"],
     number: row.number,
     seq: row.seq,
@@ -85,6 +85,10 @@ function toDto(row: typeof contracts.$inferSelect): ContractDto {
     snapshot_hash: row.snapshotHash,
     source_contract_id: row.sourceContractId,
     replaced_by_id: row.replacedById,
+    // write-side view (like steps/timeline/can below): no joins — GET /contracts/{id} carries parent/children refs
+    valid_until: row.validUntil,
+    parent: null,
+    children: [],
     submitted_at: row.submittedAt,
     decided_at: row.decidedAt,
     issued_by: row.issuedBy,

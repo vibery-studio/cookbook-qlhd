@@ -1,11 +1,15 @@
 import { z } from "@hono/zod-openapi";
 import { TimestampSchema, UlidSchema } from "./common";
+import { DocTypeEnum } from "./contracts";
 
 /** SPEC-02 §3.3 — `[a-z][a-z0-9_]*`. */
 const FieldKey = z.string().regex(/^[a-z][a-z0-9_]*$/, "key must match [a-z][a-z0-9_]*").max(64);
 
-/** `lines` = the place of the server-built line table; its only source is `derived:lines_table` (SPEC-08 §3.4, template-check). */
-export const FIELD_TYPES = ["text", "paragraph", "money", "number", "percent", "date", "choice", "lines"] as const;
+/**
+ * `lines` = the place of the server-built line table; its only source is `derived:lines_table` (SPEC-08 §3.4, template-check).
+ * `goods` = the PXK 02-VT goods table, source `derived:goods_table` (SPEC-09 FR-12; check + renderer land in C-09-004).
+ */
+export const FIELD_TYPES = ["text", "paragraph", "money", "number", "percent", "date", "choice", "lines", "goods"] as const;
 
 /** `manual` | `<kind>:<ref>`; which kinds/refs exist is a template-check (FR-6), not a shape rule. */
 const SourceString = z
@@ -103,7 +107,7 @@ export const TemplateVersionInput = z
 
 export const CreateTemplateBody = z
   .object({
-    type: z.literal("contract"),
+    type: DocTypeEnum,
     name: z.string().trim().min(1).max(200),
     subject_type: z.literal("customer"),
     version: TemplateVersionInput,
@@ -141,6 +145,7 @@ export const TemplateListResponse = z
   .openapi("TemplateList");
 
 export const TemplateListQuery = z.object({
+  type: DocTypeEnum.optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });

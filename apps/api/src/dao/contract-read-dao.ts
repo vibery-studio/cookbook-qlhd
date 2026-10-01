@@ -6,12 +6,14 @@ import { and, asc, desc, eq, inArray, lt, gt, ne, notExists, or, sql, type SQL }
 import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../db/client";
 import { approvalSteps, contracts, templates, users } from "../db/schema";
+import type { DocType } from "../domain/contract/doc-types";
 
 export type ContractRow = typeof contracts.$inferSelect;
 export type StepRow = typeof approvalSteps.$inferSelect;
 export type ContractStatusValue = "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
 
 export interface ContractFilters {
+  type?: DocType;
   customerId?: string;
   createdBy?: string;
   templateId?: string;
@@ -25,6 +27,9 @@ export interface ListContractsInput extends ContractFilters {
 
 export interface ContractListRow {
   id: string;
+  type: DocType;
+  parentId: string | null;
+  validUntil: string | null;
   number: string | null;
   status: ContractStatusValue;
   customerName: string;
@@ -38,6 +43,7 @@ export interface ContractListRow {
 /** Newest first, `(updated_at DESC, id DESC)`; fetches `limit + 1` so the caller can tell there is a next page. */
 export async function listContracts(db: Db, input: ListContractsInput): Promise<ContractListRow[]> {
   const conds: SQL[] = [];
+  if (input.type !== undefined) conds.push(eq(contracts.type, input.type));
   if (input.status !== undefined) conds.push(eq(contracts.status, input.status));
   if (input.customerId !== undefined) conds.push(eq(contracts.customerId, input.customerId));
   if (input.createdBy !== undefined) conds.push(eq(contracts.createdBy, input.createdBy));
@@ -49,6 +55,9 @@ export async function listContracts(db: Db, input: ListContractsInput): Promise<
   const rows = await db
     .select({
       id: contracts.id,
+      type: contracts.type,
+      parentId: contracts.parentId,
+      validUntil: contracts.validUntil,
       number: contracts.number,
       status: contracts.status,
       customerName: contracts.customerName,
@@ -64,12 +73,13 @@ export async function listContracts(db: Db, input: ListContractsInput): Promise<
     .where(conds.length > 0 ? and(...conds) : undefined)
     .orderBy(desc(contracts.updatedAt), desc(contracts.id))
     .limit(input.limit + 1);
-  return rows.map((r) => ({ ...r, status: r.status as ContractStatusValue }));
+  return rows.map((r) => ({ ...r, type: r.type as DocType, status: r.status as ContractStatusValue }));
 }
 
-/** Per-status counts under the same filters minus `status` (the tab badges). Missing statuses → 0. */
+/** Per-status counts under the same filters minus `status` (the tab badges; `type` narrows them). Missing statuses → 0. */
 export async function countByStatus(db: Db, filters: ContractFilters): Promise<Record<ContractStatusValue, number>> {
   const conds: SQL[] = [];
+  if (filters.type !== undefined) conds.push(eq(contracts.type, filters.type));
   if (filters.customerId !== undefined) conds.push(eq(contracts.customerId, filters.customerId));
   if (filters.createdBy !== undefined) conds.push(eq(contracts.createdBy, filters.createdBy));
   if (filters.templateId !== undefined) conds.push(eq(contracts.templateId, filters.templateId));
@@ -119,6 +129,7 @@ export async function getContractDetail(db: Db, id: string): Promise<ContractDet
 
 export interface QueueRow {
   contractId: string;
+  type: DocType;
   stepNo: number;
   label: string;
   customerName: string;
@@ -180,6 +191,7 @@ export async function listApprovalQueue(db: Db, input: ApprovalQueueInput): Prom
   const rows = await db
     .select({
       contractId: contracts.id,
+      type: contracts.type,
       stepNo: approvalSteps.stepNo,
       label: approvalSteps.label,
       customerName: contracts.customerName,
@@ -194,5 +206,47 @@ export async function listApprovalQueue(db: Db, input: ApprovalQueueInput): Prom
     .where(and(...conds))
     .orderBy(asc(submitted), asc(contracts.id))
     .limit(input.limit + 1);
-  return rows;
+  return rows.map((r) => ({ ...r, type: r.type as DocType }));
+}
+
+/** A related document (parent or child) — `ContractRef` of the API. */
+export interface RefRow {
+  id: string;
+  type: DocType;
+  number: string | null;
+  status: ContractStatusValue;
+  total: number;
+  docDate: string;
+}
+
+const refColumns = {
+  id: contracts.id,
+  type: contracts.type,
+  number: contracts.number,
+  status: contracts.status,
+  total: contracts.total,
+  docDate: contracts.docDate,
+};
+
+const toRef = (r: { id: string; type: string; number: string | null; status: string; total: number; docDate: string }): RefRow => ({
+  ...r,
+  type: r.type as DocType,
+  status: r.status as ContractStatusValue,
+});
+
+/** Refs for `ids` in one query (order not guaranteed — the caller keys by id). */
+export async function refsOf(db: Db, ids: readonly string[]): Promise<RefRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.select(refColumns).from(contracts).where(inArray(contracts.id, [...ids]));
+  return rows.map(toRef);
+}
+
+/** Every child of `parentId` (any status), oldest first — one query on `idx_contracts_parent`. */
+export async function childrenOf(db: Db, parentId: string): Promise<RefRow[]> {
+  const rows = await db
+    .select(refColumns)
+    .from(contracts)
+    .where(eq(contracts.parentId, parentId))
+    .orderBy(asc(contracts.createdAt), asc(contracts.id));
+  return rows.map(toRef);
 }

@@ -1,14 +1,19 @@
 import { listAudit, type AuditEventDto } from "../../dao/audit-dao";
 import {
+  childrenOf,
   countByStatus,
   getContractDetail,
   listApprovalQueue,
   listContracts as listContractsDao,
+  refsOf,
   type ContractDetailRow,
+  type RefRow,
 } from "../../dao/contract-read-dao";
 import { listLifecycleEvents, type LifecycleEvent } from "../../dao/contract-withdraw-dao";
 import type { Db } from "../../db/client";
-import type { ApprovalQueueDto, ContractDto, ContractListDto } from "../../dto/contracts";
+import type { ApprovalQueueDto, ContractDto, ContractListDto, ContractRefDto } from "../../dto/contracts";
+import { childRules, isDocType, type DocType } from "../../domain/contract/doc-types";
+import { todayInVN } from "../../utils/vn-date";
 import { CONTRACT_ACTIONS, type RequiredStep } from "../../domain/contract/types";
 import { isEligible } from "../../domain/contract/assignment";
 import type { Principal } from "../../openapi";
@@ -43,7 +48,13 @@ function decodeCursor(raw: string): { n: number; id: string } | null {
 export async function listContracts(
   db: Db,
   _actor: Principal,
-  q: { status?: ContractDto["status"]; customer_id?: string; created_by?: string; template_id?: string; cursor?: string; limit: number },
+  q: {
+    type?: DocType;
+    status?: ContractDto["status"];
+    customer_id?: string; created_by?: string; template_id?: string;
+    cursor?: string;
+    limit: number;
+  },
 ): Promise<ListResult> {
   let after: { updatedAt: number; id: string } | undefined;
   if (q.cursor !== undefined) {
@@ -51,7 +62,7 @@ export async function listContracts(
     if (c === null) return { kind: "invalid", errors: BAD_CURSOR };
     after = { updatedAt: c.n, id: c.id };
   }
-  const filters = { customerId: q.customer_id, createdBy: q.created_by, templateId: q.template_id };
+  const filters = { type: q.type, customerId: q.customer_id, createdBy: q.created_by, templateId: q.template_id };
   const [rows, counts] = await Promise.all([
     listContractsDao(db, { ...filters, status: q.status, after, limit: q.limit }),
     countByStatus(db, filters),
@@ -62,6 +73,9 @@ export async function listContracts(
     kind: "ok",
     items: page.map((r) => ({
       id: r.id,
+      type: r.type,
+      parent_id: r.parentId,
+      valid_until: r.validUntil,
       number: r.number,
       status: r.status,
       customer_name: r.customerName,
@@ -101,7 +115,21 @@ function buildTimeline(d: ContractDetailRow, life: LifecycleEvent[]): ContractDt
   return out.sort((a, b) => a.at - b.at);
 }
 
-function buildCan(d: ContractDetailRow, actor: Principal): ContractDto["can"] {
+function toRef(r: RefRow): ContractRefDto {
+  return { id: r.id, type: r.type, number: r.number, status: r.status, total: r.total, doc_date: r.docDate };
+}
+
+function docTypeOf(raw: string): DocType {
+  if (!isDocType(raw)) throw new Error(`contracts.type outside the CHECK: ${raw}`);
+  return raw;
+}
+
+function buildCan(
+  d: ContractDetailRow,
+  actor: Principal,
+  children: readonly RefRow[],
+  today: string,
+): ContractDto["can"] {
   const { contract: c, steps } = d;
   const isCreator = c.createdBy === actor.id;
   const has = (p: string) => actor.permissions.includes(p);
@@ -129,18 +157,29 @@ function buildCan(d: ContractDetailRow, actor: Principal): ContractDto["can"] {
     withdraw: isCreator && c.status === "pending" && steps.every((s) => s.decidedBy === null),
     delete: isCreator && c.status === "draft",
     copy: has("contract:write") && (c.status === "rejected" || (c.status === "voided" && c.replacedById === null)),
+    create_child: childRules({
+      parent: { type: docTypeOf(c.type), status: c.status, valid_until: c.validUntil },
+      liveChildren: children,
+      today,
+      perms: actor.permissions,
+    }),
   };
 }
 
-/** `null` → 404. `can` is computed for `actor`. */
-export async function contractDetail(db: Db, actor: Principal, id: string): Promise<ContractDto | null> {
+/** `null` → 404. `can` is computed for `actor`; `can.create_child` compares a BG's `valid_until` with today in VN at `now`. */
+export async function contractDetail(db: Db, actor: Principal, id: string, now: Date = new Date()): Promise<ContractDto | null> {
   const d = await getContractDetail(db, id);
   if (d === null) return null;
   const c = d.contract;
-  const life = await listLifecycleEvents(db, id);
+  const [life, parentRefs, children] = await Promise.all([
+    listLifecycleEvents(db, id),
+    c.parentId === null ? Promise.resolve([]) : refsOf(db, [c.parentId]),
+    childrenOf(db, id),
+  ]);
+  const parent = parentRefs[0];
   return {
     id: c.id,
-    type: c.type,
+    type: docTypeOf(c.type),
     status: c.status as ContractDto["status"],
     number: c.number,
     seq: c.seq,
@@ -157,6 +196,9 @@ export async function contractDetail(db: Db, actor: Principal, id: string): Prom
     snapshot_hash: c.snapshotHash,
     source_contract_id: c.sourceContractId,
     replaced_by_id: c.replacedById,
+    valid_until: c.validUntil,
+    parent: parent === undefined ? null : toRef(parent),
+    children: children.map(toRef),
     submitted_at: c.submittedAt,
     decided_at: c.decidedAt,
     issued_by: c.issuedBy,
@@ -183,7 +225,7 @@ export async function contractDetail(db: Db, actor: Principal, id: string): Prom
       snapshot_hash_at_decision: s.snapshotHashAtDecision,
     })),
     timeline: buildTimeline(d, life),
-    can: buildCan(d, actor),
+    can: buildCan(d, actor, children, todayInVN(now)),
   };
 }
 
@@ -211,6 +253,7 @@ export async function approvalQueue(
     kind: "ok",
     items: page.map((r) => ({
       contract_id: r.contractId,
+      type: r.type,
       step_no: r.stepNo,
       label: r.label,
       customer_name: r.customerName,

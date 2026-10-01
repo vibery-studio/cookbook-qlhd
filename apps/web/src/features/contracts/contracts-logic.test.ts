@@ -5,7 +5,7 @@ import { buildFlow } from "./flow";
 import { parseListParams } from "./list-params";
 import { parseSnapshot } from "./snapshot";
 
-const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false };
+const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
 type C = LockContext["contract"];
 const step = (o: Partial<C["steps"][number]>): C["steps"][number] => ({
   id: "s", step_no: 1, label: "Quản lý duyệt", status: "waiting", required_permission: "contract:approve", required_role: "quan_ly",

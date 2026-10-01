@@ -61,7 +61,8 @@ const DAY_ONE_Q4 = "2026-10-01T03:00:00.000Z";
 const NEW_CODES = ["jit:grant", "reviews:write"];
 
 /** Seed grants of the system roles (0010 + 0017 + SPEC-07 0020: jit:grant, reviews:write → giam_doc; SPEC-08 0022:
- * price:write, product:write → giam_doc + quan_ly). */
+ * price:write, product:write → giam_doc + quan_ly; SPEC-09 0025: quote/payment_request/delivery_note:write → giam_doc +
+ * quan_ly + nhan_vien). */
 const SEED_GRANTS: Record<string, string[]> = {
   giam_doc: [
     "audit:read",
@@ -70,9 +71,12 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:read",
     "contract:submit",
     "contract:write",
+    "delivery_note:write",
     "jit:grant",
+    "payment_request:write",
     "price:write",
     "product:write",
+    "quote:write",
     "reviews:write",
     "roles:write",
     "template:write",
@@ -86,10 +90,13 @@ const SEED_GRANTS: Record<string, string[]> = {
     "contract:read",
     "contract:submit",
     "contract:write",
+    "delivery_note:write",
+    "payment_request:write",
     "price:write",
     "product:write",
+    "quote:write",
   ],
-  nhan_vien: ["contract:read", "contract:submit", "contract:write"],
+  nhan_vien: ["contract:read", "contract:submit", "contract:write", "delivery_note:write", "payment_request:write", "quote:write"],
 };
 
 /** The pair no seed role holds both codes of (PLAN-07 R-8). */
@@ -517,7 +524,7 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     // FR-10 / DEC-13
     const catalog = (await listRoles(gd)).catalog;
     for (const code of NEW_CODES) expect(catalog).toContain(code);
-    expect(catalog).toHaveLength(20); // + SPEC-08 FR-7 price:write, product:write
+    expect(catalog).toHaveLength(23); // + SPEC-08 FR-7 price:write, product:write; + SPEC-09 DEC-10 B quote/payment_request/delivery_note:write
     expect(sorted((await me(gd)).permissions)).toEqual(SEED_GRANTS["giam_doc"]);
     for (const p of [admin, ql, nv]) {
       const perms = (await me(p)).permissions;
