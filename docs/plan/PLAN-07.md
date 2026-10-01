@@ -1,6 +1,6 @@
 # PLAN-07: Kiểm soát RBAC nâng cao — SoD · four-eyes đổi quyền · admin tạm thời (JIT) · rà soát quý
 
-Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền; R-9 SoD trước grant_not_held, R-10 can.request + request_locked_reason cộng thêm, R-11 phân quyền dòng rà soát như §4)
+Status: Done 2026-10-01 (PROOF bạn duyệt)
 Spec: docs/spec/SPEC-07.md (Approved 2026-10-01) · Roadmap: ROADMAP-02 row 2b · Phụ thuộc: row 2a Done (PLAN-06, commit ae42fbc)
 
 ## 0. Đối chiếu `TODO(2a)` của SPEC với code 2a đã build
@@ -140,4 +140,4 @@ Thứ tự: 001 → 002 → (003 → 004) ∥ 005 ∥ 006 → 007 → 008 → 00
   - Lỗi lộ ra khi suite nhanh hơn, đã sửa: hai admin duyệt cùng lúc → bên thua đôi khi `stale` thay `not-pending` (đọc yêu cầu và vai trò không cùng lúc) → `classifyApprove` đọc lại yêu cầu khi version lệch; AC-4 đỏ trong full run → 5/5 xanh.
 - Attack (curl vào `pnpm dev`, 4 tài khoản seed-team): ẩn danh `/role-change-requests`, `/sod-pairs`, `/access-reviews/current`, `/admin/jit-grants` → 401 · NV → 403 + `permission.denied` (`roles:write`/`jit:grant`, đã đọc trong `audit_events`) · GĐ tự cấp JIT → 403 `rule: self_grant` + audit · `PATCH /roles/{id}` có `permissions` → 422. Tự duyệt / JIT duyệt / tự rà / đoán id: suite `rbac-advanced-acceptance` 14/14.
 - Nits (để sau): nhật ký `jit.granted` chưa có tên người nhận (audit chỉ lưu id — web tra tên sau); số trên nav "Rà soát quyền" = số dòng chưa rà, chỉ khi quá hạn; câu 🔒 `not_reviewer` do agent viết.
-- Result: chờ bạn duyệt checklist trên.
+- Result: bạn duyệt 2026-10-01.

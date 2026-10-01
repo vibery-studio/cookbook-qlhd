@@ -1,6 +1,6 @@
 # PLAN-08: Sản phẩm & giá — dịch vụ + hàng hóa, mức giá theo ngày (chưa VAT + thuế suất), dòng hàng trên tài liệu
 
-Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền; P-1..P-8 theo đề xuất §4)
+Status: Done 2026-10-01 (PROOF bạn duyệt)
 Spec: docs/spec/SPEC-08.md (Approved 2026-10-01) · Intent: docs/intent/INTENT-08.md · Roadmap: ROADMAP-02 row 3
 Chạy song song row 2b (PLAN-07). **C-08-001 chạy SAU C-07-001 + C-07-002** (chung `catalog.ts`, `schema.ts`, `migrations/meta/_journal.json`,
 `data-inventory.ts`, `roles-acceptance`, `dto/error.ts`, `routes/index.ts`, `wrangler.toml`, `packages/client`). **2b merge trước → card 08 nào
@@ -161,4 +161,4 @@ Thứ tự: [C-07-001 + C-07-002 xong] → 001 ∥ 002 → 003 → 004 ∥ 005 �
   - Ảnh: `apps/web/e2e/shots/` (gitignored).
 - Attack (curl vào `pnpm dev`): ẩn danh 7 endpoint `/products*`, `/pricing/preview` → 401 · NV đọc 200, ghi → 403 + `permission.denied` (`product:write`, `price:write`) · admin đọc/ghi → 403 (`contract:read`) · đoán id sản phẩm/mức → 404 · `unit_price` trong dòng → 422 · tên `<script>` trong bảng: test `contract-merge` (escape) · SQL sửa/xóa mức đã hiệu lực: trigger (test C-08-001).
 - Nits (để sau): pill "Hàng hóa" xuống 2 dòng ở cột Loại (1440px); tab "Tất cả" chỉ hiện đang bán (ngừng bán chỉ ở tab riêng); "Hủy" mức sắp áp dụng không hỏi xác nhận; combobox không chặn chọn trùng sản phẩm (server trả lỗi dưới dòng). Ngoài lề: `vite.config.ts` proxy thiếu `/contracts`, `/approvals`, 2b, sản phẩm → đã bổ sung.
-- Result: chờ bạn duyệt checklist trên.
+- Result: bạn duyệt 2026-10-01.
