@@ -1,7 +1,9 @@
 /**
  * FIX-03 (SPEC-06 DEC-5 A): no self-escalation through the Users screen.
  *   - changing your OWN role → 403 forbidden, rule self_role
- *   - assigning `admin` when you are not admin → 403 forbidden, rule admin_only
+ *   - editing a user who holds `admin` when you are not admin → 403 forbidden, rule admin_only
+ *   - FIX-05 revised "only admin assigns admin": assigning a role carrying roles:write is for Giám đốc only
+ *     (`owner_only`, see fix-05-owner.test.ts); the tests below set up second admins through Giám đốc.
  *   - each refusal writes exactly one `permission.denied` audit row; nothing else changes
  */
 import { SELF, env } from "cloudflare:test";
@@ -115,27 +117,31 @@ describe("FIX-03 — no self-escalation via PATCH /admin/users/{id}", () => {
     expect((await patch(gd.session, gd.userId, { display_name: "Minh N." })).status).toBe(200);
   });
 
-  it("Giám đốc cannot assign admin to someone else → 403 admin_only; other role changes still work", async () => {
+  // FIX-05 revised this test: it used to expect 403 admin_only; Giám đốc (owner) now assigns admin, admin cannot.
+  it("admin cannot assign admin to someone else (FIX-05 owner_only); Giám đốc can; other role changes still work", async () => {
     const admin = await seedAdmin();
     const gd = await invite(admin.session, "giam_doc", "minh@nhatminh.vn", "Nguyễn Nhật Minh");
     const ql = await invite(admin.session, "quan_ly", "vi@nhatminh.vn", "Tường Vi");
 
-    await expectRule(await patch(gd.session, ql.userId, { role: "admin" }), "admin_only");
+    await expectRule(await patch(admin.session, ql.userId, { role: "admin" }), "owner_only");
     expect(await rolesOf(ql.session)).toEqual(["quan_ly"]);
     const rows = await denials();
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ actor: gd.userId, target: `user:${ql.userId}` });
-    expect(rows[0]?.metadata).toMatchObject({ rule: "admin_only", permission: "users:write" });
+    expect(rows[0]).toMatchObject({ actor: admin.userId, target: `user:${ql.userId}` });
+    expect(rows[0]?.metadata).toMatchObject({ rule: "owner_only", permission: "users:write" });
 
     expect((await patch(gd.session, ql.userId, { role: "nhan_vien" })).status).toBe(200);
     expect(await rolesOf(ql.session)).toEqual(["nhan_vien"]);
+    expect((await patch(gd.session, ql.userId, { role: "admin" })).status).toBe(200);
+    expect(await rolesOf(ql.session)).toEqual(["admin"]);
   });
 
-  it("admin may assign admin to another user, but not change their own role (self_role, not last-admin)", async () => {
+  it("with a second admin (made by Giám đốc, FIX-05), admin still cannot change their own role (self_role, not last-admin)", async () => {
     const admin = await seedAdmin();
+    const gd = await invite(admin.session, "giam_doc", "minh@nhatminh.vn", "Nguyễn Nhật Minh");
     const ql = await invite(admin.session, "quan_ly", "vi@nhatminh.vn", "Tường Vi");
 
-    const promote = await patch(admin.session, ql.userId, { role: "admin" });
+    const promote = await patch(gd.session, ql.userId, { role: "admin" });
     expect(promote.status).toBe(200);
     expect(await rolesOf(ql.session)).toEqual(["admin"]);
 
@@ -149,7 +155,7 @@ describe("FIX-03 — no self-escalation via PATCH /admin/users/{id}", () => {
     const admin = await seedAdmin();
     const gd = await invite(admin.session, "giam_doc", "minh@nhatminh.vn", "Nguyễn Nhật Minh");
     const second = await invite(admin.session, "quan_ly", "vi@nhatminh.vn", "Tường Vi");
-    expect((await patch(admin.session, second.userId, { role: "admin" })).status).toBe(200);
+    expect((await patch(gd.session, second.userId, { role: "admin" })).status).toBe(200); // FIX-05: owner assigns admin
 
     await expectRule(await patch(gd.session, second.userId, { role: "nhan_vien" }), "admin_only");
     await expectRule(await patch(gd.session, second.userId, { status: "disabled" }), "admin_only");

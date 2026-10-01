@@ -220,7 +220,7 @@ async function team(opts: { secondDirector?: boolean } = {}): Promise<Team> {
   const ql = await invite(admin, "quan_ly", "vi@nhatminh.vn", "Tường Vi");
   const nv = await invite(admin, "nhan_vien", "khanh@nhatminh.vn", "Minh Khánh");
   const t: Team = { admin, gd, ql, nv };
-  if (opts.secondDirector === true) t.gd2 = await invite(admin, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
+  if (opts.secondDirector === true) t.gd2 = await invite(gd.session, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
   return t;
 }
 
@@ -675,7 +675,7 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect(still.steps).toEqual([]);
     expect((await sqlFirst<{ n: number }>("SELECT COUNT(*) AS n FROM approval_steps WHERE contract_id = ?", d.id))?.n).toBe(0);
 
-    const gd2 = await invite(t.admin, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
+    const gd2 = await invite(t.gd.session, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
     expect((await act(t.gd, d.id, "submit")).status).toBe("pending");
     await act(t.ql, d.id, "approve");
     const done = await act(gd2, d.id, "approve");

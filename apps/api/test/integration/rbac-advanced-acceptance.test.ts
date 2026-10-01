@@ -665,13 +665,14 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     const roles = await listRoles(gd);
     const byName = (n: string) => roles.items.find((r) => r.name === n)!;
     await expectRule(await requestChangeRaw(gd, byName("giam_doc"), without(byName("giam_doc").permissions, "audit:read")), "own_role");
-    await expectRule(await requestChangeRaw(gd, byName("admin"), [...byName("admin").permissions, "contract:read"]), "admin_role");
+    // FIX-05 R2 (was 403 admin_role): admin changes by request; its approver must be ANOTHER Giám đốc → none here
+    await problemOf(await requestChangeRaw(gd, byName("admin"), [...byName("admin").permissions, "contract:read"]), 409, "no-eligible-approver");
     const notHeld = await expectRule(
       await requestChangeRaw(gd, byName("nhan_vien"), [...byName("nhan_vien").permissions, "settings:write"]),
       "grant_not_held",
     );
     expect(notHeld.permissions).toEqual(["settings:write"]);
-    expect(await deniedCount(gd.userId)).toBe(3);
+    expect(await deniedCount(gd.userId)).toBe(2);
 
     // stale version, unknown role, nothing to change, unknown code
     const nv = byName("nhan_vien");
@@ -684,7 +685,7 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
 
   it("AC-4 / FR-4, DEC-3: self approve → 403 self_approve; two admins approve at once → one 200 (version+1), one 409 not-pending; the holder loses the code on the next call; role.change_approved + role.permissions_changed", async () => {
     const { admin, gd, ql: qlUser, nv } = await team();
-    const admin2 = await invite(admin, "admin", "kythuat@nhatminh.vn", "Quản trị 2");
+    const admin2 = await invite(gd, "admin", "kythuat@nhatminh.vn", "Quản trị 2"); // FIX-05: only Giám đốc assigns admin
 
     // warm the Quản lý principal cache while the permission is live
     expect((await me(qlUser)).permissions).toContain("contract:issue");
@@ -796,9 +797,12 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
   it("AC-13 / FR-11, DEC-14: nobody else can approve → 409 no-eligible-approver at create (and GET /roles says so before the click)", async () => {
     const { admin, gd } = await team();
 
-    // only Giám đốc could approve, but adding to giam_doc needs an approver who does NOT carry it (DEC-3)
-    const gdRole = await role(admin, "giam_doc");
-    await problemOf(await requestChangeRaw(admin, gdRole, [...gdRole.permissions, "settings:read"]), 409, "no-eligible-approver");
+    // FIX-05 R1 replaced the old case here (admin adding to giam_doc → 409; Giám đốc now approves it, fix-05-owner.test.ts).
+    // Still locked: a change to the admin role needs ANOTHER Giám đốc (R2) — Giám đốc is the only one.
+    const adminRole = await role(gd, "admin");
+    expect(adminRole.can.request).toBe(false);
+    expect(adminRole.request_locked_reason).toBe("no_approver");
+    await problemOf(await requestChangeRaw(gd, adminRole, without(adminRole.permissions, "notes:write")), 409, "no-eligible-approver");
 
     // the admin account is disabled → Giám đốc is the only permanent roles:write left
     await env.DB.prepare("UPDATE users SET status = 'disabled' WHERE id = ?").bind(admin.userId).run();
@@ -886,7 +890,7 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     // the JIT holder passes requirePerm with admin's codes, but every D1 guard ignores JIT (DEC-7)
     await expectRule(
       await nv.session.fetch(`/admin/users/${ql.userId}`, { method: "PATCH", body: JSON.stringify({ role: "admin" }) }),
-      "admin_only",
+      "owner_only", // FIX-05 (was admin_only): assigning a role with roles:write is for Giám đốc only
     );
     expect(await rolesOfUser(ql.userId)).toEqual(["quan_ly"]);
     const qlRole = await role(gd, "quan_ly");

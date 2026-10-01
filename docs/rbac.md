@@ -76,7 +76,7 @@ harmlessly. Only `can()`'s `admin` bypass depends on a specific name.
 - `roles.name` is the immutable identity — approval steps and `can()`'s `admin` bypass match by name. Never renamed.
   Display name = `label`; duplicates checked on `label_key` (NFC, trim, collapsed spaces, `toLocaleLowerCase('vi')`).
 - System roles (`is_system=1`): the 5 seeds `admin`, `member`, `giam_doc`, `quan_ly`, `nhan_vien` — never deleted or
-  renamed; `admin` fully immutable through the API (its grants change by migration only). Custom roles: `name =
+  renamed; `admin` label/delete immutable through the API; its grants change by change request (FIX-05: Giám đốc approves). Custom roles: `name =
   "r_" + lowercase ULID`, server-made (nobody can create a role named `admin`); ≤ 50; deletable only with 0 holders.
 - `version` = CAS for every edit (`expected_version` → 409 `stale`).
 - Guards (`services/role-admin-service.ts`, order): `admin_role` → `system_role` (DELETE) → `own_role` → `grant_not_held`
@@ -116,6 +116,22 @@ Tables `0019_*` (`sod_pairs`, `role_change_requests`, `jit_grants`, `access_revi
 - **Lockout (DEC-14)**: when nobody else is eligible to approve (e.g. admin disabled), creating a request → 409
   `no-eligible-approver`; `GET /roles` shows `can.request=false` + `request_locked_reason:"no_approver"`. The only way
   out is a migration (re-enable an approver or change `role_permissions` directly) — by the technical admin.
+
+## Owner model (FIX-05) — Giám đốc = owner, admin = IT ops
+
+Owner = holder of `giam_doc` (`OWNER_ROLE`, `dao/role-dao.ts`; read from `user_roles`, JIT never counts). Rule `owner_only`.
+- **R1** Approver of a change to `giam_doc`: own_role does not apply to its holders (≠ requester, no JIT still apply).
+- **R2** `admin` permissions change by request (anyone with roles:write may propose, its carriers included); approver =
+  an owner ≠ requester (adds and removals alike) → else 403 `owner_only`. Label/delete of `admin` stay `admin_role`.
+  Only one owner → their own request on `admin` = 409 `no-eligible-approver` (`can.request=false`, `no_approver`).
+- **R3** Invite / assign a role carrying `roles:write` (admin, giam_doc, custom) → owners only (403 `owner_only` +
+  `permission.denied {rule, permission:"users:write", role}`). Bootstrap: `giam_doc` while nobody carries it (any
+  status) → any `users:write` holder (the first Giám đốc). Changing the role of a `giam_doc` holder → owners only.
+  Owners skip FR-12 for roles carrying `roles:write`. `self_role` (FIX-03) first; `admin_only` (editing an admin's
+  account) unchanged.
+- Enforced twice: service read → 403; same predicate in SQL — `approverScope()` + `eligibleApproverSql({ownerOnly})`
+  (create guard, `GET /roles`), `approveRoleGuard` (approve batch marker), `ownerMayAssignSql` /
+  `ownerMayReassignSql` (WHERE of the first write of invite / role change).
 
 ## Products & prices (SPEC-08, row 3)
 

@@ -180,7 +180,7 @@ async function team(opts: { secondDirector?: boolean } = {}): Promise<Team> {
   const ql = await invite(admin, "quan_ly", "vi@nhatminh.vn", "Tường Vi");
   const nv = await invite(admin, "nhan_vien", "khanh@nhatminh.vn", "Minh Khánh");
   const t: Team = { admin, gd, ql, nv };
-  if (opts.secondDirector === true) t.gd2 = await invite(admin, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
+  if (opts.secondDirector === true) t.gd2 = await invite(gd.session, "giam_doc", "lan@nhatminh.vn", "Phạm Thu Lan");
   return t;
 }
 

@@ -184,7 +184,9 @@ const RULE_MESSAGES: Record<string, string> = {
   one_person_one_step: "Bạn đã quyết một bước của hợp đồng này; bước tiếp theo cần người khác.",
   // FIX-03 (SPEC-06 DEC-5): PATCH/POST /admin/users
   self_role: "🔒 Không tự đổi vai trò của mình. Nhờ người khác có quyền quản lý người dùng đổi giúp.",
-  admin_only: "🔒 Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị.",
+  admin_only: "🔒 Chỉ Quản trị hệ thống mới sửa được tài khoản quản trị.",
+  // FIX-05: Giám đốc = owner (POST/PATCH /admin/users, approve a change to the admin role)
+  owner_only: "🔒 Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò, hoặc duyệt đổi quyền của vai trò Quản trị hệ thống.",
   // SPEC-06: /roles and role assignment
   own_role: "🔒 Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
   admin_role: "🔒 Quản trị hệ thống luôn đủ quyền — không sửa hay xóa được.",

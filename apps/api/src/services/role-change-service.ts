@@ -20,8 +20,9 @@ import { writeAuditEvent } from "../dao/audit-dao";
 import { isUniqueViolation } from "../dao/customer-dao";
 import { findActiveJit, jitActiveSql } from "../dao/jit-dao";
 import { listPermissionKeysForUser } from "../dao/permission-dao";
-import { findRoleDetail, listRoleIdsForUser } from "../dao/role-dao";
+import { findRoleDetail, listRoleIdsForUser, listRoleNamesForUser, OWNER_ROLE, userIsOwnerSql } from "../dao/role-dao";
 import {
+  approverScope,
   auditRowExistsSql,
   auditWithIdWhenStmt,
   bumpRoleVersionStmt,
@@ -62,7 +63,8 @@ export interface RoleChangeDeps {
 export const REQUEST_TTL_SECONDS = 7 * 24 * 60 * 60;
 const EXPIRE_BATCH = 100;
 
-export type ChangeRule = "admin_role" | "own_role" | "grant_not_held" | "self_approve" | "jit_actor";
+/** `owner_only` (FIX-05 R2): only a holder of the owner role (`giam_doc`) approves a change to the `admin` role. */
+export type ChangeRule = "owner_only" | "own_role" | "grant_not_held" | "self_approve" | "jit_actor";
 export type Forbidden = { kind: "forbidden"; rule?: ChangeRule; permissions?: string[] };
 
 export type EffectiveStatus = StoredStatus;
@@ -87,7 +89,7 @@ export interface ChangeRequestView {
   decided_at: number | null;
   decision_note: string | null;
   can: { approve: boolean; reject: boolean; withdraw: boolean };
-  locked_reason: "self_approve" | "jit_actor" | "own_role" | null;
+  locked_reason: "self_approve" | "jit_actor" | "owner_only" | "own_role" | null;
 }
 
 interface Caller {
@@ -95,26 +97,43 @@ interface Caller {
   roleIds: Set<string>;
   permissions: Set<string>;
   jit: boolean;
+  /** Carries the owner role (`giam_doc`) permanently — FIX-05. */
+  owner: boolean;
 }
 
 async function loadCaller(db: Db, id: string, now: number): Promise<Caller> {
-  const [roleIds, perms, jit] = await Promise.all([
+  const [roleIds, roleNames, perms, jit] = await Promise.all([
     listRoleIdsForUser(db, id),
+    listRoleNamesForUser(db, id),
     listPermissionKeysForUser(db, id),
     findActiveJit(db, id, now),
   ]);
-  return { id, roleIds: new Set(roleIds), permissions: new Set(perms), jit: jit !== null };
+  return { id, roleIds: new Set(roleIds), permissions: new Set(perms), jit: jit !== null, owner: roleNames.includes(OWNER_ROLE) };
 }
 
 const effectiveStatus = (r: ChangeRequestRowDto, now: number): EffectiveStatus =>
   r.status === "pending" && r.expiresAt <= now ? "expired" : r.status;
 
+/**
+ * FIX-05: the role-specific approve rule for a caller who is neither the requester nor a JIT holder.
+ * `admin` → owners only (R2). `giam_doc` → its holders may approve additions (R1). Others → DEC-3 own_role.
+ * Mirrors `approverScope()` (create / `GET /roles`) and the approve batch guard.
+ */
+function decisionLock(r: { roleId: string; roleName: string; adding: boolean }, caller: Caller): "owner_only" | "own_role" | null {
+  if (r.roleName === "admin") return caller.owner ? null : "owner_only";
+  if (r.roleName === OWNER_ROLE) return null;
+  return r.adding && caller.roleIds.has(r.roleId) ? "own_role" : null;
+}
+
 function toView(r: ChangeRequestRowDto, caller: Caller, now: number): ChangeRequestView {
   const status = effectiveStatus(r, now);
   const open = status === "pending";
   const self = r.requestedBy === caller.id;
-  const carries = r.added.length > 0 && caller.roleIds.has(r.roleId);
-  const locked = self ? "self_approve" : caller.jit ? "jit_actor" : carries ? "own_role" : null;
+  const locked = self
+    ? "self_approve"
+    : caller.jit
+      ? "jit_actor"
+      : decisionLock({ roleId: r.roleId, roleName: r.roleName, adding: r.added.length > 0 }, caller);
   const writer = caller.permissions.has("roles:write");
   return {
     id: r.id,
@@ -228,7 +247,7 @@ export type CreateRequestResult =
   | Forbidden;
 
 /**
- * Order (PLAN-07 §2b): 404 → admin_role → own_role → 422 nothing changes → sod-conflict (R-9) → grant_not_held →
+ * Order (PLAN-07 §2b, FIX-05): 404 → own_role (not for `admin`: admin proposes, an owner approves) → 422 nothing changes → sod-conflict (R-9) → grant_not_held →
  * stale → request-pending → no-eligible-approver. Returns null when every guard passes.
  */
 async function classifyCreate(
@@ -241,8 +260,7 @@ async function classifyCreate(
   const role = await findRoleDetail(db, input.roleId);
   if (role === null) return { kind: "not-found" };
   const actor = await loadCaller(db, input.actorId, now);
-  if (role.name === "admin") return deny(db, { actorId: actor.id, target, rule: "admin_role", ip: input.ip });
-  if (actor.roleIds.has(role.id)) return deny(db, { actorId: actor.id, target, rule: "own_role", ip: input.ip });
+  if (role.name !== "admin" && actor.roleIds.has(role.id)) return deny(db, { actorId: actor.id, target, rule: "own_role", ip: input.ip });
   const old = new Set(role.permissions);
   const next = new Set(input.permissions);
   const added = [...next].filter((k) => !old.has(k)).sort();
@@ -256,7 +274,7 @@ async function classifyCreate(
   }
   if (role.version !== input.expectedVersion) return { kind: "stale" };
   if (await holds(db, openRequestSql(role.id, now))) return { kind: "request-pending" };
-  const approver = eligibleApproverSql({ requesterId: actor.id, now, carryingRoleId: added.length > 0 ? role.id : undefined });
+  const approver = eligibleApproverSql({ requesterId: actor.id, now, ...approverScope(role, added.length > 0) });
   if (!(await holds(db, approver))) return { kind: "no-eligible-approver" };
   return { kind: "pass", added, removed, name: role.name, label: role.label };
 }
@@ -270,15 +288,16 @@ export async function createRequest(
   const pre = await classifyCreate(deps, input, now);
   if (pre.kind !== "pass") return pre;
   const { added, removed } = pre;
+  const target = { id: input.roleId, name: pre.name };
 
   const id = generateUlid();
   const note = input.note === undefined || input.note === "" ? null : input.note;
   const guard = sql`NOT EXISTS (SELECT 1 FROM role_change_requests gq WHERE gq.role_id = ${input.roleId} AND gq.status = 'pending')
-    AND EXISTS (SELECT 1 FROM roles gr WHERE gr.id = ${input.roleId} AND gr.version = ${input.expectedVersion} AND gr.name <> 'admin')
-    AND NOT ${actorCarriesRole(input.actorId, input.roleId)}
+    AND EXISTS (SELECT 1 FROM roles gr WHERE gr.id = ${input.roleId} AND gr.version = ${input.expectedVersion} AND gr.name = ${pre.name})
+    AND ${pre.name === "admin" ? sql`1 = 1` : sql`NOT ${actorCarriesRole(input.actorId, input.roleId)}`}
     AND ${sodClearSql(input.permissions)}
     AND ${actorHoldsAll(input.actorId, added)}
-    AND ${eligibleApproverSql({ requesterId: input.actorId, now, carryingRoleId: added.length > 0 ? input.roleId : undefined })}`;
+    AND ${eligibleApproverSql({ requesterId: input.actorId, now, ...approverScope(target, added.length > 0) })}`;
 
   // R-5/R-12: an overdue pending request still occupies the partial UNIQUE — flip it (and log it once) first.
   const overdue = await listOverdueRequests(db, { now, roleId: input.roleId, limit: 5 });
@@ -337,7 +356,10 @@ export type ApproveResult =
 
 type Pass<T> = { kind: "pass" } & T;
 
-/** 404 → self_approve → jit_actor → (no permanent roles:write) → not-pending → expired. Shared by approve/reject. */
+/**
+ * 404 → self_approve → jit_actor → (no permanent roles:write) → [approve only: owner_only | own_role, FIX-05
+ * `decisionLock`] → not-pending → expired. Shared by approve/reject.
+ */
 async function classifyDecision(
   db: Db,
   input: { actorId: string; id: string; ip: string | null; checkOwnRole: boolean },
@@ -356,8 +378,9 @@ async function classifyDecision(
   if (req.requestedBy === actor.id) return deny(db, { actorId: actor.id, target, rule: "self_approve", ip: input.ip });
   if (actor.jit) return deny(db, { actorId: actor.id, target, rule: "jit_actor", ip: input.ip });
   if (!actor.permissions.has("roles:write")) return deny(db, { actorId: actor.id, target, auditRule: "not_permanent", ip: input.ip });
-  if (input.checkOwnRole && req.added.length > 0 && actor.roleIds.has(req.roleId)) {
-    return deny(db, { actorId: actor.id, target, rule: "own_role", ip: input.ip });
+  if (input.checkOwnRole) {
+    const lock = decisionLock({ roleId: req.roleId, roleName: req.roleName, adding: req.added.length > 0 }, actor);
+    if (lock !== null) return deny(db, { actorId: actor.id, target, rule: lock, ip: input.ip });
   }
   if (req.status === "expired") return { kind: "expired" };
   if (req.status !== "pending") return { kind: "not-pending" };
@@ -392,6 +415,13 @@ async function classifyApprove(
   return { kind: "pass", req, after };
 }
 
+/** FIX-05: the SQL twin of `decisionLock` for the approve batch (role name read in-batch, so a stale DTO cannot widen it). */
+function approveRoleGuard(req: ChangeRequestRowDto, actorId: string): SQL {
+  const named = (name: string) => sql`EXISTS (SELECT 1 FROM roles nr WHERE nr.id = ${req.roleId} AND nr.name = ${name})`;
+  const notCarrier = req.added.length > 0 ? sql`NOT ${actorCarriesRole(actorId, req.roleId)}` : sql`1 = 1`;
+  return sql`(CASE WHEN ${named("admin")} THEN ${userIsOwnerSql(actorId)} WHEN ${named(OWNER_ROLE)} THEN 1 ELSE ${notCarrier} END)`;
+}
+
 export async function approveRequest(
   deps: RoleChangeDeps,
   input: { actorId: string; id: string; note?: string; ip: string | null },
@@ -411,7 +441,7 @@ export async function approveRequest(
     AND ${sodClearSql(after)}
     AND ${userHoldsKeySql(input.actorId, "roles:write")}
     AND NOT ${jitActiveSql(input.actorId, now)}
-    AND ${req.added.length > 0 ? sql`NOT ${actorCarriesRole(input.actorId, req.roleId)}` : sql`1 = 1`}`;
+    AND ${approveRoleGuard(req, input.actorId)}`;
   const markerId = generateUlid();
   const marker = auditRowExistsSql(markerId);
 

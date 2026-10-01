@@ -13,7 +13,7 @@
  *     permission edits are SENT (SPEC-07 DEC-1): the submit button's name carries the diff, "Gửi yêu cầu (−1)" /
  *     "Gửi yêu cầu (+2 · −1)" (U+2212 minus); a pending request shows `pending-band` and "Rút yêu cầu"; label/description keep "Lưu";
  *     a locked drawer shows 🔒 + reason text ("Bạn đang mang vai trò này", "Vai trò hệ thống — không xóa/đổi tên",
- *     "Bạn không có quyền này nên không cấp được", "Quản trị hệ thống luôn đủ quyền"); locked controls are disabled;
+ *     "Bạn không có quyền này nên không cấp được", "Quản trị hệ thống: không đổi tên hay xóa được…" (FIX-05)); locked controls are disabled;
  *   add / clone modal role=dialog name "Thêm vai trò": field "Tên vai trò" (clone prefill "Bản sao của <label>"),
  *     field "Mô tả", permission checkboxes as in the drawer, submit button "Tạo vai trò";
  *   delete: confirm dialog "Xác nhận" → button "Xác nhận"; 409 role-in-use → text "Còn n người mang vai trò này"

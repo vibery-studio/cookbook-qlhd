@@ -526,9 +526,10 @@ describe("SPEC-06 roles API (acceptance)", () => {
     await approve(gd, drop.id);
     expect(await permsOf(gd)).not.toContain("users:write");
 
-    // admin role is immutable through the API — for everyone, admin included
+    // admin role: label / delete stay locked for everyone (admin_role). FIX-05 R2: its permissions now change by
+    // request like any role (Giám đốc approves) — so asking to add codes admin does not hold is grant_not_held.
     await expectRule(await patchRole(gd, id("admin"), { expected_version: ver("admin"), label: "Admin" }), "admin_role");
-    await expectRule(await requestChangeRaw(admin, { id: id("admin"), version: ver("admin") }, CATALOG), "admin_role");
+    await expectRule(await requestChangeRaw(admin, { id: id("admin"), version: ver("admin") }, CATALOG), "grant_not_held");
     await expectRule(await deleteRole(gd, id("admin"), ver("admin")), "admin_role");
     expect(await deniedCount(gd.userId)).toBe(4);
     expect(await deniedCount(admin.userId)).toBe(2);

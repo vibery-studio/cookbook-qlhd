@@ -7,6 +7,7 @@ import type { ChangeRequest } from "./requests";
 const LOCK_TEXT = {
   self_approve: "Bạn gửi yêu cầu này — cần người khác duyệt",
   jit_actor: "Bạn đang có quyền quản trị tạm thời nên không duyệt được",
+  owner_only: "Chỉ Giám đốc duyệt đổi quyền của vai trò Quản trị hệ thống",
   own_role: "Bạn đang mang vai trò này nên không tự duyệt được",
 } as const;
 

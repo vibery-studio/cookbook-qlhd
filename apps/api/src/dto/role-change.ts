@@ -30,7 +30,7 @@ export const ChangeRequestSchema = z
     decided_at: z.number().int().nullable(),
     decision_note: z.string().nullable(),
     can: z.object({ approve: z.boolean(), reject: z.boolean(), withdraw: z.boolean() }),
-    locked_reason: z.enum(["self_approve", "jit_actor", "own_role"]).nullable(),
+    locked_reason: z.enum(["self_approve", "jit_actor", "owner_only", "own_role"]).nullable(),
   })
   .openapi("ChangeRequest");
 

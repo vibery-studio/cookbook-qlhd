@@ -129,12 +129,13 @@ export function RolesScreen() {
                   Quyền
                 </th>
                 {roles.map((r) => {
-                  const lock = r.locked_reason === "own_role" || r.locked_reason === "admin";
+                  // FIX-05: the admin role is no longer fully locked — its permissions change by request (Giám đốc approves).
+                  const lock = r.locked_reason === "own_role" || (r.locked_reason === "admin" && !r.can.request);
                   const content = (
                     <>
                       {r.label}
                       {lock ? (
-                        <span aria-hidden="true" title={r.locked_reason === "admin" ? "Quản trị hệ thống luôn đủ quyền" : "Bạn đang mang vai trò này"}>
+                        <span aria-hidden="true" title={r.locked_reason === "admin" ? "Đổi quyền vai trò này cần một Giám đốc khác duyệt" : "Bạn đang mang vai trò này"}>
                           {" "}
                           🔒
                         </span>

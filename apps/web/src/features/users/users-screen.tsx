@@ -13,6 +13,8 @@ import {
   ADMIN_TARGET_REASON,
   adminTargetLocked,
   FALLBACK_ROLES,
+  OWNER_TARGET_REASON,
+  ownerTargetLocked,
   NOT_GRANTABLE_REASON,
   SELF_DISABLE_REASON,
   SELF_ROLE_REASON,
@@ -67,7 +69,7 @@ export function UsersScreen() {
   const labelOf = useRoleLabelOf();
   const roles: RoleOption[] = rolesQuery.data?.items ?? FALLBACK_ROLES;
   const callerIsAdmin = me.roles.includes("admin");
-  const roleCtx = { callerIsAdmin, callerPermissions: me.permissions };
+  const roleCtx = { callerIsAdmin, callerIsOwner: me.roles.includes("giam_doc"), callerPermissions: me.permissions };
 
   const jitFor = (user: AdminUser) =>
     canGrant
@@ -122,7 +124,7 @@ export function UsersScreen() {
                   <Pill tone="accent">{roleText(user, labelOf)}</Pill>
                   <Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill>
                 </div>
-                {showActions ? <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
+                {showActions ? <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} ownerLocked={ownerTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
               </li>
             ))}
           </ul>
@@ -146,7 +148,7 @@ export function UsersScreen() {
                     <td className="px-s4 py-s3"><Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill></td>
                     {showActions ? (
                       <td className="px-s4 py-s3">
-                        <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
+                        <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} ownerLocked={ownerTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
                       </td>
                     ) : null}
                   </tr>
@@ -181,6 +183,7 @@ function Actions({
   user,
   isSelf,
   adminLocked,
+  ownerLocked,
   grantLocked,
   busy,
   onReinvite,
@@ -191,6 +194,7 @@ function Actions({
   user: AdminUser;
   isSelf: boolean;
   adminLocked: boolean;
+  ownerLocked: boolean;
   grantLocked: boolean;
   busy: boolean;
   onReinvite: (user: AdminUser) => void | Promise<void>;
@@ -220,6 +224,8 @@ function Actions({
               locked("Đổi vai trò", ADMIN_TARGET_REASON, "action-role")
             ) : isSelf ? (
               locked("Đổi vai trò", SELF_ROLE_REASON, "action-role")
+            ) : ownerLocked ? (
+              locked("Đổi vai trò", OWNER_TARGET_REASON, "action-role")
             ) : grantLocked ? (
               locked("Đổi vai trò", NOT_GRANTABLE_REASON, "action-role")
             ) : (
@@ -246,6 +252,8 @@ function Actions({
               <li>🔒 {SELF_ROLE_REASON}</li>
               {user.status !== "disabled" ? <li>🔒 {SELF_DISABLE_REASON}</li> : null}
             </ul>
+          ) : ownerLocked ? (
+            <p className="text-sm text-muted">🔒 {OWNER_TARGET_REASON}</p>
           ) : grantLocked ? (
             <p className="text-sm text-muted">🔒 {NOT_GRANTABLE_REASON}</p>
           ) : null}

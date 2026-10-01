@@ -435,8 +435,8 @@ describe("SPEC-02 templates (acceptance)", () => {
   });
 
   it("AC-6: two concurrent POSTs with the same expected_version_no → exactly one 201 and one 409 stale; versions 1, 2, 3 and 4 only", async () => {
-    const { admin, gd } = await team();
-    const other = await invite(admin, "giam_doc", "hai@nhatminh.vn", "Giám đốc hai");
+    const { gd } = await team();
+    const other = await invite(gd.session, "giam_doc", "hai@nhatminh.vn", "Giám đốc hai");
     const seed = await getSeed(gd.session);
     const mk = (marker: string) => versionPayload(seed.version, { expected_version_no: SEED_V, body: seed.version.body.replace("Điều 5", `Điều 5 ${marker}`) });
 

@@ -15,12 +15,16 @@ type Meta = { label: string; description: string };
 
 export const SYSTEM_REASON = "Vai trò hệ thống — không xóa/đổi tên";
 const LOCK_TEXT = {
-  admin: "Quản trị hệ thống luôn đủ quyền — không sửa hay xóa được.",
+  admin: "Quản trị hệ thống: không đổi tên hay xóa được. Đổi quyền thì gửi yêu cầu — chỉ Giám đốc duyệt.",
   own_role: "Bạn đang mang vai trò này nên không tự sửa được. Nhờ người khác có quyền quản lý vai trò.",
   system: SYSTEM_REASON,
 } as const;
 export const NO_APPROVER_TEXT =
   "Không còn người nào khác có quyền Quản lý vai trò để duyệt — đổi quyền phải qua người quản trị kỹ thuật (migration).";
+
+/** FIX-05 R2: a change to the admin role needs a Giám đốc other than the sender. */
+export const ADMIN_NO_APPROVER_TEXT =
+  "Đổi quyền của vai trò Quản trị hệ thống cần một Giám đốc khác bạn duyệt — hiện không có ai như vậy.";
 
 const addNoApproverText = (label: string) =>
   `Không ai duyệt được yêu cầu thêm quyền này: người duyệt phải có quyền Quản lý vai trò, không phải bạn, và không đang mang vai trò «${label}». Bớt quyền thì vẫn gửi được; muốn thêm, cấp quyền Quản lý vai trò cho một người thứ ba trước.`;
@@ -125,7 +129,14 @@ export function RoleDrawer({
       setNotice(null);
       const err = roleError(e);
       // FIX-04: adding permissions needs a third approver (own_role rule) — say so instead of the generic "no one left".
-      setError(err.slug === "no-eligible-approver" && added.length > 0 ? { ...err, message: addNoApproverText(role.label) } : err);
+      // FIX-05: the admin role's approver is a Giám đốc; giam_doc's own holders approve additions to it.
+      setError(
+        err.slug === "no-eligible-approver" && role.name === "admin"
+          ? { ...err, message: ADMIN_NO_APPROVER_TEXT }
+          : err.slug === "no-eligible-approver" && added.length > 0
+            ? { ...err, message: addNoApproverText(role.label) }
+            : err,
+      );
     }
   }
 
@@ -175,7 +186,7 @@ export function RoleDrawer({
             </div>
           ) : null}
 
-          {noApprover ? <LockedNote>{NO_APPROVER_TEXT}</LockedNote> : null}
+          {noApprover ? <LockedNote>{role.name === "admin" ? ADMIN_NO_APPROVER_TEXT : NO_APPROVER_TEXT}</LockedNote> : null}
 
           <div className="grid gap-s4">
             <Field

@@ -661,7 +661,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission, or rule admin_only (only an admin assigns the admin role) */
+                /** @description Missing users:write permission, or rule owner_only (only a giam_doc holder assigns a role carrying roles:write — admin, giam_doc, custom) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -743,7 +743,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin assigns the admin role or edits an admin user) */
+                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1188,7 +1188,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule admin_role | own_role | grant_not_held (+ `permissions`). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule own_role (not for the admin role: admin proposes, Giám đốc approves) | grant_not_held (+ `permissions`). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1206,7 +1206,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description sod-conflict (+ `pairs`) | stale (version mismatch) | request-pending (role already has a pending request) | no-eligible-approver (nobody else can approve) */
+                /** @description sod-conflict (+ `pairs`) | stale (version mismatch) | request-pending (role already has a pending request) | no-eligible-approver (nobody else can approve; for the admin role: no other giam_doc holder) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1358,7 +1358,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule self_approve (you sent it) | jit_actor (caller has an active JIT grant) | own_role (approve only: adding codes to a role you carry) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule self_approve (you sent it) | jit_actor (caller has an active JIT grant) | owner_only (approve only: a change to the admin role needs a giam_doc holder) | own_role (approve only: adding codes to a role you carry; not for giam_doc holders on giam_doc) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1454,7 +1454,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing roles:write, or `forbidden` with rule self_approve (you sent it) | jit_actor (caller has an active JIT grant) | own_role (approve only: adding codes to a role you carry) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each. */
+                /** @description Missing roles:write, or `forbidden` with rule self_approve (you sent it) | jit_actor (caller has an active JIT grant) | owner_only (approve only: a change to the admin role needs a giam_doc holder) | own_role (approve only: adding codes to a role you carry; not for giam_doc holders on giam_doc) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5694,7 +5694,7 @@ export interface components {
                 withdraw: boolean;
             };
             /** @enum {string|null} */
-            locked_reason: "self_approve" | "jit_actor" | "own_role" | null;
+            locked_reason: "self_approve" | "jit_actor" | "owner_only" | "own_role" | null;
         };
         CreateChangeRequest: {
             expected_version: number;

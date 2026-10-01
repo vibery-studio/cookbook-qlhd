@@ -31,7 +31,8 @@ type Env = { Bindings: Bindings; Variables: Variables };
 
 const ESCALATION_DETAIL: Record<EscalationRule, string> = {
   self_role: "Không tự đổi vai trò của mình.",
-  admin_only: "Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị.",
+  admin_only: "Chỉ Quản trị hệ thống mới sửa được tài khoản quản trị.",
+  owner_only: "Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò.",
 };
 
 function escalationProblem(rule: EscalationRule, instance: string, requestId: string | undefined) {
@@ -88,7 +89,7 @@ const createUserRoute = createRoute({
       content: { "application/json": { schema: InviteUserResponse } },
     },
     401: problemResponse("Not authenticated"),
-    403: problemResponse("Missing users:write permission, or rule admin_only (only an admin assigns the admin role)"),
+    403: problemResponse("Missing users:write permission, or rule owner_only (only a giam_doc holder assigns a role carrying roles:write — admin, giam_doc, custom)"),
     409: problemResponse("Email already registered"),
     422: problemResponse("Validation failed, or unknown-role (role name does not exist / is not assignable)"),
   },
@@ -111,7 +112,7 @@ const updateUserRoute = createRoute({
     },
     401: problemResponse("Not authenticated"),
     403: problemResponse(
-      "Missing users:write permission, or rule self_role (own role) | admin_only (only an admin assigns the admin role or edits an admin user)",
+      "Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write)",
     ),
     404: problemResponse("User not found"),
     409: problemResponse("last_admin: cannot disable or demote the last active admin"),

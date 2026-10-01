@@ -191,3 +191,43 @@ export function dropOtherRolesStmt(db: Db, input: { userId: string; keepRoleName
 export function userHasRole(userId: string, roleName: string): SQL {
   return sql`EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ${userId} AND r.name = ${roleName})`;
 }
+
+// ---------------------------------------------------------------------------
+// FIX-05: Giám đốc = owner. Predicates read `user_roles` (permanent; a JIT grant is never in `user_roles`).
+// ---------------------------------------------------------------------------
+
+/** The owner role: its holders alone assign roles carrying `roles:write` and approve changes to `admin`. */
+export const OWNER_ROLE = "giam_doc";
+
+/** Predicate: the user (bound id or column reference) carries the owner role right now. */
+export function userIsOwnerSql(userId: SQL | string): SQL {
+  return sql`EXISTS (SELECT 1 FROM user_roles owr JOIN roles owrl ON owrl.id = owr.role_id WHERE owr.user_id = ${userId} AND owrl.name = ${OWNER_ROLE})`;
+}
+
+/** Predicate: the role named `roleName` grants `key` right now. */
+export function roleNameGrantsKeySql(roleName: string, key: string): SQL {
+  return sql`EXISTS (SELECT 1 FROM roles gkr JOIN role_permissions gkrp ON gkrp.role_id = gkr.id JOIN permissions gkp ON gkp.id = gkrp.permission_id WHERE gkr.name = ${roleName} AND gkp.key = ${key})`;
+}
+
+/** Predicate: someone (any status) carries the owner role. */
+function anyOwnerSql(): SQL {
+  return sql`EXISTS (SELECT 1 FROM user_roles aor JOIN roles aorl ON aorl.id = aor.role_id WHERE aorl.name = ${OWNER_ROLE})`;
+}
+
+/**
+ * R3 guard for a write that gives `roleName` to someone: the role does not carry `roles:write`, or the actor is an
+ * owner, or — bootstrap — the role is `giam_doc` and nobody carries it yet (the first Giám đốc is invited by the
+ * admin). Put it in the WHERE of the batch's first write (never check-then-write alone).
+ */
+export function ownerMayAssignSql(actorId: string, roleName: string): SQL {
+  const bootstrap = roleName === OWNER_ROLE ? sql` OR NOT ${anyOwnerSql()}` : sql``;
+  return sql`(NOT ${roleNameGrantsKeySql(roleName, "roles:write")} OR ${userIsOwnerSql(actorId)}${bootstrap})`;
+}
+
+/**
+ * Guard for changing the role of `userId`: they do not carry the owner role, or the actor is an owner — so a
+ * non-owner cannot remove the Giám đốc (which would also reopen the bootstrap above).
+ */
+export function ownerMayReassignSql(actorId: string, userId: string): SQL {
+  return sql`(NOT ${userIsOwnerSql(userId)} OR ${userIsOwnerSql(actorId)})`;
+}

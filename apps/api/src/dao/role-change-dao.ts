@@ -12,6 +12,7 @@ import type { Db } from "../db/client";
 import { auditEvents, roleChangeRequests, roles, users } from "../db/schema";
 import { deepScrub } from "../observability/logger";
 import { jitActiveSql } from "./jit-dao";
+import { OWNER_ROLE, userIsOwnerSql } from "./role-dao";
 
 export type StoredStatus = "pending" | "approved" | "rejected" | "withdrawn" | "expired" | "cancelled";
 
@@ -160,15 +161,28 @@ export function userHoldsKeySql(userId: SQL | string, key: string): SQL {
 
 /**
  * DEC-3/DEC-14: EXISTS someone other than `requesterId` who could approve — `active`, not erased, permanent
- * `roles:write`, no active JIT, and (when `carryingRoleId` is given, i.e. the request ADDS codes) not carrying
- * that role. Without `carryingRoleId` this is the weakest form (`GET /roles` `no_approver`).
+ * `roles:write`, no active JIT, and (when `carryingRoleId` is given, i.e. the request ADDS codes to a role whose
+ * own_role rule applies) not carrying that role. FIX-05 R2: `ownerOnly` (a change to `admin`) also requires the
+ * approver to carry the owner role (`giam_doc`). Without either this is the weakest form (`GET /roles` `no_approver`).
+ * The service picks the scope with `approverScope()` so create, approve and `GET /roles` agree.
  */
-export function eligibleApproverSql(input: { requesterId: string; now: number; carryingRoleId?: string }): SQL {
+export function eligibleApproverSql(input: { requesterId: string; now: number; carryingRoleId?: string; ownerOnly?: boolean }): SQL {
   const carrying =
     input.carryingRoleId === undefined
       ? sql``
       : sql` AND NOT EXISTS (SELECT 1 FROM user_roles cr WHERE cr.user_id = eu.id AND cr.role_id = ${input.carryingRoleId})`;
-  return sql`EXISTS (SELECT 1 FROM users eu WHERE eu.status = 'active' AND eu.deleted_at IS NULL AND eu.id <> ${input.requesterId} AND ${userHoldsKeySql(sql`eu.id`, "roles:write")} AND NOT ${jitActiveSql(sql`eu.id`, input.now)}${carrying})`;
+  const owner = input.ownerOnly === true ? sql` AND ${userIsOwnerSql(sql`eu.id`)}` : sql``;
+  return sql`EXISTS (SELECT 1 FROM users eu WHERE eu.status = 'active' AND eu.deleted_at IS NULL AND eu.id <> ${input.requesterId} AND ${userHoldsKeySql(sql`eu.id`, "roles:write")} AND NOT ${jitActiveSql(sql`eu.id`, input.now)}${carrying}${owner})`;
+}
+
+/**
+ * FIX-05: who may approve a change to `role`. `admin` → owners only (R2; own_role n/a). `giam_doc` → own_role n/a for
+ * its holders (R1). Any other role adding codes → not a carrier (DEC-3). Role names are immutable (SPEC-06).
+ */
+export function approverScope(role: { id: string; name: string }, adding: boolean): { carryingRoleId?: string; ownerOnly?: boolean } {
+  if (role.name === "admin") return { ownerOnly: true };
+  if (role.name === OWNER_ROLE || !adding) return {};
+  return { carryingRoleId: role.id };
 }
 
 /** Evaluate a predicate now (1 = true). */

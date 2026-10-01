@@ -49,8 +49,8 @@ const deps = (c: Context<Env>): RoleChangeDeps => ({
 const ipOf = (c: Context<Env>) => c.req.header("cf-connecting-ip") ?? null;
 
 const RULE_DETAIL: Record<ChangeRule, string> = {
-  admin_role: "The admin role is immutable through the API.",
-  own_role: "You cannot change a role you carry (approving a removal from it is allowed).",
+  owner_only: "Only a holder of the Giám đốc role (owner) approves changes to the admin role.",
+  own_role: "You cannot change a role you carry (approving a removal from it is allowed; Giám đốc may approve changes to giam_doc).",
   grant_not_held: "The requester must hold every permission being added.",
   self_approve: "You sent this request; someone else must decide it.",
   jit_actor: "Temporary admin access cannot decide permission change requests.",
@@ -104,11 +104,11 @@ const createRequestRoute = createRoute({
     201: { description: "Request created (pending, expires in 7 days)", content: { "application/json": { schema: ChangeRequestSchema } } },
     401: problemResponse("Not authenticated"),
     403: problemResponse(
-      "Missing roles:write, or `forbidden` with rule admin_role | own_role | grant_not_held (+ `permissions`). One permission.denied row each.",
+      "Missing roles:write, or `forbidden` with rule own_role (not for the admin role: admin proposes, Giám đốc approves) | grant_not_held (+ `permissions`). One permission.denied row each.",
     ),
     404: problemResponse("Role not found"),
     409: problemResponse(
-      "sod-conflict (+ `pairs`) | stale (version mismatch) | request-pending (role already has a pending request) | no-eligible-approver (nobody else can approve)",
+      "sod-conflict (+ `pairs`) | stale (version mismatch) | request-pending (role already has a pending request) | no-eligible-approver (nobody else can approve; for the admin role: no other giam_doc holder)",
     ),
     422: problemResponse("Validation failed (unknown or repeated code, note > 500, nothing changes → errors[{path:'permissions'}])"),
     501: problemResponse("Not implemented"),
@@ -133,7 +133,7 @@ const listRequestsRoute = createRoute({
 
 const DECIDE_403 =
   "Missing roles:write, or `forbidden` with rule self_approve (you sent it) | jit_actor (caller has an active JIT grant) | " +
-  "own_role (approve only: adding codes to a role you carry) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each.";
+  "owner_only (approve only: a change to the admin role needs a giam_doc holder) | own_role (approve only: adding codes to a role you carry; not for giam_doc holders on giam_doc) | grant_not_held (approve only: the requester no longer holds an added code, + `permissions`). One permission.denied row each.";
 
 const approveRoute = createRoute({
   method: "post",

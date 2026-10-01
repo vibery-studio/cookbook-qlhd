@@ -60,8 +60,9 @@ describe("contract problem messages (SPEC-04b 3.5)", () => {
 
   it.each([
     ["self_role", "🔒 Không tự đổi vai trò của mình. Nhờ người khác có quyền quản lý người dùng đổi giúp."],
-    ["admin_only", "🔒 Chỉ Quản trị hệ thống mới gán vai trò Quản trị hệ thống hoặc sửa tài khoản quản trị."],
-  ])("users rule %s (FIX-03) has its own Vietnamese message", (rule, expected) => {
+    ["admin_only", "🔒 Chỉ Quản trị hệ thống mới sửa được tài khoản quản trị."],
+    ["owner_only", "🔒 Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò, hoặc duyệt đổi quyền của vai trò Quản trị hệ thống."],
+  ])("users rule %s (FIX-03, FIX-05) has its own Vietnamese message", (rule, expected) => {
     const m = problemMessage(base("forbidden", 403, { rule }));
     expect(m.message).toBe(expected);
     expect(m.message).not.toContain("Raw English");

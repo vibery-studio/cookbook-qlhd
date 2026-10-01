@@ -105,11 +105,15 @@ interface RequestContext {
   pending: ChangeRequestRowDto | undefined;
   /** Someone ≠ caller, active, permanent roles:write, no JIT (weakest form — PLAN-07 §2b `no_approver`). */
   hasApprover: boolean;
+  /** Same, and carries the owner role `giam_doc` — the only approvers of a change to `admin` (FIX-05 R2). */
+  hasOwnerApprover: boolean;
 }
 
 /**
  * `locked_reason` precedence: admin > own_role > system (PLAN-06 R-5). SPEC-07: an open request locks the role
  * (`can` all false, `request_pending`); `no_approver` only when it is the one reason the caller cannot request.
+ * FIX-05 R2: `admin` stays locked for label/delete (`locked_reason:"admin"`), but its permissions change by request like
+ * any role — even its carriers may propose; the approver must be another `giam_doc` holder.
  */
 function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext): RoleView {
   const locked: LockedReason =
@@ -118,8 +122,10 @@ function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext): RoleVie
   const pending = ctx.pending;
   const open = writer && (locked === null || locked === "system");
   const edit = open && pending === undefined;
+  const requestOpen = writer && (locked === null || locked === "system" || locked === "admin");
+  const approverOk = role.name === "admin" ? ctx.hasOwnerApprover : ctx.hasApprover;
   const request_locked_reason: RequestLockedReason =
-    pending !== undefined ? "request_pending" : open && !ctx.hasApprover ? "no_approver" : null;
+    pending !== undefined ? "request_pending" : requestOpen && !approverOk ? "no_approver" : null;
   return {
     id: role.id,
     name: role.name,
@@ -132,7 +138,7 @@ function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext): RoleVie
     can: {
       edit,
       delete: edit && locked === null,
-      request: edit && ctx.hasApprover,
+      request: requestOpen && pending === undefined && approverOk,
     },
     locked_reason: locked,
     request_locked_reason,
@@ -191,28 +197,30 @@ export async function listRolesFor(
   actorId: string,
   now: number = nowSeconds(),
 ): Promise<{ items: RoleView[]; catalog: string[] }> {
-  const [roles, actor, open, hasApprover] = await Promise.all([
+  const [roles, actor, open, hasApprover, hasOwnerApprover] = await Promise.all([
     listRoleDetails(db),
     loadActor(db, actorId),
     listOpenRequests(db, { now }),
     holds(db, eligibleApproverSql({ requesterId: actorId, now })),
+    holds(db, eligibleApproverSql({ requesterId: actorId, now, ownerOnly: true })),
   ]);
   const byRole = new Map(open.map((r) => [r.roleId, r]));
   return {
-    items: roles.map((r) => toView(r, actor, { pending: byRole.get(r.id), hasApprover })),
+    items: roles.map((r) => toView(r, actor, { pending: byRole.get(r.id), hasApprover, hasOwnerApprover })),
     catalog: [...PERMISSIONS],
   };
 }
 
 /** One role as `actorId` sees it (approve response), or null. */
 export async function roleViewFor(db: Db, actorId: string, roleId: string, now: number = nowSeconds()): Promise<RoleView | null> {
-  const [role, actor, open, hasApprover] = await Promise.all([
+  const [role, actor, open, hasApprover, hasOwnerApprover] = await Promise.all([
     findRoleDetail(db, roleId),
     loadActor(db, actorId),
     listOpenRequests(db, { now, roleIds: [roleId] }),
     holds(db, eligibleApproverSql({ requesterId: actorId, now })),
+    holds(db, eligibleApproverSql({ requesterId: actorId, now, ownerOnly: true })),
   ]);
-  return role === null ? null : toView(role, actor, { pending: open[0], hasApprover });
+  return role === null ? null : toView(role, actor, { pending: open[0], hasApprover, hasOwnerApprover });
 }
 
 // ------------------------------- create ------------------------------------
