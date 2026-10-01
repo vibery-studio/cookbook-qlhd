@@ -1,8 +1,8 @@
 /** SPEC-05 §3.1: the PDF state a contract row implies (no stored status column). */
-export type PdfStatus = "none" | "pending" | "ready" | "failed";
+export type PdfStatus = "none" | "pending" | "ready";
 
-export function pdfStatusOf(row: { status: string; pdfKey: string | null; pdfFailedAt: number | null }): PdfStatus {
+/** none = not issued · pending = issued, made on the first "Tải PDF" · ready = stored in R2. */
+export function pdfStatusOf(row: { status: string; pdfKey: string | null }): PdfStatus {
   if (row.status !== "issued" && row.status !== "voided") return "none";
-  if (row.pdfKey !== null) return "ready";
-  return row.pdfFailedAt !== null ? "failed" : "pending";
+  return row.pdfKey !== null ? "ready" : "pending";
 }

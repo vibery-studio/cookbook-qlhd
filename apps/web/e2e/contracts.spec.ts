@@ -26,7 +26,7 @@ const NUMBER = /HD-\d{4}-001/;
 const CUSTOMER = { name: "Tạp hóa Cô Ba", contact: "Trần Thị Ba", phone: "0912 345 678", email: "coba@example.com" };
 
 test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, then fill) and submits, self-approve is 🔒; Quản lý approves + issues; void; paper", async ({ browser }) => {
-  test.setTimeout(240_000); // SPEC-05: waits for the queued PDF (local Chrome, first launch can take ~90s)
+  test.setTimeout(240_000); // SPEC-05: the first PDF launches local Chrome (~90s the first time)
   // ---- logged out: every 4b URL lands on /login?next= (gap left by the 4a smoke) ----
   const anon = await browser.newContext({ locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" });
   const anonPage = await anon.newPage();
@@ -160,18 +160,8 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await expect(qDrawer).toContainText(NUMBER);
   await expect(qDrawer).toContainText("Đã phát hành");
 
-  // SPEC-05 AC-6/AC-7: the PDF is made by the queue + local Chrome after issue; F5 until "Tải PDF" is a link, then download
-  await expect
-    .poll(
-      async () => {
-        await ql.reload();
-        await expect(qDrawer).toContainText("Đã phát hành");
-        return qDrawer.getByRole("link", { name: "Tải PDF" }).count();
-      },
-      { timeout: 150_000, intervals: [3_000] },
-    )
-    .toBe(1);
-  const downloading = ql.waitForEvent("download");
+  // SPEC-05 AC-6/AC-7: the PDF is made by local Chrome on the first click (first Chrome launch can take ~90s)
+  const downloading = ql.waitForEvent("download", { timeout: 150_000 });
   await qDrawer.getByRole("link", { name: "Tải PDF" }).click();
   const pdf = await downloading;
   expect(pdf.suggestedFilename()).toMatch(/^HD-\d{4}-001\.pdf$/);

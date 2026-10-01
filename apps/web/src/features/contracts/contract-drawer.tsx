@@ -170,6 +170,8 @@ export function ContractDrawer({
   const lock = contract ? { contract, meId: me.id, permissions: me.permissions } : null;
   const actions = contract && lock ? visibleActions(contract.status).map((a) => ({ a, reason: lockReason(a, lock) })) : [];
   const reasons = [...new Set(actions.flatMap((x) => (x.reason ? [x.reason] : [])))];
+  // SPEC-05: issued/voided → the server makes the PDF on the first click, then serves the stored file
+  const hasPdf = contract !== undefined && contract.pdf_status !== "none";
 
   return (
     <>
@@ -312,6 +314,16 @@ export function ContractDrawer({
           <div className="grid gap-s3 border-t border-line bg-sunken px-s5 py-s4">
             {error ? <Alert tone="danger">{error}</Alert> : null}
             <div className="flex flex-wrap gap-s2">
+              {hasPdf ? (
+                <a
+                  href={`/contracts/${contract.id}/pdf`}
+                  download
+                  data-testid="action-pdf"
+                  className="motion-colors inline-flex min-h-[var(--row-h)] items-center rounded-r2 border border-line-strong bg-surface px-s4 text-md font-semibold text-body hover:bg-hover"
+                >
+                  Tải PDF
+                </a>
+              ) : null}
               {actions.map(({ a, reason }) =>
                 reason ? (
                   <Button
@@ -384,7 +396,7 @@ export function ContractDrawer({
         />
       ) : null}
 
-      {paperOpen && contract ? <PaperOverlay contractId={contract.id} version={contract.version} onClose={onClosePaper} /> : null}
+      {paperOpen && contract ? <PaperOverlay contractId={contract.id} hasPdf={hasPdf} version={contract.version} onClose={onClosePaper} /> : null}
     </>
   );
 }

@@ -44,6 +44,7 @@ export const AUDIT_ACTIONS: Readonly<Record<string, Entry>> = {
   "contract.deleted": { icon: "🗑", tone: "neutral", text: "xóa hợp đồng nháp" },
   "contract.issued": { icon: "📤", tone: "accent", text: "phát hành hợp đồng" },
   "contract.voided": { icon: "⛔", tone: "danger", text: "hủy hợp đồng đã phát hành" },
+  "contract.pdf_generated": { icon: "📄", tone: "neutral", text: "tạo PDF cho hợp đồng" },
   "settings.update": { icon: "⚙️", tone: "neutral", text: "đổi cài đặt hệ thống" },
 };
 

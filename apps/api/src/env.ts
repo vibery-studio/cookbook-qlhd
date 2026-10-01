@@ -25,8 +25,8 @@ export const EnvSchema = z.object({
   PASSWORD_MIN_LENGTH: z.coerce.number().default(12),
   RATE_LIMIT_AUTH_LOGIN: z.coerce.number().default(5),
   RATE_LIMIT_AUTH_SIGNUP: z.coerce.number().default(3),
-  /** SPEC-05: `off` = the contract-pdf consumer acks without rendering and the sweeper does not run (tests, kill-switch). */
-  PDF_RENDERER: z.enum(["browser", "off"]).default("browser"),
+  /** SPEC-05: `browser` = Chrome via BROWSER · `fake` = fixed tiny PDF (vitest) · `off` = kill-switch, GET …/pdf → 503. */
+  PDF_RENDERER: z.enum(["browser", "fake", "off"]).default("browser"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -47,7 +47,6 @@ export interface Bindings extends Env {
   BROWSER: Fetcher;
   /** SPEC-05: R2 bucket holding issued-contract PDFs (`contracts/{id}/{ulid}.pdf`). */
   FILES: R2Bucket;
-  CONTRACT_PDF_QUEUE: Queue<{ contract_id: string }>;
   RL_AUTH_LOGIN: RateLimit;
   RL_AUTH_SIGNUP: RateLimit;
   RL_AUTH_VERIFY: RateLimit;

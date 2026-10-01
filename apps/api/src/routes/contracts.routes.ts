@@ -30,7 +30,9 @@ import { decideContract } from "../services/contract/decide-service";
 import { issueContract } from "../services/contract/issue-service";
 import { contractAudit, contractDetail, listContracts } from "../services/contract/read-service";
 import { renderContract } from "../services/contract/render-service";
-import { downloadContractPdf } from "../services/contract/pdf-download-service";
+import { getContractPdf } from "../services/contract/pdf-service";
+import { selectPdfRenderer } from "../adapters/pdf-select";
+import { deepScrub } from "../observability/logger";
 import { submitContract } from "../services/contract/submit-service";
 import type { BuildFailure, CommandCtx } from "../services/contract/types";
 import { updateContract } from "../services/contract/update-service";
@@ -287,7 +289,7 @@ const pdfRouteDef = createRoute({
   method: "get",
   path: "/contracts/{id}/pdf",
   tags: ["contracts"],
-  summary: "Download the issued PDF (made once after issue; voided keeps the original file)",
+  summary: "Download the issued PDF (made on the first request, then served from storage; voided keeps the original)",
   security,
   request: { params: IdParam },
   responses: {
@@ -298,7 +300,8 @@ const pdfRouteDef = createRoute({
     ...baseErrors,
     403: problemResponse("Missing contract:read permission"),
     404: problemResponse("Contract not found"),
-    409: problemResponse("state-conflict (not issued; current_status) | pdf-not-ready (pdf_status pending|failed; Retry-After: 60)"),
+    409: problemResponse("state-conflict (not issued; current_status)"),
+    503: problemResponse("PDF renderer unavailable (contract untouched; use the printable paper)"),
   },
 });
 
@@ -562,18 +565,39 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
   });
 
   app.openapi(pdfRouteDef, async (c) => {
-    const r = await downloadContractPdf(getDb(c.env), c.env.FILES, c.req.valid("param").id);
+    const id = c.req.valid("param").id;
+    const unavailable = () =>
+      c.json(
+        problem(503, "PDF is unavailable", ProblemType.ServiceUnavailable, {
+          instance: c.req.path,
+          request_id: c.get("requestId"),
+          detail: "Chưa tạo được PDF lúc này — dùng In để in hoặc lưu PDF.",
+        }),
+        503,
+        PROBLEM_HEADERS,
+      );
+    const renderer = await selectPdfRenderer(c.env);
+    if (renderer === null) return unavailable() as never;
+    let r;
+    try {
+      r = await getContractPdf(
+        { db: getDb(c.env), files: c.env.FILES, renderer, now: () => Math.floor(Date.now() / 1000) },
+        id,
+      );
+    } catch (err) {
+      // renderer down / over quota: the contract is untouched, the paper's "In" still works
+      console.error(
+        JSON.stringify(
+          deepScrub({ ts: Date.now(), kind: "contract.pdf.failed", id, error: err instanceof Error ? err.message : String(err) }),
+        ),
+      );
+      return unavailable() as never;
+    }
     switch (r.kind) {
       case "not-found":
         return notFound(c);
       case "state-conflict":
         return stateConflict(c, r.current);
-      case "not-ready":
-        c.header("retry-after", "60");
-        return fail(c, 409, "PDF is not ready yet", ProblemType.PdfNotReady, {
-          detail: r.pdfStatus === "failed" ? "Chưa tạo được PDF, hệ thống sẽ tự thử lại." : "PDF đang được tạo, thử lại sau ít phút.",
-          pdf_status: r.pdfStatus,
-        });
       case "ok":
         return c.body(r.body, 200, {
           "content-type": "application/pdf",

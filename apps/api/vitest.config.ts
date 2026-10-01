@@ -48,8 +48,8 @@ export default defineWorkersConfig({
             JWT_SECRET: "test-jwt-secret-min-32-chars-abcdef0123",
             TOKEN_PEPPER: "test-token-pepper-min-32-chars-abcdef01",
             READYZ_TOKEN: "test-readyz-token-min-16",
-            // SPEC-05 R-4: the miniflare contract-pdf consumer must not race the tests that call it directly.
-            PDF_RENDERER: "off",
+            // SPEC-05: no Chrome in vitest — GET /contracts/{id}/pdf renders with the fake renderer.
+            PDF_RENDERER: "fake",
           },
         },
       },

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "aab9501d-68e3-424a-a0d8-9ce310fc076d",
+  "id": "3047826f-0231-4e40-9201-562b0c1369be",
   "prevId": "c4e1a02e-c691-4342-8818-e179d494f830",
   "tables": {
     "approval_steps": {
@@ -439,21 +439,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "pdf_attempts": {
-          "name": "pdf_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "pdf_failed_at": {
-          "name": "pdf_failed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -508,14 +493,6 @@
           "name": "idx_contracts_created_by",
           "columns": [
             "created_by"
-          ],
-          "isUnique": false
-        },
-        "idx_contracts_pdf_sweep": {
-          "name": "idx_contracts_pdf_sweep",
-          "columns": [
-            "pdf_key",
-            "status"
           ],
           "isUnique": false
         }

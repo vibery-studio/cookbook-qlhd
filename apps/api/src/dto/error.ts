@@ -41,7 +41,6 @@ export const ProblemDto = z
     label: z.string().optional(),
     /** 409 `state-conflict` */
     current_status: z.string().optional(),
-    pdf_status: z.enum(["pending", "failed"]).optional(),
     /** 403 separation-of-duties rule: `creator_cannot_approve` | `one_person_one_step` */
     rule: z.string().optional(),
   })
@@ -81,7 +80,6 @@ export const ProblemType = {
   AlreadyDecided: "already-decided",
   ChangedAfterApproval: "changed-after-approval",
   WouldBlockLaterStep: "would-block-later-step",
-  PdfNotReady: "pdf-not-ready",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -99,7 +97,6 @@ export interface ProblemOptions {
   step_no?: number;
   label?: string;
   current_status?: string;
-  pdf_status?: "pending" | "failed";
   rule?: string;
 }
 
@@ -133,7 +130,6 @@ export function problem(
     ...(options.label !== undefined && { label: options.label }),
     ...(options.current_status !== undefined && { current_status: options.current_status }),
     ...(options.rule !== undefined && { rule: options.rule }),
-    ...(options.pdf_status !== undefined && { pdf_status: options.pdf_status }),
   };
 }
 

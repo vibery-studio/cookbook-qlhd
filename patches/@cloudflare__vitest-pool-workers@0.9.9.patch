@@ -1,0 +1,41 @@
+diff --git a/dist/worker/lib/cloudflare/test-internal.mjs b/dist/worker/lib/cloudflare/test-internal.mjs
+index 7ec9404518493d08d37c6cc97adcdcc90d727fbb..ff9d8ec576a48f92ff0a20500a3769a630665853 100644
+--- a/dist/worker/lib/cloudflare/test-internal.mjs
++++ b/dist/worker/lib/cloudflare/test-internal.mjs
+@@ -306,23 +306,24 @@ function importModule(env2, specifier) {
+ }
+ var IGNORED_KEYS = ["self", "tailStream"];
+ function createProxyPrototypeClass(superClass, getUnknownPrototypeKey) {
++  // patched (workers-sdk#15092): install the prototype Proxy ONCE, not on every construction
+   function Class(...args) {
+-    Class.prototype = new Proxy(Class.prototype, {
+-      get(target, key, receiver) {
+-        const value = Reflect.get(target, key, receiver);
+-        if (value !== void 0) {
+-          return value;
+-        }
+-        if (typeof key === "symbol" || IGNORED_KEYS.includes(key)) {
+-          return;
+-        }
+-        return getUnknownPrototypeKey.call(receiver, key);
+-      }
+-    });
+     return Reflect.construct(superClass, args, Class);
+   }
+   Reflect.setPrototypeOf(Class.prototype, superClass.prototype);
+   Reflect.setPrototypeOf(Class, superClass);
++  Class.prototype = new Proxy(Class.prototype, {
++    get(target, key, receiver) {
++      const value = Reflect.get(target, key, receiver);
++      if (value !== void 0) {
++        return value;
++      }
++      if (typeof key === "symbol" || IGNORED_KEYS.includes(key)) {
++        return;
++      }
++      return getUnknownPrototypeKey.call(receiver, key);
++    }
++  });
+   return Class;
+ }
+ function getRPCProperty(ctor, instance, key) {

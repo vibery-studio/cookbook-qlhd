@@ -3,6 +3,11 @@
 Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền)
 Spec: docs/spec/SPEC-05.md
 
+## 0. Sửa đổi 2026-10-01 — PDF tạo khi bấm (SPEC-05 §0)
+- Bỏ queue/cron/enqueue (C-05-002 phần consumer/sweeper/issue-service gỡ ra); `getContractPdf` = đọc hoặc tạo-rồi-đọc; route chọn renderer (`adapters/pdf-select.ts`, `pdf-fake.ts`). Migration 0015 làm lại (chưa deploy) = 4 cột `pdf_key/hash/size/at`, tên `0015_contract_pdf.sql`.
+- Acceptance viết lại: AC-1 AC-2' AC-3' AC-5 (4 test); web AC-7'; e2e: bấm "Tải PDF" ngay sau phát hành (chờ tải ≤150s).
+- Công cụ test: `pnpm patch` `@cloudflare/vitest-pool-workers@0.9.9` (workers-sdk#15092 — Proxy bọc lại mỗi lần construct → tràn stack khi suite > ~2000 request ở singleWorker). Nếu PROOF vẫn đỏ sau 1 vòng → về hộp thoại In, giữ port `PdfRenderer` (bạn chốt).
+
 ## 1. Acceptance tests — written first, seen failing
 | AC | How it's proven | Fails now? (real output) |
 |---|---|---|

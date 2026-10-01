@@ -248,6 +248,23 @@ wrangler d1 execute runway_prod --remote --command \
 # should equal the highest-numbered file in apps/api/src/db/migrations/
 ```
 
+## PDF hợp đồng — tài nguyên cần tạo một lần (SPEC-05)
+
+Bạn chạy (máy bạn, `wrangler login`) TRƯỚC lần deploy đầu có tính năng PDF:
+
+```bash
+cd apps/api
+pnpm exec wrangler r2 bucket create hopdong-files-prod
+# preview (nếu dùng): hopdong-files-preview
+```
+
+- Browser Rendering không cần tạo gì: binding `[browser] BROWSER` trong `wrangler.toml` là đủ.
+- PDF tạo ở lần bấm "Tải PDF" đầu tiên rồi lưu; các lần sau trả file lưu (không tốn trình duyệt).
+- Hạn mức: gói Free = 10 phút trình duyệt/ngày, 3 trình duyệt cùng lúc (~1–3s/PDF). Hết hạn mức → `GET …/pdf` trả 503 "dùng In"; hợp đồng không bị ảnh hưởng; bấm lại hôm sau được.
+- Tắt khẩn cấp: `PDF_RENDERER = "off"` trong `[env.production.vars]` → 503; bản in (In) vẫn dùng được.
+- Local: `pnpm dev` tự giả lập R2, Chrome chạy cục bộ (lần đầu ~90s để tải Chrome).
+- File PDF không bao giờ bị xóa (hợp đồng không bao giờ xóa); khóa `contracts/{id}/{ulid}.pdf`.
+
 ## Secrets
 
 Set once per env:

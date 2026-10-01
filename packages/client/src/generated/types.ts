@@ -2629,7 +2629,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download the issued PDF (made once after issue; voided keeps the original file) */
+        /** Download the issued PDF (made on the first request, then served from storage; voided keeps the original) */
         get: {
             parameters: {
                 query?: never;
@@ -2677,8 +2677,17 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description state-conflict (not issued; current_status) | pdf-not-ready (pdf_status pending|failed; Retry-After: 60) */
+                /** @description state-conflict (not issued; current_status) */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description PDF renderer unavailable (contract untouched; use the printable paper) */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3394,8 +3403,6 @@ export interface components {
             step_no?: number;
             label?: string;
             current_status?: string;
-            /** @enum {string} */
-            pdf_status?: "pending" | "failed";
             rule?: string;
         };
         SignupRequest: {
@@ -3718,10 +3725,10 @@ export interface components {
             voided_at: number | null;
             void_reason: string | null;
             /**
-             * @description SPEC-05: none = not issued · pending = queued · ready = GET /contracts/{id}/pdf · failed = last try failed, retried hourly
+             * @description SPEC-05: none = not issued · pending = made on the first GET /contracts/{id}/pdf · ready = stored
              * @enum {string}
              */
-            pdf_status: "none" | "pending" | "ready" | "failed";
+            pdf_status: "none" | "pending" | "ready";
             pdf_size: number | null;
             created_at: number;
             updated_at: number;

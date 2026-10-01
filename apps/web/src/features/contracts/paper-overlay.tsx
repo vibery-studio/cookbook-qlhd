@@ -7,7 +7,7 @@ import { Dialog } from "./dialog";
  * No allow-scripts (server CSP is default-src 'none'), nothing from the frame is read or rewritten here.
  * "In" calls the frame's print(); if the browser refuses, the new-tab link is the fallback (DEC-4).
  */
-export function PaperOverlay({ contractId, version, onClose }: { contractId: string; version: number; onClose: () => void }) {
+export function PaperOverlay({ contractId, version, hasPdf = false, onClose }: { contractId: string; version: number; hasPdf?: boolean; onClose: () => void }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [printFailed, setPrintFailed] = useState(false);
   const src = `/contracts/${contractId}/render`;
@@ -30,6 +30,15 @@ export function PaperOverlay({ contractId, version, onClose }: { contractId: str
         <h2 className="text-lg font-bold leading-head text-strong">Văn bản hợp đồng</h2>
         <div className="flex flex-wrap items-center gap-s2">
           <Button type="button" variant="secondary" onClick={print}>In</Button>
+          {hasPdf ? (
+            <a
+              href={`/contracts/${contractId}/pdf`}
+              download
+              className="motion-colors inline-flex min-h-[var(--row-h)] items-center rounded-r2 border border-line-strong bg-surface px-s4 text-md font-semibold text-body hover:bg-hover"
+            >
+              Tải PDF
+            </a>
+          ) : null}
           <a
             href={src}
             target="_blank"

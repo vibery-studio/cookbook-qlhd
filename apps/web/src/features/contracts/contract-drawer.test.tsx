@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -44,6 +44,8 @@ function renderDrawer(paperOpen = false) {
   );
 }
 
+afterEach(cleanup); // no vitest globals → RTL does not auto-clean between tests
+
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
@@ -81,7 +83,7 @@ describe("ContractDrawer", () => {
     expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(within(paper).getByRole("link", { name: "Mở ở tab mới" }).getAttribute("href")).toBe(`/contracts/${contract.id}/render`);
   });
-  it("SPEC-05 AC-7: Tải PDF — ready = download link; pending/failed = 🔒 + reason; draft = no button", async () => {
+  it("SPEC-05 AC-7: issued/voided → «Tải PDF» download link (made on click); draft/pending → no link", async () => {
     const serve = (over: Record<string, unknown>) =>
       get.mockImplementation((path) =>
         Promise.resolve(
@@ -92,35 +94,20 @@ describe("ContractDrawer", () => {
       );
     const issued = { status: "issued", number: "HD-2026-001", seq: 1, series_year: 2026, steps: [], can: noCan };
 
-    serve({ ...issued, pdf_status: "ready", pdf_size: 20480 });
-    const r1 = renderDrawer();
-    let dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
-    const link = await within(dialog).findByRole("link", { name: "Tải PDF" });
-    expect(link.getAttribute("href")).toBe(`/contracts/${contract.id}/pdf`);
-    expect(link.hasAttribute("download")).toBe(true);
-    r1.unmount();
-
-    serve({ ...issued, pdf_status: "pending", pdf_size: null });
-    const r2 = renderDrawer();
-    dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
-    const pending = await within(dialog).findByTestId("action-pdf");
-    expect(pending.getAttribute("aria-disabled")).toBe("true");
-    expect(pending.textContent).toContain("🔒");
-    expect(dialog.textContent).toContain("Đang tạo PDF — thử lại sau ít phút; cần ngay thì dùng In");
-    expect(within(dialog).queryByRole("link", { name: "Tải PDF" })).toBeNull();
-    r2.unmount();
-
-    serve({ ...issued, pdf_status: "failed", pdf_size: null });
-    const r3 = renderDrawer();
-    dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
-    await within(dialog).findByTestId("action-pdf");
-    expect(dialog.textContent).toContain("Chưa tạo được PDF, hệ thống sẽ tự thử lại — tạm thời dùng In");
-    r3.unmount();
+    for (const over of [{ ...issued, pdf_status: "pending", pdf_size: null }, { ...issued, status: "voided", pdf_status: "ready", pdf_size: 20480 }]) {
+      serve(over);
+      const r = renderDrawer();
+      const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+      const link = await within(dialog).findByRole("link", { name: "Tải PDF" });
+      expect(link.getAttribute("href")).toBe(`/contracts/${contract.id}/pdf`);
+      expect(link.hasAttribute("download")).toBe(true);
+      r.unmount();
+    }
 
     serve({ pdf_status: "none", pdf_size: null }); // the pending contract above
     renderDrawer();
-    dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
     await within(dialog).findByTestId("action-withdraw");
-    expect(within(dialog).queryByTestId("action-pdf")).toBeNull();
+    expect(within(dialog).queryByRole("link", { name: "Tải PDF" })).toBeNull();
   });
 });

@@ -105,8 +105,8 @@ export const ContractSchema = z
     voided_by: z.string().nullable(),
     voided_at: TimestampSchema.nullable(),
     void_reason: z.string().nullable(),
-    pdf_status: z.enum(["none", "pending", "ready", "failed"]).openapi({
-      description: "SPEC-05: none = not issued · pending = queued · ready = GET /contracts/{id}/pdf · failed = last try failed, retried hourly",
+    pdf_status: z.enum(["none", "pending", "ready"]).openapi({
+      description: "SPEC-05: none = not issued · pending = made on the first GET /contracts/{id}/pdf · ready = stored",
     }),
     pdf_size: z.number().int().nullable(),
     created_at: TimestampSchema,

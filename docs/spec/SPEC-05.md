@@ -4,11 +4,21 @@ Status: Approved 2026-10-01 (driver chốt — bạn ủy quyền "chạy tiếp
 Intent: docs/intent/INTENT-05.md
 Phụ thuộc: SPEC-03 (phát hành, `rendered_html` lưu một lần, `contract.issued`) · SPEC-04b (ngăn chi tiết, bản in, `problem-messages`).
 
+## 0. Sửa đổi 2026-10-01 (bạn chốt: "PDF chỉ tạo khi nhấn nút") — thắng mọi dòng cũ bên dưới
+- Bỏ hàng đợi `contract-pdf`, cron bù, gửi việc lúc phát hành, cột `pdf_attempts`/`pdf_failed_at`, trạng thái `failed`, Problem `pdf-not-ready`. Phát hành không đổi gì so với SPEC-03.
+- FR-2'/FR-3': `GET /contracts/{id}/pdf` — chưa có file → render ngay (renderer theo `PDF_RENDERER`: `browser` | `fake` (vitest) | `off`) → R2 + CAS + audit (như FR-1/FR-7) → trả file; đã có → trả file lưu. Hai lần bấm cùng lúc: CAS giữ một file, cả hai nhận cùng bytes.
+- Renderer lỗi / `off` → **503** Problem `service-unavailable` ("dùng In"); hợp đồng không bị chạm. Bấm lại sẽ thử lại.
+- FR-6': `pdf_status` = `none` | `pending` (chưa tạo — tạo khi bấm) | `ready`.
+- FR-8': hợp đồng `issued`/`voided` luôn có link "Tải PDF" (ngăn chi tiết + bản in); không có trạng thái 🔒.
+- AC-2' renderer lỗi → lỗi, hợp đồng vẫn `issued`, không object R2; lần bấm sau 200 · AC-3' hai lần bấm đồng thời → 1 key, 1 audit, 1 object · AC-4 (cron) bỏ · AC-7' issued/voided có link, nháp không.
+- Hạ tầng: chỉ `[browser]` + R2 `FILES`; không queue.
+
 ## 1. Research (nguồn + ngày, đọc 2026-10-01)
 - Browser Rendering ("Browser Run"): binding `[browser] binding = "BROWSER"`; `@cloudflare/puppeteer` 1.4.0 `puppeteer.launch(env.BROWSER)` → `page.setContent` → `page.pdf`. `wrangler dev` chạy Chrome headless cục bộ (changelog 2025-07-22); `quickAction()` cần `--remote` → **không dùng**. Giới hạn Free: 3 trình duyệt đồng thời, **10 phút/ngày**, 1 trình duyệt mới/20s; Paid: 10 giờ/tháng kèm gói. Hết hạn mức → 429 (`Retry-After`; hết 10 phút/ngày thì chỉ hết vào hôm sau). Font: chỉ "bộ font cài sẵn chuẩn", không cam kết tiếng Việt → nhúng `@font-face` data URI. — developers.cloudflare.com/browser-rendering/{workers-bindings,puppeteer,limits,pricing,features/custom-fonts}/, changelog/2025-07-22-br-local-dev/
 - R2: `[[r2_buckets]] binding/bucket_name`; `put(key, bytes, {httpMetadata})`, `get(key)` → `body` stream + `writeHttpMetadata`; miniflare/vitest-pool-workers giả lập R2 cục bộ. — developers.cloudflare.com/r2/api/workers/workers-api-usage/
 - Queues: `msg.attempts`, `msg.retry({delaySeconds})`, `max_retries` (mặc định 3), DLQ tùy chọn. — developers.cloudflare.com/queues/configuration/batching-retries/
 - **Spike 2026-10-01** (`/tmp/pdfspike`, wrangler 4.135.0 như repo): `wrangler dev` + binding → PDF A4 1 trang; lần đầu 91s (tải Chrome), sau đó ~1,2s; nhúng Arimo (`@fontsource/arimo` 5.3.0, subset latin+latin-ext+vietnamese 400/700 = 144 KB) đặt tên `Arial` → `pdffonts`: Arimo-Regular/Bold nhúng, dấu tiếng Việt đúng (đã xem ảnh trang). Hai lần render cùng HTML cho **byte khác nhau** (dấu thời gian PDF) → phải tạo một lần và lưu.
+- **Spike Forme 2026-10-01** (`@formepdf/html` 0.26.0, WASM, bạn hỏi): bản in HD-2026-014 → PDF đúng dấu với Liberation Sans đặt tên `Arial`; ~100–260ms CPU/PDF (vượt 10ms CPU gói Free), wasm 7,75 MB (3,45 MB nén, vượt 3 MB gói Free), CSS một phần (`transform`/`opacity`/`position: fixed` → cảnh báo), 0.x, một người duy trì. → giữ Browser Rendering (bạn chốt); Forme là adapter dự phòng sau `PdfRenderer` nếu lên gói Paid.
 - Nội bộ: `render-service.ts` (bản in đã phát hành = `rendered_html` lưu một lần bằng CAS; đã hủy = cùng bytes + dải "ĐÃ HỦY" thêm lúc đọc) · `issue-service.ts` (render sau phát hành, lỗi render không hoàn tác) · `events/contract-events.ts` · `index.ts` (`queue()` chỉ một consumer; `scheduled()` bảng cron) · bản in dùng `font-family: Arial, sans-serif`, CSP `default-src 'none'` (không tải gì từ ngoài).
 - Miền: workbook §"Output format" + adapter: "renderer outage leaves the document issued and its HTML downloadable — never un-issues it".
 

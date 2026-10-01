@@ -1,8 +1,7 @@
 /**
- * SPEC-05 API acceptance — AC-1 · AC-2 · AC-3 · AC-4 · AC-5 (PLAN-05 §1). Written before the code.
- * The PDF job runs through the real queue consumer with an injected renderer (no browser in vitest); the miniflare
- * consumer itself is switched off by PDF_RENDERER=off in vitest.config.ts so it never races these direct calls.
- * New modules are loaded with dynamic import so each test reports its own failure on the red run.
+ * SPEC-05 API acceptance — AC-1 · AC-2 · AC-3 · AC-5 (PLAN-05 §1; on-demand revision 2026-10-01).
+ * The PDF is made on the first GET /contracts/{id}/pdf; vitest runs PDF_RENDERER=fake (fixed tiny PDF, no browser).
+ * A renderer outage is exercised through the service with a failing renderer.
  * Helper pattern copied from contracts-4b-acceptance.test.ts (that file is not edited). Clock pin 28/09/2026.
  */
 import { SELF, env } from "cloudflare:test";
@@ -27,7 +26,6 @@ const PASSWORD = "correct-horse-battery-staple";
 const fetcher = (input: string, init?: RequestInit) => SELF.fetch(input, init);
 const FIXTURE_DAY = "2026-09-28T03:00:00Z";
 const UNKNOWN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-const FAKE_PDF = new TextEncoder().encode("%PDF-1.4\n% fake pdf for tests\n%%EOF\n");
 
 type Role = "giam_doc" | "quan_ly" | "nhan_vien";
 interface Staff {
@@ -53,18 +51,9 @@ interface ProblemBody {
   type: string;
   status: number;
   current_status?: string;
-  pdf_status?: string;
 }
 interface PdfRenderer {
   render(html: string): Promise<Uint8Array>;
-}
-interface FakeMessage {
-  id: string;
-  timestamp: Date;
-  body: { contract_id: string };
-  attempts: number;
-  ack: ReturnType<typeof vi.fn>;
-  retry: ReturnType<typeof vi.fn>;
 }
 
 // ---------------------------------------------------------------- clock + db
@@ -131,15 +120,17 @@ async function act(by: Staff, id: string, action: "submit" | "approve" | "issue"
   return res.json();
 }
 
+let phoneSeq = 0;
 async function draftFor(t: Team): Promise<Contract> {
+  phoneSeq += 1;
   const tplRes = await t.nv.session.fetch("/templates");
   const tpls: { items: Array<{ id: string; name: string }> } = await tplRes.json();
   const tpl = tpls.items.find((x) => x.name === "Hợp đồng cung cấp dịch vụ phần mềm")!;
   const cRes = await post(t.nv, "/customers", {
     name: "Tạp hóa Cô Ba",
     contact_person: "Trần Thị Ba",
-    phone: "0901 234 567",
-    email: "coba@example.com",
+    phone: `0901 234 ${String(100 + phoneSeq).padStart(3, "0")}`,
+    email: `coba${phoneSeq}@example.com`,
     address: "12 Lê Lợi, Q.1, TP.HCM",
   });
   expect(cRes.status).toBe(201);
@@ -166,34 +157,11 @@ async function get(by: Staff, id: string): Promise<Contract> {
   return res.json();
 }
 
-// ---------------------------------------------------------------- pdf job
+// ---------------------------------------------------------------- pdf
 
-const okRenderer: PdfRenderer = { render: async () => FAKE_PDF };
 const failingRenderer: PdfRenderer = {
-  render: async () => {
-    throw new Error("browser unavailable (429)");
-  },
+  render: () => Promise.reject(new Error("browser unavailable (429)")),
 };
-
-function batchOf(contractId: string, attempts = 1): { batch: MessageBatch<{ contract_id: string }>; msg: FakeMessage } {
-  const msg: FakeMessage = {
-    id: `m-${attempts}`,
-    timestamp: new Date(),
-    body: { contract_id: contractId },
-    attempts,
-    ack: vi.fn(),
-    retry: vi.fn(),
-  };
-  const batch = { queue: "contract-pdf", messages: [msg], ackAll: vi.fn(), retryAll: vi.fn() };
-  return { batch: batch as unknown as MessageBatch<{ contract_id: string }>, msg };
-}
-
-async function runJob(contractId: string, renderer: PdfRenderer, attempts = 1): Promise<FakeMessage> {
-  const { contractPdfConsumer } = await import("../../src/queues/contract-pdf-consumer");
-  const { batch, msg } = batchOf(contractId, attempts);
-  await contractPdfConsumer(batch, env, { renderer });
-  return msg;
-}
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", bytes);
@@ -222,19 +190,11 @@ describe("SPEC-05 PDF (acceptance)", () => {
     vi.useRealTimers();
   });
 
-  it("AC-1: issue → job → pdf_status ready; GET /pdf = attachment HD-2026-001.pdf, %PDF-, ETag = sha256; voided keeps the same bytes", async () => {
+  it("AC-1: issued → pdf_status pending; first GET /pdf makes it (attachment HD-2026-001.pdf, %PDF-, ETag = sha256) → ready; later GETs + voided = same bytes", async () => {
     const t = await team();
     const c = await issued(t);
     expect(c.number).toBe("HD-2026-001");
     expect((await get(t.nv, c.id)).pdf_status).toBe("pending");
-
-    const msg = await runJob(c.id, okRenderer);
-    expect(msg.ack).toHaveBeenCalled();
-    expect(msg.retry).not.toHaveBeenCalled();
-
-    const after = await get(t.nv, c.id);
-    expect(after.pdf_status).toBe("ready");
-    expect(after.pdf_size).toBe(FAKE_PDF.byteLength);
 
     const res = await t.nv.session.fetch(`/contracts/${c.id}/pdf`);
     expect(res.status).toBe(200);
@@ -245,36 +205,37 @@ describe("SPEC-05 PDF (acceptance)", () => {
     expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe("%PDF-");
     expect(res.headers.get("etag")).toBe(`"${await sha256Hex(bytes)}"`);
 
+    const after = await get(t.nv, c.id);
+    expect(after.pdf_status).toBe("ready");
+    expect(after.pdf_size).toBe(bytes.byteLength);
+
+    const again = await t.ql.session.fetch(`/contracts/${c.id}/pdf`);
+    expect(await sha256Hex(await again.arrayBuffer())).toBe(await sha256Hex(bytes));
+
     await act(t.gd, c.id, "void", { reason: "Khách hủy" });
     const voided = await t.ql.session.fetch(`/contracts/${c.id}/pdf`);
     expect(voided.status).toBe(200);
     expect(await sha256Hex(await voided.arrayBuffer())).toBe(await sha256Hex(bytes));
+    expect(await auditCount("contract.pdf_generated", c.id)).toBe(1);
   }, 60_000);
 
-  it("AC-2: renderer down → issue still 200 with a number; retries then failed → 409 pdf-not-ready; draft → 409 state-conflict", async () => {
+  it("AC-2: renderer down → error, contract untouched (still issued, no pdf); draft → 409 state-conflict + pdf_status none", async () => {
+    const { getContractPdf } = await import("../../src/services/contract/pdf-service");
     const t = await team();
     const c = await issued(t);
-    expect(c.status).toBe("issued");
-    expect(c.number).toBe("HD-2026-001");
+    await expect(
+      getContractPdf({ db: getDb(env), files: env.FILES, renderer: failingRenderer, now: () => Math.floor(Date.now() / 1000) }, c.id),
+    ).rejects.toThrow("browser unavailable");
+    const after = await get(t.nv, c.id);
+    expect(after.status).toBe("issued");
+    expect(after.number).toBe("HD-2026-001");
+    expect(after.pdf_status).toBe("pending");
+    expect((await env.FILES.list({ prefix: `contracts/${c.id}/` })).objects).toEqual([]);
 
-    const first = await runJob(c.id, failingRenderer, 1);
-    expect(first.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
-    expect(first.ack).not.toHaveBeenCalled();
-    expect((await get(t.nv, c.id)).pdf_status).toBe("pending");
-
-    const last = await runJob(c.id, failingRenderer, 3);
-    expect(last.ack).toHaveBeenCalled();
-    expect(last.retry).not.toHaveBeenCalled();
-    const failed = await get(t.nv, c.id);
-    expect(failed.status).toBe("issued");
-    expect(failed.pdf_status).toBe("failed");
-
-    const res = await t.nv.session.fetch(`/contracts/${c.id}/pdf`);
-    expect(res.status).toBe(409);
-    expect(res.headers.get("retry-after")).toBe("60");
-    const body: ProblemBody = await res.json();
-    expect(body.type).toContain("pdf-not-ready");
-    expect(body.pdf_status).toBe("failed");
+    // the next click works (body consumed: an open R2 stream breaks vitest isolated storage)
+    const retry = await t.nv.session.fetch(`/contracts/${c.id}/pdf`);
+    expect(retry.status).toBe(200);
+    await retry.arrayBuffer();
 
     const d = await draftFor(t);
     expect((await get(t.nv, d.id)).pdf_status).toBe("none");
@@ -283,21 +244,19 @@ describe("SPEC-05 PDF (acceptance)", () => {
     const db: ProblemBody = await dr.json();
     expect(db.type).toContain("state-conflict");
     expect(db.current_status).toBe("draft");
-
-    // a later success still lands (the cron re-sends failed jobs)
-    await runJob(c.id, okRenderer, 1);
-    expect((await get(t.nv, c.id)).pdf_status).toBe("ready");
   }, 60_000);
 
-  it("AC-3: the job twice (and concurrently) → one pdf_key, one contract.pdf_generated row, one R2 object", async () => {
+  it("AC-3: two clicks at once → one pdf_key, one contract.pdf_generated row, one R2 object, both get the same file", async () => {
     const t = await team();
     const c = await issued(t);
-    await Promise.all([runJob(c.id, okRenderer), runJob(c.id, okRenderer)]);
-    await runJob(c.id, okRenderer);
+    const [a, b] = await Promise.all([
+      t.nv.session.fetch(`/contracts/${c.id}/pdf`),
+      t.ql.session.fetch(`/contracts/${c.id}/pdf`),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(await sha256Hex(await a.arrayBuffer())).toBe(await sha256Hex(await b.arrayBuffer()));
 
-    const row = await env.DB.prepare("SELECT pdf_key, pdf_hash FROM contracts WHERE id = ?")
-      .bind(c.id)
-      .first<{ pdf_key: string | null; pdf_hash: string | null }>();
+    const row = await env.DB.prepare("SELECT pdf_key FROM contracts WHERE id = ?").bind(c.id).first<{ pdf_key: string | null }>();
     expect(row?.pdf_key).toMatch(new RegExp(`^contracts/${c.id}/[0-9A-HJKMNP-TV-Z]{26}\\.pdf$`));
     const listed = await env.FILES.list({ prefix: `contracts/${c.id}/` });
     expect(listed.objects.map((o) => o.key)).toEqual([row!.pdf_key]);
@@ -307,49 +266,12 @@ describe("SPEC-05 PDF (acceptance)", () => {
       .bind(c.id)
       .first<{ actor: string | null; metadata: string }>();
     expect(audit?.actor).toBeNull();
-    expect(JSON.parse(audit!.metadata)).toEqual({ size: FAKE_PDF.byteLength });
-  }, 60_000);
-
-  it("AC-4: sweeper re-sends issued contracts without a PDF (older than 5 min) and failed ones after 1 hour only", async () => {
-    const { contractPdfSweeper } = await import("../../src/crons/contract-pdf-sweeper");
-    const t = await team();
-    const fresh = await issued(t); // issued just now → not yet swept
-    const sent: string[] = [];
-    const queue = {
-      sendBatch: vi.fn(async (msgs: Iterable<{ body: { contract_id: string } }>) => {
-        for (const m of msgs) sent.push(m.body.contract_id);
-      }),
-    };
-    const nowSec = Math.floor(Date.now() / 1000);
-
-    await contractPdfSweeper({ db: getDb(env), queue: queue as unknown as Queue, now: nowSec });
-    expect(sent).toEqual([]);
-
-    // 6 minutes later the never-queued contract is picked up
-    await contractPdfSweeper({ db: getDb(env), queue: queue as unknown as Queue, now: nowSec + 6 * 60 });
-    expect(sent).toEqual([fresh.id]);
-
-    // failed 10 minutes ago → skipped; failed 61 minutes ago → re-sent
-    sent.length = 0;
-    await runJob(fresh.id, failingRenderer, 3);
-    const failedAt = (await env.DB.prepare("SELECT pdf_failed_at AS f FROM contracts WHERE id = ?").bind(fresh.id).first<{ f: number }>())!.f;
-    await contractPdfSweeper({ db: getDb(env), queue: queue as unknown as Queue, now: failedAt + 10 * 60 });
-    expect(sent).toEqual([]);
-    await contractPdfSweeper({ db: getDb(env), queue: queue as unknown as Queue, now: failedAt + 61 * 60 });
-    expect(sent).toEqual([fresh.id]);
-
-    // ready contracts and drafts are never swept
-    sent.length = 0;
-    await runJob(fresh.id, okRenderer, 1);
-    await draftFor(t);
-    await contractPdfSweeper({ db: getDb(env), queue: queue as unknown as Queue, now: nowSec + 24 * 3600 });
-    expect(sent).toEqual([]);
+    expect(Object.keys(JSON.parse(audit!.metadata) as object)).toEqual(["size"]);
   }, 60_000);
 
   it("AC-5: GET /pdf — anonymous 401; no contract:read → 403 + permission.denied; unknown id → 404", async () => {
     const t = await team();
     const c = await issued(t);
-    await runJob(c.id, okRenderer);
 
     const anon = await fetcher(`${ORIGIN}/contracts/${c.id}/pdf`);
     expect(anon.status).toBe(401);
@@ -358,6 +280,7 @@ describe("SPEC-05 PDF (acceptance)", () => {
     expect(adminRes.status).toBe(403);
     const denied = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE action = 'permission.denied'").first<{ n: number }>();
     expect(denied?.n).toBeGreaterThan(0);
+    expect((await env.FILES.list({ prefix: `contracts/${c.id}/` })).objects).toEqual([]); // nothing rendered for them
 
     const missing = await t.nv.session.fetch(`/contracts/${UNKNOWN_ID}/pdf`);
     expect(missing.status).toBe(404);
