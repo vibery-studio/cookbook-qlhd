@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useCurrentUser } from "../../app/me";
 import { useRoleLabelOf, useRoles } from "../../app/roles-query";
 import { Alert, Button, EmptyState, ErrorState, Field, Modal, Pill, Skeleton } from "../../ui";
@@ -6,6 +6,9 @@ import type { PillTone } from "../../ui";
 import { errorText, useInviteUser, useReinvite, useUpdateUser, useUsers } from "./api";
 import type { ActivationLink, AdminUser } from "./api";
 import { LinkBox } from "./link-box";
+import { GrantJitDialog, JitControls } from "./jit-controls";
+import { useActiveJitGrants } from "./jit-api";
+import { jitRowAction } from "./jit-rules";
 import {
   ADMIN_TARGET_REASON,
   adminTargetLocked,
@@ -47,11 +50,14 @@ type Dialog =
   | { kind: "invite" }
   | { kind: "link"; link: ActivationLink; name: string }
   | { kind: "role"; user: AdminUser }
-  | { kind: "status"; user: AdminUser };
+  | { kind: "status"; user: AdminUser }
+  | { kind: "jit"; user: AdminUser };
 
 export function UsersScreen() {
   const me = useCurrentUser();
   const canWrite = me.permissions.includes("users:write");
+  const canGrant = me.permissions.includes("jit:grant");
+  const grants = useActiveJitGrants(canGrant);
   const users = useUsers();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const reinvite = useReinvite();
@@ -62,6 +68,12 @@ export function UsersScreen() {
   const roles: RoleOption[] = rolesQuery.data?.items ?? FALLBACK_ROLES;
   const callerIsAdmin = me.roles.includes("admin");
   const roleCtx = { callerIsAdmin, callerPermissions: me.permissions };
+
+  const jitFor = (user: AdminUser) =>
+    canGrant
+      ? <JitControls user={user} action={jitRowAction(user, me, grants.data?.find((g) => g.user_id === user.id && g.state === "active"))} onGrant={(u) => setDialog({ kind: "jit", user: u })} />
+      : null;
+  const showActions = canWrite || canGrant;
 
   const items = useMemo(() => users.data?.pages.flatMap((page) => page.items) ?? [], [users.data]);
 
@@ -110,7 +122,7 @@ export function UsersScreen() {
                   <Pill tone="accent">{roleText(user, labelOf)}</Pill>
                   <Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill>
                 </div>
-                {canWrite ? <Actions user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
+                {showActions ? <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
               </li>
             ))}
           </ul>
@@ -122,7 +134,7 @@ export function UsersScreen() {
                   <th className="px-s4 py-s3 font-semibold">Email</th>
                   <th className="px-s4 py-s3 font-semibold">Vai trò</th>
                   <th className="px-s4 py-s3 font-semibold">Trạng thái</th>
-                  {canWrite ? <th className="px-s4 py-s3 font-semibold">Thao tác</th> : null}
+                  {showActions ? <th className="px-s4 py-s3 font-semibold">Thao tác</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -132,9 +144,9 @@ export function UsersScreen() {
                     <td className="px-s4 py-s3 text-body">{user.email}</td>
                     <td className="px-s4 py-s3"><Pill tone="accent">{roleText(user, labelOf)}</Pill></td>
                     <td className="px-s4 py-s3"><Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill></td>
-                    {canWrite ? (
+                    {showActions ? (
                       <td className="px-s4 py-s3">
-                        <Actions user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
+                        <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
                       </td>
                     ) : null}
                   </tr>
@@ -157,12 +169,15 @@ export function UsersScreen() {
         </Modal>
       ) : null}
       {dialog?.kind === "role" ? <RoleDialog user={dialog.user} roles={selectableRoles(roles, { ...roleCtx, mode: "assign" })} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "jit" ? <GrantJitDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "status" ? <StatusDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
     </section>
   );
 }
 
 function Actions({
+  canWrite,
+  jit,
   user,
   isSelf,
   adminLocked,
@@ -171,6 +186,8 @@ function Actions({
   onReinvite,
   onDialog,
 }: {
+  canWrite: boolean;
+  jit: ReactNode;
   user: AdminUser;
   isSelf: boolean;
   adminLocked: boolean;
@@ -193,43 +210,48 @@ function Actions({
   );
   return (
     <div className="grid justify-items-start gap-s2">
-      <div className="flex flex-wrap gap-s2">
-        {user.status === "pending" ? (
-          <Button variant="secondary" disabled={busy} onClick={() => void onReinvite(user)}>Tạo lại link</Button>
-        ) : null}
-        {adminLocked ? (
-          locked("Đổi vai trò", ADMIN_TARGET_REASON, "action-role")
-        ) : isSelf ? (
-          locked("Đổi vai trò", SELF_ROLE_REASON, "action-role")
-        ) : grantLocked ? (
-          locked("Đổi vai trò", NOT_GRANTABLE_REASON, "action-role")
-        ) : (
-          <Button variant="secondary" data-testid="action-role" onClick={() => onDialog({ kind: "role", user })}>
-            Đổi vai trò
-          </Button>
-        )}
-        {adminLocked ? (
-          locked(user.status === "disabled" ? "Mở khóa" : "Khóa", ADMIN_TARGET_REASON, "action-status")
-        ) : user.status === "disabled" ? (
-          <Button variant="secondary" onClick={() => onDialog({ kind: "status", user })}>Mở khóa</Button>
-        ) : isSelf ? (
-          locked("Khóa", SELF_DISABLE_REASON, "action-status")
-        ) : (
-          <Button variant="danger" data-testid="action-status" onClick={() => onDialog({ kind: "status", user })}>
-            Khóa
-          </Button>
-        )}
-      </div>
-      {adminLocked ? (
-        <p className="text-sm text-muted">🔒 {ADMIN_TARGET_REASON}</p>
-      ) : isSelf ? (
-        <ul className="grid gap-s1 text-sm text-muted">
-          <li>🔒 {SELF_ROLE_REASON}</li>
-          {user.status !== "disabled" ? <li>🔒 {SELF_DISABLE_REASON}</li> : null}
-        </ul>
-      ) : grantLocked ? (
-        <p className="text-sm text-muted">🔒 {NOT_GRANTABLE_REASON}</p>
+      {canWrite ? (
+        <>
+          <div className="flex flex-wrap gap-s2">
+            {user.status === "pending" ? (
+              <Button variant="secondary" disabled={busy} onClick={() => void onReinvite(user)}>Tạo lại link</Button>
+            ) : null}
+            {adminLocked ? (
+              locked("Đổi vai trò", ADMIN_TARGET_REASON, "action-role")
+            ) : isSelf ? (
+              locked("Đổi vai trò", SELF_ROLE_REASON, "action-role")
+            ) : grantLocked ? (
+              locked("Đổi vai trò", NOT_GRANTABLE_REASON, "action-role")
+            ) : (
+              <Button variant="secondary" data-testid="action-role" onClick={() => onDialog({ kind: "role", user })}>
+                Đổi vai trò
+              </Button>
+            )}
+            {adminLocked ? (
+              locked(user.status === "disabled" ? "Mở khóa" : "Khóa", ADMIN_TARGET_REASON, "action-status")
+            ) : user.status === "disabled" ? (
+              <Button variant="secondary" onClick={() => onDialog({ kind: "status", user })}>Mở khóa</Button>
+            ) : isSelf ? (
+              locked("Khóa", SELF_DISABLE_REASON, "action-status")
+            ) : (
+              <Button variant="danger" data-testid="action-status" onClick={() => onDialog({ kind: "status", user })}>
+                Khóa
+              </Button>
+            )}
+          </div>
+          {adminLocked ? (
+            <p className="text-sm text-muted">🔒 {ADMIN_TARGET_REASON}</p>
+          ) : isSelf ? (
+            <ul className="grid gap-s1 text-sm text-muted">
+              <li>🔒 {SELF_ROLE_REASON}</li>
+              {user.status !== "disabled" ? <li>🔒 {SELF_DISABLE_REASON}</li> : null}
+            </ul>
+          ) : grantLocked ? (
+            <p className="text-sm text-muted">🔒 {NOT_GRANTABLE_REASON}</p>
+          ) : null}
+        </>
       ) : null}
+      {jit}
     </div>
   );
 }

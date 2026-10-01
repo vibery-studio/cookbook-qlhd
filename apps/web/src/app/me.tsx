@@ -8,6 +8,8 @@ export type Me = {
   display_name: string | null;
   roles: string[];
   permissions: string[];
+  /** Temporary admin (SPEC-07 JIT): until when, or null. Optional so fixtures stay small. */
+  jit?: { expires_at: number } | null;
 };
 
 /** Fallback labels for the built-in roles, used until GET /roles loads (the API label wins — see roles-query.ts). */
@@ -22,13 +24,14 @@ export const roleLabels: Record<string, string> = {
 async function fetchMe(): Promise<Me> {
   const result = await client.me();
   if (!result.ok) throw new ApiProblemError(result.problem);
-  const data = result.data as typeof result.data & { display_name?: string | null };
+  const data = result.data as typeof result.data & { display_name?: string | null; jit?: { expires_at: number } | null };
   return {
     id: data.id,
     email: data.email,
     display_name: data.display_name ?? null,
     roles: data.roles,
     permissions: data.permissions,
+    jit: data.jit ?? null,
   };
 }
 

@@ -7,6 +7,7 @@ import { customersNavItems } from "../features/customers/nav";
 import { rolesNavItems } from "../features/roles/nav";
 import { auditNavItems } from "../features/audit/nav";
 import { usersNavItems } from "../features/users/nav";
+import { accessReviewNavItems } from "../features/access-review/nav";
 
 /**
  * The shell reads one registry. Feature cards replace or extend their own
@@ -18,12 +19,15 @@ export const navRegistry: readonly NavItem[] = [
   ...approvalsNavItems,
   ...customersNavItems,
   ...rolesNavItems,
+  ...accessReviewNavItems,
   ...auditNavItems,
   ...usersNavItems,
 ];
 
 export function canAccessNavItem(item: NavItem, me: Me): boolean {
-  return (item.requiredPermissions ?? []).every((permission) => me.permissions.includes(permission));
+  const all = (item.requiredPermissions ?? []).every((permission) => me.permissions.includes(permission));
+  const any = item.anyPermissions === undefined || item.anyPermissions.some((permission) => me.permissions.includes(permission));
+  return all && any;
 }
 
 export function visibleNavItems(me: Me): NavItem[] {

@@ -5,7 +5,9 @@ import { cn } from "../lib/cn";
 import { Icon } from "../ui";
 import { useCurrentUser } from "./me";
 import { useRoleLabelOf } from "./roles-query";
-import { navRegistry } from "./nav";
+import { canAccessNavItem, navRegistry } from "./nav";
+import { JitBanner } from "../features/users/jit-banner";
+import { OverdueReviewBanner } from "../features/access-review/overdue-banner";
 import type { NavItem } from "./route-types";
 
 function initials(displayName: string | null, email: string): string {
@@ -73,7 +75,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <nav aria-label="Điều hướng chính" className="grid gap-s1">
           {navRegistry
             .filter((item) => item.section === "workspace")
-            .filter((item) => (item.requiredPermissions ?? []).every((permission) => user.permissions.includes(permission)))
+            .filter((item) => canAccessNavItem(item, user))
             .map((item) => (
               <ShellNavLink key={item.id} item={item} onNavigate={() => setMenuOpen(false)} />
             ))}
@@ -82,7 +84,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <nav aria-label="Điều hướng hệ thống" className="grid gap-s1">
           {navRegistry
             .filter((item) => item.section === "system")
-            .filter((item) => (item.requiredPermissions ?? []).every((permission) => user.permissions.includes(permission)))
+            .filter((item) => canAccessNavItem(item, user))
             .map((item) => (
               <ShellNavLink key={item.id} item={item} onNavigate={() => setMenuOpen(false)} />
             ))}
@@ -123,6 +125,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
           <Brand mobile />
         </header>
         <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-s5 px-s5 py-s5 max-mobile:px-s4 max-mobile:py-s4">
+          <JitBanner />
+          <OverdueReviewBanner />
           {children ?? <Outlet />}
         </div>
       </main>

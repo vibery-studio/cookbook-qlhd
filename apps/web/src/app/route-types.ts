@@ -12,6 +12,8 @@ export type NavItem = {
   icon: IconName;
   section: "workspace" | "system";
   requiredPermissions?: readonly string[];
+  /** Any one of these codes is enough (PLAN-07 R-15); combined with `requiredPermissions` by AND. */
+  anyPermissions?: readonly string[];
   /**
    * Optional hook returning a count (or text) for a pill on the nav item; 0 / "" / undefined hides it.
    * Rendered as its own component per visible item, so it is a normal React hook.
