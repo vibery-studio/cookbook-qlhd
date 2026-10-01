@@ -21,7 +21,7 @@ import {
   type ImportPreview,
   type RowError,
 } from "./import-logic";
-import { IMPORT_TYPES, TypeSelect, type ImportType } from "./type-select";
+import { TypeSelect, type ImportType } from "./type-select";
 
 const MODAL_CLASS =
   "max-w-[1180px]! max-mobile:fixed max-mobile:inset-0 max-mobile:h-full max-mobile:max-h-none max-mobile:max-w-none! max-mobile:rounded-none max-mobile:border-0";
