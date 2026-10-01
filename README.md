@@ -36,6 +36,26 @@ bru run docs/bruno --env local
 **Prereqs**: Node 22, pnpm 10.28+, `wrangler login`. Budget those
 separately.
 
+### Tài khoản thử (chỉ D1 local)
+
+```bash
+pnpm db:migrate:local
+RUNWAY_LOCAL=1 pnpm dev:seed-team       # 4 tài khoản dưới đây
+RUNWAY_LOCAL=1 pnpm dev:seed-products   # sản phẩm + giá DEMO
+pnpm dev                                # http://localhost:8787
+```
+
+Mật khẩu chung: `correct-horse-battery-staple`
+
+| Email | Vai trò | Dùng để thử |
+|---|---|---|
+| `admin@runway.local` | Quản trị | người dùng, vai trò, duyệt yêu cầu đổi quyền |
+| `giamdoc@runway.local` | Giám đốc | duyệt (giảm > 10%), phát hành, nhập mẫu từ Word, cấp quản trị tạm thời, rà soát quyền |
+| `quanly@runway.local` | Quản lý | duyệt, phát hành, sản phẩm & giá |
+| `nhanvien@runway.local` | Nhân viên | tạo báo giá / hợp đồng / phiếu xuất kho, lập tài liệu con |
+
+Chỉ có 4 email này — email khác (vd. `test@runway.local`) không đăng nhập được.
+
 ## What's inside
 
 ```
