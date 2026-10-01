@@ -4979,7 +4979,7 @@ export interface components {
         CreateRoleRequest: {
             label: string;
             description?: string;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
         };
         PatchRoleRequest: {
             expected_version: number;
@@ -5016,7 +5016,7 @@ export interface components {
         };
         CreateChangeRequest: {
             expected_version: number;
-            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
+            permissions: ("audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write")[];
             note?: string;
         };
         ChangeRequestList: {
@@ -5045,9 +5045,9 @@ export interface components {
         };
         CreateSodPair: {
             /** @enum {string} */
-            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_a: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             /** @enum {string} */
-            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
+            perm_b: "audit:read" | "contract:approve" | "contract:issue" | "contract:read" | "contract:submit" | "contract:write" | "flags:read" | "flags:write" | "jit:grant" | "notes:read" | "notes:write" | "price:write" | "product:write" | "reviews:write" | "roles:write" | "settings:read" | "settings:write" | "template:write" | "users:read" | "users:write";
             reason?: string;
         };
         JitGrantList: {

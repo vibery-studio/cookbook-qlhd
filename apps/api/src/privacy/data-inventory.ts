@@ -111,6 +111,29 @@ export const DATA_INVENTORY: readonly DataInventoryEntry[] = [
     onDelete: "skip",
   },
   {
+    // RBAC governance (SPEC-07): kept on erasure like approval_steps — who requested/approved a permission
+    // change, who held temporary admin and why, and each review decision must stay signed.
+    table: "role_change_requests",
+    ownerColumn: "requested_by",
+    personal: true, // note
+    exportable: true,
+    onDelete: "skip",
+  },
+  {
+    table: "jit_grants",
+    ownerColumn: "user_id",
+    personal: true, // reason
+    exportable: true,
+    onDelete: "skip",
+  },
+  {
+    table: "access_review_items",
+    ownerColumn: "user_id",
+    personal: true,
+    exportable: true,
+    onDelete: "skip",
+  },
+  {
     table: "users",
     ownerColumn: null,
     personal: true,
@@ -141,4 +164,10 @@ export const INVENTORY_EXEMPT_TABLES: readonly string[] = [
   "template_versions",
   // contracts: business records (created_by/issued_by are staff ids, kept like customers) (SPEC-03)
   "contracts",
+  // products + dated price levels: business records, no personal data (created_by = staff id) (SPEC-08)
+  "products",
+  "product_prices",
+  // RBAC configuration + review campaign headers: no personal data (opened_by/closed_by = staff ids) (SPEC-07)
+  "sod_pairs",
+  "access_reviews",
 ];

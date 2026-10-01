@@ -600,6 +600,76 @@ export const accessReviewItems = sqliteTable(
 );
 
 /**
+ * Products (SPEC-08 §3.1): a service (duration N day/month) or goods (unit, no duration). Never hard-deleted
+ * (`active` = 0 is "ngừng bán"). `code`, `kind` never change after creation; `code_norm` = trim + upper, UNIQUE.
+ * `version` = CAS for edits. `created_by` NULL = seeded by a migration (system); no FK (like contracts.created_by).
+ */
+export const products = sqliteTable(
+  "products",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(), // service | goods
+    code: text("code").notNull(),
+    codeNorm: text("code_norm").notNull(),
+    name: text("name").notNull(),
+    unit: text("unit").notNull(),
+    durationValue: integer("duration_value"),
+    durationUnit: text("duration_unit"), // day | month | NULL
+    active: integer("active").notNull().default(1),
+    version: integer("version").notNull().default(1),
+    createdBy: text("created_by"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    check("ck_products_kind", sql`${table.kind} IN ('service','goods')`),
+    check(
+      "ck_products_code_norm",
+      sql`length(${table.codeNorm}) BETWEEN 1 AND 32 AND ${table.codeNorm} NOT GLOB '*[^A-Z0-9._-]*'`,
+    ),
+    check("ck_products_name", sql`length(${table.name}) BETWEEN 1 AND 120`),
+    check("ck_products_unit", sql`length(${table.unit}) BETWEEN 1 AND 20`),
+    check("ck_products_active", sql`${table.active} IN (0,1)`),
+    check(
+      "ck_products_duration",
+      sql`(${table.kind} = 'goods' AND ${table.durationValue} IS NULL AND ${table.durationUnit} IS NULL) OR (${table.kind} = 'service' AND ((${table.durationUnit} = 'month' AND ${table.durationValue} BETWEEN 1 AND 120) OR (${table.durationUnit} = 'day' AND ${table.durationValue} BETWEEN 1 AND 3650)))`,
+    ),
+    uniqueIndex("uq_products_code_norm").on(table.codeNorm),
+  ],
+);
+
+/**
+ * Product price levels (SPEC-08 §3.1) — APPEND-ONLY: the price at date D is the level with the greatest
+ * `effective_from` ≤ D (business zone); no `effective_to` (end = day before the next level, computed on read).
+ * Whole đồng, ex-VAT. `vat_rate_bps` NULL = KCT (không chịu thuế). Triggers (migration `0022`) refuse every
+ * UPDATE, DELETE of a level already in effect, and a backdated INSERT when the product already has a level.
+ */
+export const productPrices = sqliteTable(
+  "product_prices",
+  {
+    id: text("id").primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    effectiveFrom: text("effective_from").notNull(), // YYYY-MM-DD (business zone)
+    unitPriceExVat: integer("unit_price_ex_vat").notNull(),
+    vatRateBps: integer("vat_rate_bps"),
+    createdBy: text("created_by"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    check("ck_product_prices_price", sql`${table.unitPriceExVat} BETWEEN 0 AND 1000000000000`),
+    check("ck_product_prices_vat", sql`${table.vatRateBps} IS NULL OR ${table.vatRateBps} IN (0,500,800,1000)`),
+    check(
+      "ck_product_prices_date",
+      sql`${table.effectiveFrom} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(${table.effectiveFrom}) = ${table.effectiveFrom}`,
+    ),
+    uniqueIndex("uq_product_prices_product_from").on(table.productId, table.effectiveFrom),
+    index("idx_product_prices_product_from_desc").on(table.productId, sql`${table.effectiveFrom} DESC`),
+  ],
+);
+
+/**
  * Full table collection for drizzle-kit schema generation and for
  * `drizzle(db, { schema })` typed query building in `db/client.ts`.
  */
@@ -630,4 +700,6 @@ export const schema = {
   jitGrants,
   accessReviews,
   accessReviewItems,
+  products,
+  productPrices,
 };

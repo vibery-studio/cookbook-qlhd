@@ -117,6 +117,14 @@ Tables `0019_*` (`sod_pairs`, `role_change_requests`, `jit_grants`, `access_revi
   `no-eligible-approver`; `GET /roles` shows `can.request=false` + `request_locked_reason:"no_approver"`. The only way
   out is a migration (re-enable an approver or change `role_permissions` directly) — by the technical admin.
 
+## Products & prices (SPEC-08, row 3)
+
+Codes `product:write` (`01PERM000000PRODUCTWRITE00`, "Sửa sản phẩm"), `price:write` (`01PERM00000000PRICEWRITE00`,
+"Đặt giá") → `quan_ly` + `giam_doc` (`0022`); not `nhan_vien`, not `admin` (like `contract:*`). Reading products and
+`POST /pricing/preview` use existing codes (`contract:read`, `contract:write` — DEC-11). `POST /products` with
+`first_price` also needs `price:write` (403 + `permission.denied`). `product_prices` is append-only by D1 triggers
+(`0022`: no UPDATE, no DELETE of a level in effect, no backdated INSERT) — the API's rules are the first lock.
+
 ## Cache invalidation contract
 
 When a role assignment changes on a user, the OWNING SERVICE (admin-
