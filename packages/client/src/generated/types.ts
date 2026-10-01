@@ -3267,82 +3267,8 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Not implemented */
-                501: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
             };
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/price-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Packages in force on a date (default: today, Vietnam time) */
-        get: {
-            parameters: {
-                query?: {
-                    date?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Price list for the date */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["PriceList"];
-                    };
-                };
-                /** @description Not authenticated */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
-                /** @description Missing contract:read permission */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
-                /** @description Bad date */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3766,7 +3692,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description validation | missing-fields (missing_fields[]) | unresolved-placeholder (placeholders[]) */
+                /** @description validation (errors[].path `lines` = DEC-10 rule, `lines.<i>.product_id` = unknown/duplicate) | product-inactive | no-price | missing-fields (missing_fields[]) | unresolved-placeholder (placeholders[]) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3962,7 +3888,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description validation | missing-fields | unresolved-placeholder */
+                /** @description validation (lines / lines.<i>.product_id) | product-inactive | no-price | missing-fields | unresolved-placeholder */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4465,7 +4391,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description missing-fields | validation (today's data) */
+                /** @description missing-fields | validation | product-inactive | no-price (today's data) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -5840,21 +5766,6 @@ export interface components {
             product_id: string;
             qty: number;
         };
-        PriceList: {
-            date: string;
-            items: components["schemas"]["PriceItem"][];
-        };
-        PriceItem: {
-            code: string;
-            name: string;
-            duration_value: number;
-            /** @enum {string} */
-            duration_unit: "day" | "month";
-            unit_price: number;
-            effective_from: string;
-            effective_to: string | null;
-            note: string | null;
-        };
         TemplateList: {
             items: components["schemas"]["TemplateListItem"][];
             next_cursor: string | null;
@@ -5903,11 +5814,10 @@ export interface components {
             key: string;
             label: string;
             /** @enum {string} */
-            type: "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice";
+            type: "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice" | "lines";
             required: boolean;
             source: string;
             options?: string[];
-            options_from?: string;
             default?: string | number;
         };
         TemplateFieldRule: {
@@ -6056,11 +5966,10 @@ export interface components {
         CreateContractRequest: {
             template_id: string;
             customer_id: string;
+            lines: components["schemas"]["LineInput"][];
             values: components["schemas"]["ContractValues"];
         };
         ContractValues: {
-            ma_goi: string;
-            so_cua_hang: number;
             giam_gia?: number;
             chuc_vu_nguoi_ky?: string;
             ngay_bat_dau?: string;
@@ -6095,6 +6004,7 @@ export interface components {
         UpdateContractRequest: {
             expected_version: number;
             customer_id?: string;
+            lines?: components["schemas"]["LineInput"][];
             values?: components["schemas"]["ContractValues"];
             use_latest_template?: boolean;
         };

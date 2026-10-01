@@ -41,6 +41,7 @@ import { invalidatePrincipalCache } from "../dao/session-cache";
 import { createAuditLogger } from "../observability/logger";
 import { generateOpaqueToken } from "@runway/auth";
 import { users, notes } from "../db/schema";
+import { passwordHashParams } from "../utils/password-params";
 
 export type DeletionResult =
   | { kind: "ok"; scheduledCompletionAt: number }
@@ -171,7 +172,7 @@ export async function sweepPendingDeletions(
     // Anonymize the users row itself. Password hash is scrypt of a
     // random opaque token — no one can log in as this user again.
     const anonPassword = generateOpaqueToken(32);
-    const anonPasswordHash = await hashPassword(anonPassword);
+    const anonPasswordHash = await hashPassword(anonPassword, passwordHashParams(deps.env));
     await anonymizeUser(deps.db, {
       id: raw.id,
       anonEmail: `deleted-${raw.id}@runway.local`,

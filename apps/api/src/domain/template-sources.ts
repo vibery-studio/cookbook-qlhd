@@ -1,11 +1,27 @@
 // The ONE place that says which field sources exist (SPEC-02 §3.3 / §3.6).
 // Adding a source = add it here; row 3 resolves it, the template check accepts it.
+// `derived:lines_table` is the one source of a `lines`-type field (and only that type takes it) — template-check enforces.
 export const SOURCE_REGISTRY: Readonly<Record<string, readonly string[]>> = {
   subject: ["name", "contact_person", "tax_code", "phone", "email", "address"],
-  price_list: ["code", "name", "unit_price", "duration_value", "duration_unit"],
-  derived: ["doc_date", "contract_end", "total", "total_in_words", "discount_bps"],
+  derived: [
+    "doc_date",
+    "contract_end",
+    "total",
+    "total_in_words",
+    "discount_bps",
+    // SPEC-08 §3.4: document lines (price_list:* is gone — DEC-8/9)
+    "subtotal_ex_vat",
+    "discount_amount",
+    "total_ex_vat",
+    "vat_total",
+    "vat_rates",
+    "service_name",
+    "lines_table",
+  ],
   issue: ["number"],
 };
+
+export const LINES_TABLE_SOURCE = "derived:lines_table";
 
 /** `manual` has no reference; every other source is `kind:ref` with ref in the registry. */
 export function isResolvableSource(source: unknown): boolean {

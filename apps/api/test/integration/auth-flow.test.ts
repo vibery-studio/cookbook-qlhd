@@ -200,7 +200,7 @@ describe("auth flow (integration)", () => {
     // noisy, and an absolute-delta bound flakes because scrypt itself
     // varies by ±hundreds of ms per call under contention. What we
     // *really* want to prove: the unknown-email path did comparable
-    // scrypt work to the known path (via DUMMY_HASH_PROMISE). If we
+    // scrypt work to the known path (via the dummy hash). If we
     // ever short-circuited on unknown-email, `unknown` would be near
     // zero while `known` was ~hundreds of ms — a ratio, not a
     // delta, catches that.

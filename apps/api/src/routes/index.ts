@@ -15,7 +15,6 @@ import { contractsRoutes } from "./contracts.routes";
 import { customersRoutes } from "./customers.routes";
 import { productsRoutes } from "./products.routes";
 import { pricingRoutes } from "./pricing.routes";
-import { priceListRoutes } from "./price-list.routes";
 import { templatesRoutes } from "./templates.routes";
 import { templatesWriteRoutes } from "./templates-write.routes";
 import { rolesRoutes } from "./roles.routes";
@@ -49,7 +48,6 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   customersRoutes(app);
   productsRoutes(app);
   pricingRoutes(app);
-  priceListRoutes(app);
   templatesRoutes(app);
   templatesWriteRoutes(app);
   contractsRoutes(app);

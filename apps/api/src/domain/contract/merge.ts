@@ -38,7 +38,15 @@ function findMatchingIf(body: string, from: number, end: number): { contentEnd: 
   return null;
 }
 
-export function mergeFields(body: string, values: Record<string, string>): { html: string; leftover: string[] } {
+/**
+ * Fill `{{key}}` / `{{#if key}}…{{/if}}`. Every value is escaped — except keys in `trustedHtml`, the one channel for markup the
+ * server itself built with every cell escaped (the `lines` table, PLAN-08 R-5). User input never reaches `trustedHtml`.
+ */
+export function mergeFields(
+  body: string,
+  values: Record<string, string>,
+  trustedHtml: Record<string, string> = {},
+): { html: string; leftover: string[] } {
   const leftover: string[] = [];
   const seen = new Set<string>();
 
@@ -89,7 +97,9 @@ export function mergeFields(body: string, values: Record<string, string>): { htm
         continue;
       }
 
-      if (KEY_RE.test(inner) && Object.prototype.hasOwnProperty.call(values, inner)) {
+      if (KEY_RE.test(inner) && Object.prototype.hasOwnProperty.call(trustedHtml, inner)) {
+        html += trustedHtml[inner] ?? "";
+      } else if (KEY_RE.test(inner) && Object.prototype.hasOwnProperty.call(values, inner)) {
         html += escapeHtml(values[inner] ?? "");
       } else {
         addLeftover(leftover, seen, KEY_RE.test(inner) ? inner : token);

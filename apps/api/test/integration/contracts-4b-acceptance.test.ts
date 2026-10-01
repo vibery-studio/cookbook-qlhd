@@ -53,10 +53,9 @@ interface Step {
 interface Snapshot {
   template: { id: string; version_id: string; version_no: number };
   customer: { id: string; name: string; phone: string | null };
-  package: { code: string; unit_price: number };
   fields: Record<string, string>;
-  lines: Array<{ description: string; qty: number; unit_price: number; discount_bps: number; amount: number }>;
-  gross: number;
+  lines: Array<{ product_id: string; code: string; qty: number; unit_price_ex_vat: number; amount_ex_vat: number; net_ex_vat: number }>;
+  vat_groups: Array<{ vat_rate_bps: number | null; base: number; vat: number }>;
   discount_amount: number;
   total: number;
   total_words: string;
@@ -214,7 +213,9 @@ async function templateId(by: Staff): Promise<string> {
   return t!.id;
 }
 
-const WITHOUT_TITLE = { ma_goi: "G6", so_cua_hang: 1, giam_gia: 500 };
+/** SPEC-08 FR-4: one G6 line (seed id, migration 0022); prices come from the server. */
+const G6_LINES = [{ product_id: "01PROD000000000000000000G6", qty: 1 }];
+const WITHOUT_TITLE = { giam_gia: 500 };
 const BASE_VALUES = { ...WITHOUT_TITLE, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" };
 
 function post(by: Staff, path: string, body: unknown, key?: string): Promise<Response> {
@@ -233,7 +234,7 @@ function createRaw(
   extra: Record<string, unknown> = {},
   key?: string,
 ): Promise<Response> {
-  return post(by, "/contracts", { template_id: tplId, customer_id: customerId, values, ...extra }, key);
+  return post(by, "/contracts", { template_id: tplId, customer_id: customerId, lines: G6_LINES, values, ...extra }, key);
 }
 
 async function create(

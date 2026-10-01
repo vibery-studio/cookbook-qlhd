@@ -375,7 +375,11 @@ async function classifyApprove(
   if (base.kind !== "pass") return base;
   const { req, actor } = base;
   const role = await findRoleDetail(db, req.roleId);
-  if (role === null || role.version !== req.baseVersion) return { kind: "stale" };
+  if (role === null || role.version !== req.baseVersion) {
+    // Request and role are read separately: a concurrent approve of THIS request may commit between the two reads.
+    const fresh = await findChangeRequest(db, req.id);
+    return fresh !== null && fresh.status !== "pending" ? { kind: "not-pending" } : { kind: "stale" };
+  }
   const removed = new Set(req.removed);
   const after = [...new Set([...role.permissions.filter((k) => !removed.has(k)), ...req.added])].sort();
   const pairs = sodViolations(after, await listSodPairs(db));

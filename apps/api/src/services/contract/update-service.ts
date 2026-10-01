@@ -1,6 +1,7 @@
 import type { Db } from "../../db/client";
 import type { ContractDto, UpdateContractInput } from "../../dto/contracts";
 import type { Snapshot } from "../../domain/contract/types";
+import { splitInputs } from "./snapshot-builder";
 import { writeAuditEvent } from "../../dao/audit-dao";
 import { getContractForWrite, updateDraftCas } from "../../dao/contract-write-dao";
 import { loadAndBuild } from "./snapshot-builder";
@@ -35,8 +36,9 @@ export async function updateContract(
   if (current.status !== "draft") return { kind: "state-conflict", current: current.status };
 
   const previous = current.snapshot as unknown as Snapshot;
+  const kept = splitInputs(previous);
   const values = {
-    ...previous.inputs,
+    ...kept.values,
     ...(input.values === undefined ? {} : { ...input.values }),
   };
   const suppliedStart = input.values !== undefined && Object.prototype.hasOwnProperty.call(input.values, "ngay_bat_dau");
@@ -46,6 +48,7 @@ export async function updateContract(
       ? { templateId: current.template_id }
       : { templateVersionId: current.template_version_id }),
     customerId: input.customer_id ?? current.customer_id,
+    lines: input.lines ?? kept.lines,
     values,
     now: ctx.now,
     manualStart: suppliedStart || previousStartWasManual,
@@ -54,6 +57,7 @@ export async function updateContract(
   if (built.kind !== "ok") return built;
 
   const fieldNames = input.values === undefined ? [] : Object.keys(input.values);
+  if (input.lines !== undefined) fieldNames.push("lines");
   if (input.customer_id !== undefined) fieldNames.push("customer_id");
   if (input.use_latest_template === true) fieldNames.push("template_version_id");
   const now = Math.floor(ctx.now.getTime() / 1000);

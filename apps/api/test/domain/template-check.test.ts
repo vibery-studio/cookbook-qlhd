@@ -97,12 +97,47 @@ describe("checkTemplate", () => {
   });
 
   it("source registry accepts every documented source", () => {
-    for (const s of ["manual", "subject:tax_code", "price_list:unit_price", "derived:total_in_words", "issue:number", "derived:discount_bps"]) {
-      expect(isResolvableSource(s)).toBe(true);
+    for (const s of [
+      "manual",
+      "subject:tax_code",
+      "derived:total_in_words",
+      "issue:number",
+      "derived:discount_bps",
+      "derived:subtotal_ex_vat",
+      "derived:discount_amount",
+      "derived:total_ex_vat",
+      "derived:vat_total",
+      "derived:vat_rates",
+      "derived:service_name",
+      "derived:lines_table",
+    ]) {
+      expect(isResolvableSource(s), s).toBe(true);
     }
+    // SPEC-08 DEC-8/9: the price list is no longer a source
+    for (const s of ["price_list:unit_price", "price_list:name", "price_list:code"]) expect(isResolvableSource(s), s).toBe(false);
     expect(isResolvableSource("__proto__:x")).toBe(false);
     expect(isResolvableSource("constructor:name")).toBe(false);
     expect(isResolvableSource(undefined)).toBe(false);
+  });
+
+  it("a `lines` field ⇔ source derived:lines_table (PLAN-08 R-5); price_list:* refused", () => {
+    const body = "<p>{{bang}}</p>";
+    expect(codes(make({ body, fields: [f("bang", { type: "lines", required: true, source: "derived:lines_table" })] }))).toEqual([]);
+    const e = checkTemplate(
+      make({
+        body: "<p>{{a}} {{b}} {{c}}</p>",
+        fields: [
+          f("a", { type: "lines", source: "manual" }),
+          f("b", { type: "text", source: "derived:lines_table" }),
+          f("c", { source: "price_list:unit_price" }),
+        ],
+      }),
+    );
+    expect(e.map((x) => [x.code, x.key, x.source])).toEqual([
+      ["unresolvable_source", "a", "manual"],
+      ["unresolvable_source", "b", "derived:lines_table"],
+      ["unresolvable_source", "c", "price_list:unit_price"],
+    ]);
   });
 
   it("html attack list is refused (case-insensitive, fail-closed)", () => {

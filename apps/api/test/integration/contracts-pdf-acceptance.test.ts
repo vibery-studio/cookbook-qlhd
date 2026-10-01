@@ -140,7 +140,8 @@ async function draftFor(t: Team): Promise<Contract> {
   const res = await post(t.nv, "/contracts", {
     template_id: tpl.id,
     customer_id: cust.id,
-    values: { ma_goi: "G6", so_cua_hang: 1, giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" },
+    lines: [{ product_id: "01PROD000000000000000000G6", qty: 1 }], // SPEC-08: seed G6 (migration 0022)
+    values: { giam_gia: 500, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" },
   });
   expect(res.status).toBe(201);
   return res.json();

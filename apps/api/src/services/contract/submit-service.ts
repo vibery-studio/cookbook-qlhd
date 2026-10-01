@@ -24,10 +24,13 @@ export type SubmitResult =
 /** A concurrent draft edit between our read and our CAS → recompute from the new snapshot (bounded). */
 const MAX_ATTEMPTS = 3;
 
-/** Policy variables (SPEC-03 §3.2): the largest line discount + the total. Unknown → undefined → fail-closed step. */
+/**
+ * Policy variables (SPEC-03 §3.2, SPEC-08 §3.3): the document discount + the payable total (VAT included). Unknown → undefined
+ * → fail-closed step.
+ */
 function policyVars(s: Snapshot): Record<string, number | undefined> {
-  const bps = s.lines.map((l) => l.discount_bps).filter((n) => Number.isFinite(n));
-  return { discount_bps: bps.length > 0 ? Math.max(...bps) : undefined, total: s.total };
+  const bps = typeof s.discount_bps === "number" && Number.isFinite(s.discount_bps) ? s.discount_bps : undefined;
+  return { discount_bps: bps, total: s.total };
 }
 
 export async function submitContract(db: Db, ctx: CommandCtx, id: string): Promise<SubmitResult> {

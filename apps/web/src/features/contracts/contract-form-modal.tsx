@@ -15,7 +15,6 @@ import {
   errorMessage,
   updateContract,
   useContract,
-  usePriceListCodes,
   useTemplate,
   useTemplates,
   type Contract,
@@ -74,9 +73,6 @@ export function ContractFormModal(props: ContractFormProps) {
   const fields: TemplateField[] = useMemo(() => template.data?.version.fields ?? [], [template.data]);
   const keys = useMemo(() => activeKeys(fields), [fields]);
   const required = useMemo(() => requiredKeys(fields), [fields]);
-  const maGoiField = fields.find((f) => f.key === "ma_goi");
-  const priceCodes = usePriceListCodes(Boolean(maGoiField && !maGoiField.options && maGoiField.options_from));
-  const packageOptions = maGoiField?.options ?? priceCodes.data ?? [];
 
   const [customer, setCustomer] = useState<PickedCustomer | null>(editing ? { id: editing.customer_id, name: editing.customer_name } : null);
   const [form, setForm] = useState<FormState>(() => (editing ? formFromInputs(parseSnapshot(editing.snapshot).inputs) : emptyForm()));
@@ -136,7 +132,8 @@ export function ContractFormModal(props: ContractFormProps) {
     try {
       let contract: Contract;
       if (props.mode === "create") {
-        const body = { template_id: templateId, customer_id: customer.id, values: built.values };
+        // C-08-005 shim (PLAN-08 R-2): the line block arrives in C-08-008 — until then creating from the web is refused (422).
+        const body = { template_id: templateId, customer_id: customer.id, lines: [], values: built.values };
         contract = await createContract(body, keeper.keyFor(JSON.stringify(body)));
       } else {
         contract = await updateContract(props.contract.id, {
@@ -231,20 +228,7 @@ export function ContractFormModal(props: ContractFormProps) {
           {loadingTemplate ? <Skeleton className="h-[calc(var(--row-h)*3)]" /> : null}
           {template.isError ? <p className="text-md text-danger">Không tải được mẫu. Đóng rồi mở lại.</p> : null}
 
-          {keys.includes("ma_goi") && !loadingTemplate && templateId ? (
-            <Row id="cf-ma_goi" label={VALUE_LABELS.ma_goi} required error={errors.ma_goi}>
-              <select id="cf-ma_goi" value={form.ma_goi} onChange={(e) => setField("ma_goi", e.target.value)} className={cn(INPUT_CLASS, errors.ma_goi ? "border-danger" : "border-line-strong")}>
-                <option value="">Chọn gói</option>
-                {packageOptions.map((code) => (
-                  <option key={code} value={code}>{code}</option>
-                ))}
-              </select>
-            </Row>
-          ) : null}
-
-          {keys
-            .filter((k) => k !== "ma_goi")
-            .map((k) => {
+          {keys.map((k) => {
               if (loadingTemplate || !templateId) return null;
               const id = `cf-${k}`;
               const isDate = k === "ngay_bat_dau" || k === "ngay_bao_gia";
@@ -255,13 +239,13 @@ export function ContractFormModal(props: ContractFormProps) {
                   label={VALUE_LABELS[k]}
                   required={required.has(k)}
                   error={errors[k]}
-                  {...(k === "so_cua_hang" ? { hint: "Từ 1 đến 999" } : k === "giam_gia" ? { hint: "0–100, gõ 7,5 hoặc 7.5" } : {})}
+                  {...(k === "giam_gia" ? { hint: "0–100, gõ 7,5 hoặc 7.5" } : {})}
                 >
                   <input
                     id={id}
                     name={k}
                     type={isDate ? "date" : "text"}
-                    inputMode={k === "so_cua_hang" ? "numeric" : k === "giam_gia" ? "decimal" : undefined}
+                    inputMode={k === "giam_gia" ? "decimal" : undefined}
                     value={form[k]}
                     autoComplete="off"
                     aria-invalid={errors[k] ? true : undefined}

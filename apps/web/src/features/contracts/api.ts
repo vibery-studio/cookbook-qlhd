@@ -106,18 +106,6 @@ export function useTemplate(id: string | undefined) {
   });
 }
 
-/** Fallback source of `ma_goi` options when the template field has none (options_from = price_list). */
-export function usePriceListCodes(enabled: boolean) {
-  return useQuery({
-    queryKey: ["price-list"],
-    enabled,
-    queryFn: async () => {
-      const list = await unwrap(client.typed.GET("/price-list", {}) as Raw<components["schemas"]["PriceList"]>);
-      return list.items.filter((p) => p.duration_unit === "month").map((p) => p.code);
-    },
-  });
-}
-
 type AnyPost = (path: string, init: unknown) => Raw<Contract>;
 
 export type ContractAction = "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw";

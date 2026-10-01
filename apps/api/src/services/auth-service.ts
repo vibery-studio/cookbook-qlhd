@@ -47,6 +47,7 @@ import { invalidatePrincipalCache } from "../dao/session-cache";
 import type { Db } from "../db/client";
 import { writeAuditEvent } from "../dao/audit-dao";
 import { createAuditLogger } from "../observability/logger";
+import { passwordHashParams } from "../utils/password-params";
 
 // -------------------------- TTL constants ---------------------------------
 const VERIFY_TTL_SECONDS = 24 * 60 * 60; // 24h
@@ -148,7 +149,7 @@ export async function signup(
 
   const now = deps.now();
   const userId = generateUlid();
-  const passwordHash = await hashPassword(input.password);
+  const passwordHash = await hashPassword(input.password, passwordHashParams(deps.env));
 
   await createUser(deps.db, {
     id: userId,
@@ -208,11 +209,19 @@ export async function verifyEmail(
  * feed a dummy hash string when the user doesn't exist so `verifyPassword`
  * does the same amount of work.
  *
- * Precomputed dummy hash: scrypt of an empty string under OWASP 2024
- * params. Constant expression baked at module load so the CPU cost is
- * only paid on first login attempt after cold start.
+ * Dummy hash: scrypt under the SAME params new hashes use (passwordHashParams), memoised per N so the CPU cost is
+ * only paid on the first unknown-email login after cold start.
  */
-const DUMMY_HASH_PROMISE = hashPassword("dummy-for-timing-safety");
+const dummyHashes = new Map<number, Promise<string>>();
+function dummyHash(env: AuthServiceDeps["env"]): Promise<string> {
+  const params = passwordHashParams(env);
+  let hash = dummyHashes.get(params.N);
+  if (hash === undefined) {
+    hash = hashPassword("dummy-for-timing-safety", params);
+    dummyHashes.set(params.N, hash);
+  }
+  return hash;
+}
 
 export async function login(
   deps: AuthServiceDeps,
@@ -225,8 +234,7 @@ export async function login(
   let ok: boolean;
   if (userRow === null) {
     // Do the same amount of work as the real path so timing doesn't split.
-    const dummyHash = await DUMMY_HASH_PROMISE;
-    await verifyPassword(input.password, dummyHash);
+    await verifyPassword(input.password, await dummyHash(deps.env));
     ok = false;
   } else {
     ok = await verifyPassword(input.password, userRow.passwordHash);

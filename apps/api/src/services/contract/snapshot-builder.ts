@@ -1,19 +1,19 @@
 import { getCustomer } from "../../dao/customer-dao";
 import { getCurrentVersion, getTemplateVersionById } from "../../dao/template-dao";
-import { priceListAt } from "../../dao/price-list-dao";
 import { snapshotHash } from "../../domain/contract/hash";
 import { buildSnapshot } from "../../domain/contract/snapshot";
 import type {
   ApprovalPolicy,
   CustomerInput,
   FieldRule,
-  PriceRow,
+  LineRef,
   Snapshot,
   TemplateField,
   TemplateVersionInput,
 } from "../../domain/contract/types";
 import type { Db } from "../../db/client";
 import { todayInVN } from "../../utils/vn-date";
+import { resolveLines } from "../pricing-service";
 import type { BuildFailure } from "./types";
 
 const MAX_SNAPSHOT_BYTES = 256 * 1024;
@@ -22,6 +22,7 @@ export interface LoadAndBuildInput {
   templateVersionId?: string;
   templateId?: string;
   customerId: string;
+  lines: LineRef[];
   values: Record<string, unknown>;
   now: Date;
   manualStart: boolean;
@@ -67,18 +68,10 @@ function customerInput(customer: Awaited<ReturnType<typeof getCustomer>>): Custo
   };
 }
 
-function priceInput(
-  row: Awaited<ReturnType<typeof priceListAt>>[number] | undefined,
-): PriceRow | null {
-  if (row === undefined) return null;
-  return {
-    code: row.code,
-    name: row.name,
-    duration_value: row.duration_value,
-    duration_unit: row.duration_unit,
-    unit_price: row.unit_price,
-    effective_from: row.effective_from,
-  };
+/** A stored snapshot's inputs → the requested lines + the manual values (for edit / copy: re-priced on the new date). */
+export function splitInputs(snapshot: Pick<Snapshot, "inputs">): { lines: LineRef[]; values: Record<string, unknown> } {
+  const { lines, ...values } = snapshot.inputs ?? { lines: [] };
+  return { lines: Array.isArray(lines) ? lines.map((l) => ({ product_id: l.product_id, qty: l.qty })) : [], values };
 }
 
 function mapBuildFailure(result: Exclude<ReturnType<typeof buildSnapshot>, { ok: true }>): BuildFailure {
@@ -101,14 +94,14 @@ export async function loadAndBuild(db: Db, input: LoadAndBuildInput): Promise<Lo
   if (customerRow === null) return { kind: "not-found", what: "customer" };
 
   const docDate = todayInVN(input.now);
-  const requestedCode = typeof input.values.ma_goi === "string" ? input.values.ma_goi : undefined;
-  const prices = await priceListAt(db, docDate);
-  const price = priceInput(prices.find((item) => item.code === requestedCode));
+  // PLAN-08 P-2: per-line rules first (unknown / duplicate / inactive / no price), then the document rule in buildSnapshot.
+  const resolved = await resolveLines(db, input.lines, docDate);
+  if (resolved.kind !== "ok") return resolved;
   const version = decodeTemplateVersion(versionRow);
   const result = buildSnapshot({
     version,
     customer: customerInput(customerRow),
-    price,
+    lines: resolved.lines,
     values: input.values,
     docDate,
     manualStart: input.manualStart,

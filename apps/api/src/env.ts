@@ -27,6 +27,8 @@ export const EnvSchema = z.object({
   RATE_LIMIT_AUTH_SIGNUP: z.coerce.number().default(3),
   /** SPEC-05: `browser` = Chrome via BROWSER · `fake` = fixed tiny PDF (vitest) · `off` = kill-switch, GET …/pdf → 503. */
   PDF_RENDERER: z.enum(["browser", "fake", "off"]).default("browser"),
+  /** `test-fast` = cheap scrypt for vitest only; ignored unless APP_ENV=development (utils/password-params.ts). */
+  PASSWORD_HASH_PROFILE: z.enum(["owasp2024", "test-fast"]).default("owasp2024"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -42,7 +42,6 @@ interface FieldDef {
   required: boolean;
   source: string;
   options?: string[];
-  options_from?: string;
   default?: string | number;
 }
 interface VersionDetail {
@@ -88,7 +87,8 @@ interface CheckProblem {
 // ---- fixtures ----------------------------------------------------------------------------------------------------
 /**
  * `template_versions` is append-only (a DB trigger refuses UPDATE/DELETE — AC-10), so the per-test reset
- * drops that trigger, removes what tests created, puts the seed template back on v1, and recreates the trigger.
+ * drops that trigger, removes what tests created, puts the seed template back on its seeded current version (v2 since
+ * SPEC-08 migration 0023; v1 kept), and recreates the trigger.
  * Everything is raw SQL and tolerant of a missing table (red run).
  */
 async function resetTemplates(): Promise<void> {
@@ -100,10 +100,10 @@ async function resetTemplates(): Promise<void> {
     for (const t of triggers.results) await env.DB.prepare(`DROP TRIGGER ${t.name}`).run();
     try {
       if (seed) {
-        await env.DB.prepare("DELETE FROM template_versions WHERE template_id <> ? OR version_no > 1").bind(seed.id).run();
+        await env.DB.prepare("DELETE FROM template_versions WHERE template_id <> ? OR version_no > 2").bind(seed.id).run();
         await env.DB.prepare("DELETE FROM templates WHERE id <> ?").bind(seed.id).run();
         await env.DB.prepare(
-          "UPDATE templates SET current_version_id = (SELECT id FROM template_versions WHERE template_id = templates.id AND version_no = 1) WHERE id = ?",
+          "UPDATE templates SET current_version_id = (SELECT id FROM template_versions WHERE template_id = templates.id AND version_no = 2) WHERE id = ?",
         )
           .bind(seed.id)
           .run();
@@ -121,7 +121,8 @@ async function resetTemplates(): Promise<void> {
 
 async function resetDb(): Promise<void> {
   await resetTemplates();
-  // keep the seed's own `template.created` row (actor NULL); drop everything else
+  // keep the seed's own `template.created` row (actor NULL); drop everything else (incl. 0023's v2 `template.version_created`,
+  // so version_created counts below are the test's own)
   await clearAuditEvents(env.DB, "NOT (action = 'template.created' AND actor IS NULL)");
   await truncateTables(getDb(env), [verificationTokens, refreshTokens, jwtRevocations, userRoles, users]);
 }
@@ -220,7 +221,7 @@ async function auditRows(s: RunwaySession, action: string) {
   return body.items;
 }
 
-// SPEC-02 §3.4 — the 16 placeholders of Hop_Dong_Dich_Vu.docx and where each value comes from
+// SPEC-02 §3.4 + SPEC-08 §3.4 (seed v2, migration 0023) — the 20 placeholders and where each value comes from
 const SEED_SOURCES: Record<string, string> = {
   so_hop_dong: "issue:number",
   so_bao_gia: "manual",
@@ -231,14 +232,21 @@ const SEED_SOURCES: Record<string, string> = {
   chuc_vu_nguoi_ky: "manual",
   sdt: "subject:phone",
   email: "subject:email",
-  ten_goi: "price_list:name",
-  so_cua_hang: "manual",
+  ten_goi: "derived:service_name",
+  bang_hang: "derived:lines_table",
   ngay_bat_dau: "manual",
   ngay_ket_thuc: "derived:contract_end",
   giam_gia: "manual",
-  tong_tien: "derived:total",
-  tong_tien_bang_chu: "derived:total_in_words",
+  tien_truoc_thue: "derived:subtotal_ex_vat",
+  tien_giam_gia: "derived:discount_amount",
+  thue_suat: "derived:vat_rates",
+  tien_thue: "derived:vat_total",
+  tong_thanh_toan: "derived:total",
+  tong_thanh_toan_bang_chu: "derived:total_in_words",
 };
+
+/** The seed's current version (v2 since SPEC-08 DEC-8); a POSTed version becomes SEED_V + 1. */
+const SEED_V = 2;
 
 describe("SPEC-02 templates (acceptance)", () => {
   beforeEach(async () => {
@@ -247,7 +255,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     _resetJtiCache();
   });
 
-  it("AC-1: after migrate, all three roles see exactly the one seeded template at v1 with its approval policy", async () => {
+  it("AC-1: after migrate, all three roles see exactly the one seeded template at v2 (v1 kept) with its approval policy", async () => {
     const { gd, ql, nv } = await team();
     for (const s of [nv.session, ql.session, gd.session]) {
       const res = await s.fetch("/templates");
@@ -255,15 +263,15 @@ describe("SPEC-02 templates (acceptance)", () => {
       const list: TemplateList = await res.json();
       expect(list.items).toHaveLength(1);
       expect(list.items[0]).toMatchObject({ name: SEED_NAME, type: "contract", active: true });
-      expect(list.items[0]?.current_version.version_no).toBe(1);
+      expect(list.items[0]?.current_version.version_no).toBe(SEED_V);
       expect(list.items[0]?.required_fields).toContain("chuc_vu_nguoi_ky");
       expect(list.items[0]).not.toHaveProperty("body"); // list has no body (§3.8)
     }
 
     const t = await getSeed(nv.session);
     expect(t.subject_type).toBe("customer");
-    expect(t.version.version_no).toBe(1);
-    expect(t.versions.map((v) => v.version_no)).toEqual([1]);
+    expect(t.version.version_no).toBe(SEED_V);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
     expect(t.version.approval_policy).toEqual({
       mode: "combined",
       steps: [{ step_no: 1, label: "Quản lý duyệt", permission: "contract:approve" }],
@@ -275,14 +283,15 @@ describe("SPEC-02 templates (acceptance)", () => {
       ],
     });
     const byKey = new Map(t.version.fields.map((f) => [f.key, f]));
-    expect(byKey.get("ma_goi")?.options).toEqual(["G3", "G6", "G12"]);
+    expect(byKey.get("bang_hang")).toMatchObject({ type: "lines", source: "derived:lines_table" }); // SPEC-08 DEC-7
+    expect(byKey.has("ma_goi")).toBe(false);
     expect(byKey.get("ngay_bat_dau")?.default).toBe("derived:doc_date");
     expect(byKey.get("giam_gia")?.default).toBe(0);
     expect(t.version.default_line_items).toEqual([]);
     expect(t.version.default_clauses).toEqual([]);
   });
 
-  it("AC-2: seed body v1 — no internal note, 16 placeholders each with the right source, chuc_vu_nguoi_ky manual + required, so_bao_gia/ngay_bao_gia optional + all_or_none, {{#if}} wraps 'Căn cứ'", async () => {
+  it("AC-2: seed body v2 — no internal note, 20 placeholders each with the right source, chuc_vu_nguoi_ky manual + required, so_bao_gia/ngay_bao_gia optional + all_or_none, {{#if}} wraps 'Căn cứ'", async () => {
     const { nv } = await team();
     const t = await getSeed(nv.session);
     const body = t.version.body;
@@ -291,7 +300,9 @@ describe("SPEC-02 templates (acceptance)", () => {
 
     const keys = new Set([...body.matchAll(/\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/g)].map((m) => m[1]!));
     expect([...keys].sort()).toEqual(Object.keys(SEED_SOURCES).sort());
-    expect(keys.size).toBe(16);
+    expect(keys.size).toBe(20);
+    expect(t.version.fields).toHaveLength(20);
+    expect(body).not.toContain("đã gồm VAT"); // SPEC-08 §3.4
 
     const byKey = new Map(t.version.fields.map((f) => [f.key, f]));
     for (const [key, source] of Object.entries(SEED_SOURCES)) {
@@ -302,37 +313,37 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(byKey.get("ngay_bao_gia")?.required).toBe(false);
     expect(t.version.field_rules).toContainEqual({ all_or_none: ["so_bao_gia", "ngay_bao_gia"] });
     for (const k of ["ten_khach", "sdt", "email"]) expect(byKey.get(k)?.required, k).toBe(true); // DEC-8
-    // ma_goi is used to compute, not printed
-    expect(keys.has("ma_goi")).toBe(false);
-    expect(byKey.get("ma_goi")).toMatchObject({ type: "choice", required: true, source: "manual" });
+    // SPEC-08: packages + quantities are document lines now — no ma_goi / so_cua_hang / tong_tien, no price_list source
+    for (const gone of ["ma_goi", "so_cua_hang", "tong_tien"]) expect(byKey.has(gone), gone).toBe(false);
+    expect(t.version.fields.some((f) => f.source.startsWith("price_list:"))).toBe(false);
 
     expect(body).toMatch(/\{\{#if so_bao_gia\}\}[^]*Căn cứ báo giá số \{\{so_bao_gia\}\}[^]*\{\{\/if\}\}/);
     expect(body).toContain("CÔNG TY TNHH PHẦN MỀM NHẬT MINH"); // Bên A stays in the body (DEC-4)
   });
 
-  it("AC-3: Giám đốc posts v2 (expected_version_no 1) → 201; v2 becomes current; v1 is byte-for-byte unchanged", async () => {
+  it("AC-3: Giám đốc posts v3 (expected_version_no 2) → 201; v3 becomes current; v2 is byte-for-byte unchanged", async () => {
     const { gd, nv } = await team();
     const seed = await getSeed(gd.session);
-    // compare the v1 VERSION object only — the detail's `versions[]` list legitimately gains v2
+    // compare the v2 VERSION object only — the detail's `versions[]` list legitimately gains v3
     const v1Of = async (s: RunwaySession): Promise<string> => {
-      const d: TemplateDetail = await (await s.fetch(`/templates/${seed.id}?version_no=1`)).json();
+      const d: TemplateDetail = await (await s.fetch(`/templates/${seed.id}?version_no=${SEED_V}`)).json();
       return JSON.stringify(d.version);
     };
     const v1Before = await v1Of(gd.session);
 
     const edited = seed.version.body.replace("Hôm nay, ngày", "Hôm nay là ngày");
     expect(edited).not.toBe(seed.version.body);
-    const res = await postVersion(gd.session, seed.id, versionPayload(seed.version, { expected_version_no: 1, body: edited, note: "sửa một câu" }));
+    const res = await postVersion(gd.session, seed.id, versionPayload(seed.version, { expected_version_no: SEED_V, body: edited, note: "sửa một câu" }));
     expect(res.status).toBe(201);
     const created: TemplateDetail = await res.json();
-    expect(created.version.version_no).toBe(2);
+    expect(created.version.version_no).toBe(SEED_V + 1);
 
     const now: TemplateDetail = await (await nv.session.fetch(`/templates/${seed.id}`)).json();
-    expect(now.version.version_no).toBe(2);
+    expect(now.version.version_no).toBe(SEED_V + 1);
     expect(now.version.body).toBe(edited);
-    expect(now.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
+    expect(now.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
     const list: TemplateList = await (await nv.session.fetch("/templates")).json();
-    expect(list.items[0]?.current_version.version_no).toBe(2);
+    expect(list.items[0]?.current_version.version_no).toBe(SEED_V + 1);
 
     const v1After = await v1Of(nv.session);
     expect(v1After).toBe(v1Before);
@@ -346,7 +357,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     const auditBefore = (await auditRows(gd.session, "template.version_created")).length;
 
     const bad = versionPayload(seed.version, {
-      expected_version_no: 1,
+      expected_version_no: SEED_V,
       body: `${seed.version.body}<p>{{ten_cong_ty}}</p>`,
       fields: [
         ...seed.version.fields,
@@ -367,14 +378,14 @@ describe("SPEC-02 templates (acceptance)", () => {
     for (const e of p.errors) expect(e.message.length).toBeGreaterThan(0);
 
     const after: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(after.versions.map((v) => v.version_no)).toEqual([1]);
+    expect(after.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
     expect((await auditRows(gd.session, "template.version_created")).length).toBe(auditBefore);
   });
 
   it("AC-4 (input edge cases): unbalanced {{#if}}, malformed {{ Placeholder }}, duplicate field key, choice without options, body empty → 422", async () => {
     const { gd } = await team();
     const seed = await getSeed(gd.session);
-    const post = (over: Record<string, unknown>) => postVersion(gd.session, seed.id, tinyVersion({ expected_version_no: 1, ...over }));
+    const post = (over: Record<string, unknown>) => postVersion(gd.session, seed.id, tinyVersion({ expected_version_no: SEED_V, ...over }));
 
     const unbalanced = await post({ body: "<p>{{#if ten_khach}}Xin chào {{ten_khach}}</p>" });
     expect(unbalanced.status).toBe(422);
@@ -394,14 +405,14 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect((await post({ body: "" })).status).toBe(422);
 
     const after: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(after.versions).toHaveLength(1);
+    expect(after.versions).toHaveLength(SEED_V);
   });
 
   it("AC-5: internal note → internal_note; <script>/onclick → html_not_allowed; bad approval_policy → policy_invalid; oversize → too_large", async () => {
     const { gd } = await team();
     const seed = await getSeed(gd.session);
     const codes = async (over: Record<string, unknown>): Promise<string[]> => {
-      const res = await postVersion(gd.session, seed.id, tinyVersion({ expected_version_no: 1, ...over }));
+      const res = await postVersion(gd.session, seed.id, tinyVersion({ expected_version_no: SEED_V, ...over }));
       expect(res.status).toBe(422);
       const p: CheckProblem = await res.json();
       expect(p.type).toMatch(/\/template-check-failed$/);
@@ -421,14 +432,14 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(await codes({ fields: [{ key: "ten_khach", label: "Tên", type: "text", required: true, source: "subject:name" }, ...many] })).toContain("too_large");
 
     const after: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(after.versions).toHaveLength(1);
+    expect(after.versions).toHaveLength(SEED_V);
   });
 
-  it("AC-6: two concurrent POSTs with the same expected_version_no → exactly one 201 and one 409 stale; versions 1 and 2 only", async () => {
+  it("AC-6: two concurrent POSTs with the same expected_version_no → exactly one 201 and one 409 stale; versions 1, 2 and 3 only", async () => {
     const { admin, gd } = await team();
     const other = await invite(admin, "giam_doc", "hai@nhatminh.vn", "Giám đốc hai");
     const seed = await getSeed(gd.session);
-    const mk = (marker: string) => versionPayload(seed.version, { expected_version_no: 1, body: seed.version.body.replace("Điều 5", `Điều 5 ${marker}`) });
+    const mk = (marker: string) => versionPayload(seed.version, { expected_version_no: SEED_V, body: seed.version.body.replace("Điều 5", `Điều 5 ${marker}`) });
 
     const [a, b] = await Promise.all([postVersion(gd.session, seed.id, mk("A")), postVersion(other.session, seed.id, mk("B"))]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
@@ -437,10 +448,10 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(loserBody.type).toMatch(/\/stale$/);
 
     const t: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
-    expect(t.version.version_no).toBe(2);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
+    expect(t.version.version_no).toBe(SEED_V + 1);
     const rows = await env.DB.prepare("SELECT version_no FROM template_versions WHERE template_id = ? ORDER BY version_no").bind(seed.id).all<{ version_no: number }>();
-    expect(rows.results.map((r) => r.version_no)).toEqual([1, 2]);
+    expect(rows.results.map((r) => r.version_no)).toEqual([1, 2, 3]);
     expect(await auditRows(gd.session, "template.version_created")).toHaveLength(1);
   });
 
@@ -448,14 +459,14 @@ describe("SPEC-02 templates (acceptance)", () => {
     const { gd } = await team();
     const seed = await getSeed(gd.session);
     const key = crypto.randomUUID();
-    const payload = versionPayload(seed.version, { expected_version_no: 1, body: seed.version.body.replace("Điều 5", "Điều 5 (lặp)") });
+    const payload = versionPayload(seed.version, { expected_version_no: SEED_V, body: seed.version.body.replace("Điều 5", "Điều 5 (lặp)") });
     const r1 = await postVersion(gd.session, seed.id, payload, { "Idempotency-Key": key });
     const r2 = await postVersion(gd.session, seed.id, payload, { "Idempotency-Key": key });
     expect(r1.status).toBe(201);
     expect(r2.status).toBe(201);
     expect(await r2.text()).toBe(await r1.text());
     const t: TemplateDetail = await (await gd.session.fetch(`/templates/${seed.id}`)).json();
-    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2]);
+    expect(t.versions.map((v) => v.version_no).sort()).toEqual([1, 2, 3]);
     expect(await auditRows(gd.session, "template.version_created")).toHaveLength(1);
   });
 
@@ -473,7 +484,7 @@ describe("SPEC-02 templates (acceptance)", () => {
       const c = await postTemplate(who.session, `Mẫu của ${who.email}`, tinyVersion(), ip);
       expect(c.status).toBe(403);
       expect(c.headers.get("content-type")).toContain("application/problem+json");
-      const v = await postVersion(who.session, seed.id, versionPayload(seed.version, { expected_version_no: 1 }), ip);
+      const v = await postVersion(who.session, seed.id, versionPayload(seed.version, { expected_version_no: SEED_V }), ip);
       expect(v.status).toBe(403);
       expect(v.headers.get("content-type")).toContain("application/problem+json");
     }
@@ -488,7 +499,7 @@ describe("SPEC-02 templates (acceptance)", () => {
 
     const list: TemplateList = await (await gd.session.fetch("/templates")).json();
     expect(list.items).toHaveLength(1);
-    expect(list.items[0]?.current_version.version_no).toBe(1);
+    expect(list.items[0]?.current_version.version_no).toBe(SEED_V);
     expect((await admin.fetch("/templates")).status).toBe(403);
     expect((await admin.fetch(`/templates/${seed.id}`)).status).toBe(403);
   });
@@ -503,7 +514,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     expect(created.status).toBe(201);
     const t: TemplateDetail = await created.json();
     const seed = await getSeed(gd.session);
-    const v2 = await postVersion(gd.session, seed.id, versionPayload(seed.version, { expected_version_no: 1, body: seed.version.body.replace("Điều 5", "Điều 5 bis") }));
+    const v2 = await postVersion(gd.session, seed.id, versionPayload(seed.version, { expected_version_no: SEED_V, body: seed.version.body.replace("Điều 5", "Điều 5 bis") }));
     expect(v2.status).toBe(201);
 
     const createdRows = (await auditRows(gd.session, "template.created")).filter((e) => e.actor !== null);
@@ -514,7 +525,7 @@ describe("SPEC-02 templates (acceptance)", () => {
     const vRows = await auditRows(gd.session, "template.version_created");
     expect(vRows).toHaveLength(1);
     expect(vRows[0]).toMatchObject({ actor: gd.userId, target: `template:${seed.id}` });
-    expect(vRows[0]?.metadata).toMatchObject({ version_no: 2 });
+    expect(vRows[0]?.metadata).toMatchObject({ version_no: SEED_V + 1 });
     const raw = JSON.stringify([...createdRows, ...vRows]);
     expect(raw).not.toContain("Điều 5");
     expect(raw).not.toContain("CÔNG TY TNHH");

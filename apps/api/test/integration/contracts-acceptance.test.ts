@@ -54,13 +54,30 @@ interface Step {
   snapshot_hash_at_decision: string | null;
 }
 
+interface SnapLine {
+  product_id: string;
+  code: string;
+  name: string;
+  qty: number;
+  unit_price_ex_vat: number;
+  vat_rate_bps: number | null;
+  price_from: string;
+  amount_ex_vat: number;
+  discount_amount: number;
+  net_ex_vat: number;
+}
+
+/** SPEC-08 §3.2 snapshot (lines + VAT groups; no `package` / `gross`). */
 interface Snapshot {
   template: { id: string; version_id: string; version_no: number };
   customer: { id: string; name: string; phone: string | null };
-  package: { code: string; unit_price: number };
   fields: Record<string, string>;
-  lines: Array<{ description: string; qty: number; unit_price: number; discount_bps: number; amount: number }>;
-  gross: number;
+  lines: SnapLine[];
+  vat_groups: Array<{ vat_rate_bps: number | null; base: number; vat: number }>;
+  subtotal_ex_vat: number;
+  discount_bps: number;
+  total_ex_vat: number;
+  vat_total: number;
   discount_amount: number;
   total: number;
   total_words: string;
@@ -236,7 +253,16 @@ async function templateId(by: Staff): Promise<string> {
   return t!.id;
 }
 
-const WITHOUT_TITLE = { ma_goi: "G6", so_cua_hang: 1, giam_gia: 500 };
+/** Seed product ids (migration 0022 literals — SPEC-08 DEMO seed). */
+const PRODUCT = {
+  G6: "01PROD000000000000000000G6",
+  G12: "01PROD00000000000000000G12",
+  DT14: "01PROD0000000000000000DT14",
+} as const;
+type LineIn = { product_id: string; qty: number };
+/** SPEC-08 FR-4: products + quantities travel in `lines`; the default contract is one G6 for one shop. */
+const G6_LINES: LineIn[] = [{ product_id: PRODUCT.G6, qty: 1 }];
+const WITHOUT_TITLE = { giam_gia: 500 };
 const BASE_VALUES = { ...WITHOUT_TITLE, chuc_vu_nguoi_ky: "Chủ hộ kinh doanh" };
 
 function post(by: Staff, path: string, body: unknown, key?: string): Promise<Response> {
@@ -255,7 +281,7 @@ function createRaw(
   extra: Record<string, unknown> = {},
   key?: string,
 ): Promise<Response> {
-  return post(by, "/contracts", { template_id: tplId, customer_id: customerId, values, ...extra }, key);
+  return post(by, "/contracts", { template_id: tplId, customer_id: customerId, lines: G6_LINES, values, ...extra }, key);
 }
 
 async function create(
@@ -263,8 +289,9 @@ async function create(
   tplId: string,
   customerId: string,
   values: Record<string, unknown> = BASE_VALUES,
+  lines: LineIn[] = G6_LINES,
 ): Promise<Contract> {
-  const res = await createRaw(by, tplId, customerId, values);
+  const res = await createRaw(by, tplId, customerId, values, { lines });
   expect(res.status).toBe(201);
   return res.json();
 }
@@ -436,14 +463,13 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect(half.status).toBe(422);
   });
 
-  it("AC-6: server_prices_from_price_list_on_doc_date — client prices refused; G6 = 2.400.000 on 30/06, 2.700.000 on 28/09", async () => {
+  it("AC-6: server_prices_on_doc_date — client prices refused; G6 = 2.400.000 on 30/06, 2.700.000 on 28/09 (seed levels)", async () => {
     pin("2026-06-30T03:00:00Z");
     const t = await team();
     const tpl = await templateId(t.nv);
     const c = await customer(t.nv);
     const june = await create(t.nv, tpl, c.id, { ...BASE_VALUES, giam_gia: 0 });
-    expect(june.snapshot.package.unit_price).toBe(2_400_000);
-    expect(june.snapshot.lines[0]?.unit_price).toBe(2_400_000);
+    expect(june.snapshot.lines[0]).toMatchObject({ code: "G6", unit_price_ex_vat: 2_400_000, price_from: "2025-01-01" });
     expect(june.total).toBe(2_400_000);
     expect(june.doc_date).toBe("2026-06-30");
 
@@ -463,9 +489,9 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     pin(FIXTURE_DAY);
     await relogin(t.nv);
     const sept = await create(t.nv, tpl, c.id, { ...BASE_VALUES, giam_gia: 0 });
-    expect(sept.snapshot.package.unit_price).toBe(2_700_000);
+    expect(sept.snapshot.lines[0]).toMatchObject({ unit_price_ex_vat: 2_700_000, price_from: "2026-07-01" });
 
-    for (const forged of [{ total: 1 }, { unit_price: 1 }]) {
+    for (const forged of [{ total: 1 }, { unit_price: 1 }, { lines: [{ ...G6_LINES[0], unit_price_ex_vat: 1 }] }]) {
       const res = await createRaw(t.nv, tpl, c.id, BASE_VALUES, forged);
       expect(res.status, JSON.stringify(forged)).toBe(422);
     }
@@ -480,33 +506,44 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
 
     const a = await create(t.nv, tpl, c.id);
     expect(a.snapshot).toMatchObject({
-      gross: 2_700_000,
+      subtotal_ex_vat: 2_700_000,
+      discount_bps: 500,
       discount_amount: 135_000,
+      total_ex_vat: 2_565_000,
+      vat_groups: [{ vat_rate_bps: null, base: 2_565_000, vat: 0 }],
+      vat_total: 0,
       total: 2_565_000,
       total_words: "Hai triệu năm trăm sáu mươi lăm nghìn đồng",
       dates: { doc_date: "2026-09-28", start: "2026-09-28", end: "2027-03-27" },
     });
-    expect(a.snapshot.lines).toEqual([
-      { description: "Gói 6 tháng", qty: 1, unit_price: 2_700_000, discount_bps: 500, amount: 2_565_000 },
+    expect(a.snapshot.lines).toMatchObject([
+      { code: "G6", name: "Gói 6 tháng", qty: 1, unit_price_ex_vat: 2_700_000, vat_rate_bps: null, amount_ex_vat: 2_700_000, discount_amount: 135_000, net_ex_vat: 2_565_000 },
     ]);
     const paper = (await render(t.nv, a.id)).html;
     expect(paper).toContain("2.565.000");
     expect(paper).toContain("28/09/2026");
     expect(paper).toContain("27/03/2027");
-    expect(paper).toContain("đã trừ giảm giá 5%");
+    expect(paper).toContain("giảm giá 5% (135.000 đồng)"); // template v2 Điều 2 (SPEC-08 §3.4)
 
-    const b = await create(t.nv, tpl, c.id, { ...BASE_VALUES, ma_goi: "G12", so_cua_hang: 2, giam_gia: 1500 });
+    const b = await create(t.nv, tpl, c.id, { ...BASE_VALUES, giam_gia: 1500 }, [{ product_id: PRODUCT.G12, qty: 2 }]);
     expect(b.total).toBe(8_160_000);
     expect(b.snapshot.dates.end).toBe("2027-09-27");
 
     const monthEnd = await create(t.nv, tpl, c.id, { ...BASE_VALUES, ngay_bat_dau: "2026-08-31" });
     expect(monthEnd.snapshot.dates.end).toBe("2027-02-28");
 
-    const trial = await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, ma_goi: "DT14" });
+    // DT14 is off sale (seed active = 0) → product-inactive naming the line (SPEC-08, PLAN-08 P-2)
+    const trial = await createRaw(t.nv, tpl, c.id, BASE_VALUES, { lines: [{ product_id: PRODUCT.DT14, qty: 1 }] });
     expect(trial.status).toBe(422);
-    expect(JSON.stringify(await trial.json())).toContain("ma_goi");
+    const trialBody: ProblemBody = await trial.json();
+    expect(trialBody.type).toContain("product-inactive");
+    expect(trialBody.errors?.map((e) => e.path)).toContain("lines.0.product_id");
 
-    for (const bad of [{ so_cua_hang: 0 }, { so_cua_hang: 1000 }, { giam_gia: 10_001 }, { giam_gia: -1 }, { ngay_bat_dau: "2026-02-30" }]) {
+    for (const qty of [0, 10_000]) {
+      const res = await createRaw(t.nv, tpl, c.id, BASE_VALUES, { lines: [{ product_id: PRODUCT.G6, qty }] });
+      expect(res.status, `qty ${qty}`).toBe(422);
+    }
+    for (const bad of [{ giam_gia: 10_001 }, { giam_gia: -1 }, { ngay_bat_dau: "2026-02-30" }]) {
       const res = await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, ...bad });
       expect(res.status, JSON.stringify(bad)).toBe(422);
     }
@@ -600,7 +637,7 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     const t = await team(); // exactly 1 Giám đốc + 1 Quản lý
     const tpl = await templateId(t.nv);
     const c = await customer(t.nv);
-    const d = await create(t.nv, tpl, c.id, { ...BASE_VALUES, ma_goi: "G12", so_cua_hang: 2, giam_gia: 1500 });
+    const d = await create(t.nv, tpl, c.id, { ...BASE_VALUES, giam_gia: 1500 }, [{ product_id: PRODUCT.G12, qty: 2 }]);
     await act(t.nv, d.id, "submit");
 
     // the approve action always targets the lowest waiting step; the director taking step 1 would leave step 2
@@ -922,7 +959,7 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect((await get(t.gd, d.id)).status).toBe("pending");
   });
 
-  it("AC-21: live-data probe — after issue, customer rename + phone + a new G6 price leave the paper byte-identical", async () => {
+  it("AC-21: live-data probe — after issue, customer rename + phone + G6 renamed / off sale / a new price leave the paper byte-identical", async () => {
     const t = await team();
     const tpl = await templateId(t.nv);
     const c = await customer(t.nv, { phone: "0908 111 222" });
@@ -938,9 +975,12 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
       body: JSON.stringify({ name: "Siêu thị Mini Ba", phone: "0987 654 321", expected_version: c.version }),
     });
     expect(edit.status).toBe(200);
-    await sqlRun("UPDATE price_list SET effective_to = '2026-09-27' WHERE code = 'G6' AND effective_to IS NULL");
+    // SPEC-08: the product changes under the issued paper. Raw SQL; the new level is far in the future because the
+    // product_prices backdate trigger uses SQLite's real clock, not the pinned Date (PLAN-08 P-4).
+    await sqlRun("UPDATE products SET name = 'Gói 6 tháng (đổi tên)', active = 0, version = version + 1 WHERE id = ?", PRODUCT.G6);
     await sqlRun(
-      "INSERT INTO price_list (id, code, name, duration_value, duration_unit, unit_price, effective_from, effective_to, note) VALUES ('01J9ZTESTG6PRICE0000000000', 'G6', 'Gói 6 tháng', 6, 'month', 2900000, '2026-09-28', NULL, 'test')",
+      "INSERT INTO product_prices (id, product_id, effective_from, unit_price_ex_vat, vat_rate_bps, created_by, created_at) VALUES ('01J9ZTESTG6PRICE0000000000', ?, '2099-01-01', 2900000, NULL, NULL, unixepoch())",
+      PRODUCT.G6,
     );
 
     const second = await render(t.nv, d.id);
@@ -950,6 +990,7 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect(second.html).toContain("0908 111 222");
     expect(second.html).toContain("2.565.000");
     expect(second.html).not.toContain("Siêu thị Mini Ba");
+    expect(second.html).not.toContain("(đổi tên)");
   });
 
   it("AC-22: template-edit probe — issued on v1 stays identical after v2; new contracts use v2; old draft keeps v1 until use_latest_template", async () => {
@@ -989,17 +1030,22 @@ describe("SPEC-03 contract lifecycle (acceptance)", () => {
     expect((await r2.json<Contract>()).id).toBe((await r1.json<Contract>()).id);
     expect(r2.headers.get("idempotency-replay")).toBe("true");
     expect(await countContracts()).toBe(before + 1);
-    expect((await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, so_cua_hang: 2 }, {}, KEY_A)).status).toBe(409);
+    expect((await createRaw(t.nv, tpl, c.id, BASE_VALUES, { lines: [{ product_id: PRODUCT.G6, qty: 2 }] }, KEY_A)).status).toBe(409);
   });
 
   it("AC-24: tamper probe — total 1.000.000 + unit_price 1 → 422, no row; the honest request stores 2.565.000", async () => {
     const t = await team();
     const tpl = await templateId(t.nv);
     const c = await customer(t.nv);
-    for (const forged of [{ total: 1_000_000, unit_price: 1 }, { number: "HD-2026-999" }, { status: "issued" }]) {
+    for (const forged of [
+      { total: 1_000_000, unit_price: 1 },
+      { number: "HD-2026-999" },
+      { status: "issued" },
+      { lines: [{ ...G6_LINES[0], unit_price_ex_vat: 1 }], total: 1_000_000 }, // a price inside a line (SPEC-08 I4)
+    ]) {
       expect((await createRaw(t.nv, tpl, c.id, BASE_VALUES, forged)).status, JSON.stringify(forged)).toBe(422);
     }
-    for (const forged of [{ tong_tien: 1_000_000 }, { ngay_ket_thuc: "2030-01-01" }, { so_hop_dong: "HD-2026-999" }]) {
+    for (const forged of [{ tong_tien: 1_000_000 }, { tong_thanh_toan: 1_000_000 }, { ngay_ket_thuc: "2030-01-01" }, { so_hop_dong: "HD-2026-999" }]) {
       expect((await createRaw(t.nv, tpl, c.id, { ...BASE_VALUES, ...forged })).status, JSON.stringify(forged)).toBe(422);
     }
     expect(await countContracts()).toBe(0);

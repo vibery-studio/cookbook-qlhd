@@ -4,7 +4,8 @@ import { TimestampSchema, UlidSchema } from "./common";
 /** SPEC-02 §3.3 — `[a-z][a-z0-9_]*`. */
 const FieldKey = z.string().regex(/^[a-z][a-z0-9_]*$/, "key must match [a-z][a-z0-9_]*").max(64);
 
-export const FIELD_TYPES = ["text", "paragraph", "money", "number", "percent", "date", "choice"] as const;
+/** `lines` = the place of the server-built line table; its only source is `derived:lines_table` (SPEC-08 §3.4, template-check). */
+export const FIELD_TYPES = ["text", "paragraph", "money", "number", "percent", "date", "choice", "lines"] as const;
 
 /** `manual` | `<kind>:<ref>`; which kinds/refs exist is a template-check (FR-6), not a shape rule. */
 const SourceString = z
@@ -22,12 +23,11 @@ export const TemplateFieldSchema = z
     required: z.boolean(),
     source: SourceString,
     options: z.array(z.string().min(1).max(200)).min(1).max(100).optional(),
-    options_from: z.string().min(1).max(64).optional(),
     default: z.union([z.string().max(200), z.number()]).optional(),
   })
   .strict()
-  .refine((f) => f.type !== "choice" || f.options !== undefined || f.options_from !== undefined, {
-    message: "a choice field needs options or options_from",
+  .refine((f) => f.type !== "choice" || f.options !== undefined, {
+    message: "a choice field needs options",
     path: ["options"],
   })
   .openapi("TemplateField");

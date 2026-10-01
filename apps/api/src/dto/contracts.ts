@@ -1,5 +1,7 @@
 import { z } from "@hono/zod-openapi";
+import { MAX_LINES } from "../domain/money/line-pricing";
 import { TimestampSchema, UlidSchema } from "./common";
+import { LineInput } from "./products";
 
 const trimmedNonEmpty = (max: number) => z.string().trim().min(1).max(max);
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
@@ -7,13 +9,11 @@ const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 export const ContractStatusEnum = z.enum(["draft", "pending", "approved", "rejected", "issued", "voided"]);
 
 /**
- * `values` keys = template field `key`s (SPEC-02). `ma_goi` is a plain string on purpose: DT14 (and any unknown
- * code) must reach the snapshot builder so the 422 names `ma_goi`. Unknown keys (`total`, `unit_price`…) → 422.
+ * `values` keys = template manual field `key`s (SPEC-02). Products + quantities travel in `lines` (SPEC-08 FR-4); prices and
+ * totals are never accepted from the client (I4): unknown keys (`total`, `unit_price`, the old `ma_goi`…) → 422.
  */
 export const ContractValues = z
   .object({
-    ma_goi: z.string(),
-    so_cua_hang: z.number().int(),
     giam_gia: z.number().int().min(0).max(10000).optional(),
     chuc_vu_nguoi_ky: z.string().optional(), // absent/blank -> 422 missing-fields (builder), not validation
     ngay_bat_dau: IsoDate.optional(),
@@ -23,8 +23,11 @@ export const ContractValues = z
   .strict()
   .openapi("ContractValues");
 
+/** 1–50 `{product_id, qty}`; the server prices them on the doc date (exactly one monthly service line — DEC-10). */
+export const ContractLines = z.array(LineInput).min(1).max(MAX_LINES);
+
 export const CreateContractBody = z
-  .object({ template_id: UlidSchema, customer_id: UlidSchema, values: ContractValues })
+  .object({ template_id: UlidSchema, customer_id: UlidSchema, lines: ContractLines, values: ContractValues })
   .strict()
   .openapi("CreateContractRequest");
 
@@ -32,6 +35,8 @@ export const UpdateContractBody = z
   .object({
     expected_version: z.number().int().min(1),
     customer_id: UlidSchema.optional(),
+    /** Omitted = keep the draft's lines (re-priced on today's date). */
+    lines: ContractLines.optional(),
     values: ContractValues.optional(),
     use_latest_template: z.boolean().optional(),
   })

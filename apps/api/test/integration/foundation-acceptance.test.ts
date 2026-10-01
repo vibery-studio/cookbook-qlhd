@@ -296,31 +296,11 @@ describe("SPEC-01 foundation (acceptance)", () => {
     expect([404, 405]).toContain(del.status);
   });
 
-  it("AC-7: the price list answers by date in the business zone", async () => {
-    const { nv } = await team();
-    const at = async (date?: string) => {
-      const res = await nv.session.fetch(date ? `/price-list?date=${date}` : "/price-list");
-      expect(res.status).toBe(200);
-      const body: { date: string; items: Array<{ code: string; unit_price: number }> } = await res.json();
-      return body;
-    };
-    const june = await at("2026-06-30");
-    expect(june.items.find((p) => p.code === "G6")?.unit_price).toBe(2_400_000);
-    const july = await at("2026-07-01");
-    expect(july.items.find((p) => p.code === "G6")?.unit_price).toBe(2_700_000);
-    expect(july.items.find((p) => p.code === "G12")?.unit_price).toBe(4_800_000);
-    expect(july.items.find((p) => p.code === "DT14")?.unit_price).toBe(0);
-    expect(july.items.filter((p) => p.code === "G6")).toHaveLength(1);
-
-    const today = await at();
-    const vnToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
-    expect(today.date).toBe(vnToday);
-
-    expect((await nv.session.fetch("/price-list?date=2026-13-40")).status).toBe(422);
-  });
+  // AC-7 (GET /price-list by date) moved: SPEC-08 DEC-9 removed the route; dated prices are proven by
+  // products-acceptance AC-1 (GET /products?date=…, G6 2.400.000 on 30/06 → 2.700.000 on 01/07).
 
   it("AC-8: not logged in → 401 with no data; nhan_vien inviting → 403 + permission.denied", async () => {
-    for (const path of ["/customers", "/audit", "/price-list", "/admin/users", "/roles"]) {
+    for (const path of ["/customers", "/audit", "/products", "/admin/users", "/roles"]) {
       const res = await fetcher(`${ORIGIN}${path}`);
       expect(res.status, path).toBe(401);
       expect(await res.text()).not.toContain("items");

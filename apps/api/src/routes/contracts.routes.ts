@@ -74,10 +74,29 @@ const stateConflict = (c: Ctx, current: string) =>
     current_status: current,
   });
 
+/** PLAN-08 P-2: a line rule broken — slug validation | product-inactive | no-price, `errors[].path` names the lines. */
+function lineSlug(slug: "validation" | "product-inactive" | "no-price"): { slug: ProblemTypeSlug; title: string } {
+  switch (slug) {
+    case "product-inactive":
+      return { slug: ProblemType.ProductInactive, title: "Product is not on sale" };
+    case "no-price":
+      return { slug: ProblemType.NoPrice, title: "Product has no price on the document date" };
+    case "validation":
+      return { slug: ProblemType.Validation, title: "Validation failed" };
+  }
+}
+
+function lineFailure(c: Ctx, slug: "validation" | "product-inactive" | "no-price", errors: Array<{ path: string; message: string }>) {
+  const t = lineSlug(slug);
+  return fail(c, 422, t.title, t.slug, { detail: errors.map((e) => e.message).join(" "), errors });
+}
+
 function buildFailure(c: Ctx, r: BuildFailure) {
   switch (r.kind) {
     case "invalid":
       return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
+    case "line-invalid":
+      return lineFailure(c, r.slug, r.errors);
     case "missing-fields":
       return fail(c, 422, "Missing required fields", ProblemType.MissingFields, {
         detail: `Thiếu: ${r.missing.map((m) => m.label).join(", ")}.`,
@@ -114,7 +133,9 @@ const createRouteDef = createRoute({
     403: problemResponse("Missing contract:write permission"),
     404: problemResponse("template or customer not found"),
     409: problemResponse("idempotency-conflict"),
-    422: problemResponse("validation | missing-fields (missing_fields[]) | unresolved-placeholder (placeholders[])"),
+    422: problemResponse(
+      "validation (errors[].path `lines` = DEC-10 rule, `lines.<i>.product_id` = unknown/duplicate) | product-inactive | no-price | missing-fields (missing_fields[]) | unresolved-placeholder (placeholders[])",
+    ),
   },
 });
 
@@ -164,7 +185,7 @@ const patchRouteDef = createRoute({
     403: problemResponse("Missing contract:write, or not the creator (permission.denied)"),
     404: problemResponse("Contract not found"),
     409: problemResponse("state-conflict (current_status) | stale"),
-    422: problemResponse("validation | missing-fields | unresolved-placeholder"),
+    422: problemResponse("validation (lines / lines.<i>.product_id) | product-inactive | no-price | missing-fields | unresolved-placeholder"),
   },
 });
 
@@ -263,7 +284,7 @@ const copyRouteDef = createRoute({
     403: problemResponse("Missing contract:write permission"),
     404: problemResponse("Contract not found"),
     409: problemResponse("state-conflict (source not rejected/voided, or voided already replaced)"),
-    422: problemResponse("missing-fields | validation (today's data)"),
+    422: problemResponse("missing-fields | validation | product-inactive | no-price (today's data)"),
   },
 });
 

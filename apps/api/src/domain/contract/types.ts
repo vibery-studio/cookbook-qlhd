@@ -1,6 +1,6 @@
 export type ContractStatus = "draft" | "pending" | "approved" | "rejected" | "issued" | "voided";
 
-export type FieldType = "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice";
+export type FieldType = "text" | "paragraph" | "money" | "number" | "percent" | "date" | "choice" | "lines";
 
 export interface TemplateField {
   key: string;
@@ -9,7 +9,6 @@ export interface TemplateField {
   required: boolean;
   source: string;
   options?: string[];
-  options_from?: "price_list";
   default?: string | number;
 }
 
@@ -57,22 +56,42 @@ export interface CustomerInput {
   address: string | null;
 }
 
-export interface PriceRow {
-  code: string;
-  name: string;
-  duration_value: number;
-  duration_unit: "day" | "month";
-  unit_price: number;
-  effective_from: string;
+/** One requested line (`inputs.lines`, API body): the client sends only these two (I4). */
+export interface LineRef {
+  product_id: string;
+  qty: number;
 }
 
-export interface Line {
-  description: string;
+/** A line with the product + the price level in force on the doc date (SPEC-08 §3.2), before the money is computed. */
+export interface PricedLineInput {
+  product_id: string;
+  code: string;
+  name: string;
+  kind: "service" | "goods";
+  unit: string;
+  duration_value: number | null;
+  duration_unit: "day" | "month" | null;
   qty: number;
-  unit_price: number;
-  discount_bps: number;
-  amount: number;
+  unit_price_ex_vat: number;
+  vat_rate_bps: number | null;
+  /** effective_from of the level used. */
+  price_from: string;
 }
+
+export interface SnapshotLine extends PricedLineInput {
+  amount_ex_vat: number;
+  discount_amount: number;
+  net_ex_vat: number;
+}
+
+export interface SnapshotVatGroup {
+  vat_rate_bps: number | null;
+  base: number;
+  vat: number;
+}
+
+/** Manual values as entered + the requested lines (for edit / copy). */
+export type SnapshotInputs = { lines: LineRef[] } & Record<string, string | number | LineRef[]>;
 
 export interface Snapshot {
   template: { id: string; version_id: string; version_no: number };
@@ -85,19 +104,18 @@ export interface Snapshot {
     tax_code: string | null;
     address: string | null;
   };
-  package: {
-    code: string;
-    name: string;
-    duration_value: number;
-    duration_unit: "month";
-    unit_price: number;
-    effective_from: string;
-  };
-  inputs: Record<string, string | number>;
+  inputs: SnapshotInputs;
   fields: Record<string, string>;
-  lines: Line[];
-  gross: number;
+  /** Keys of `lines`-type fields: their placeholder takes the server-built table of `lines` (PLAN-08 R-5). */
+  line_table_fields: string[];
+  lines: SnapshotLine[];
+  vat_groups: SnapshotVatGroup[];
+  subtotal_ex_vat: number;
+  discount_bps: number;
   discount_amount: number;
+  total_ex_vat: number;
+  vat_total: number;
+  /** Payable total, VAT included (= contracts.total). */
   total: number;
   total_words: string;
   dates: { doc_date: string; start: string; end: string };

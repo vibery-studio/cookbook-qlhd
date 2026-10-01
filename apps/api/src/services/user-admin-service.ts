@@ -49,6 +49,7 @@ import {
 import { listPermissionKeysForRoleNames, listPermissionKeysForUser, roleNameExists } from "../dao/permission-dao";
 import { dropOtherRolesStmt, grantRoleByNameStmt, listRoleNamesForUser, userHasRole } from "../dao/role-dao";
 import { generateUlid } from "../utils/id";
+import { passwordHashParams } from "../utils/password-params";
 
 export const INVITE_TTL_SECONDS = 72 * 60 * 60;
 
@@ -179,7 +180,7 @@ export async function inviteUser(
   const token = newInviteToken(deps.env);
   const expiresAt = now + INVITE_TTL_SECONDS;
   // Unusable password: a valid-format hash of a random secret nobody ever sees.
-  const passwordHash = await hashPassword(generateOpaqueToken(32));
+  const passwordHash = await hashPassword(generateOpaqueToken(32), passwordHashParams(deps.env));
 
   // The role may be deleted between the check above and this batch: the user row, the grant, the token and the audit
   // row all depend on the role existing INSIDE the batch (one transaction), so a vanished role creates nobody.
@@ -279,7 +280,7 @@ export async function activateUser(
     return { kind: "invalid-or-expired" };
   }
 
-  const passwordHash = await hashPassword(input.password);
+  const passwordHash = await hashPassword(input.password, passwordHashParams(deps.env));
   const consumed = inviteConsumedAt(tokenHash, now);
   const results = await deps.db.batch([
     consumeInviteTokenStmt(deps.db, tokenHash, now),

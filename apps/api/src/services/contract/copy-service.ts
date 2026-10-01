@@ -4,7 +4,7 @@ import type { Snapshot } from "../../domain/contract/types";
 import { emitContractEvent } from "../../events/contract-events";
 import { generateUlid } from "../../utils/id";
 import { getContractForWrite, insertCopy } from "../../dao/contract-write-dao";
-import { loadAndBuild } from "./snapshot-builder";
+import { loadAndBuild, splitInputs } from "./snapshot-builder";
 import type { BuildFailure, CommandCtx } from "./types";
 
 export type CopyResult =
@@ -24,10 +24,12 @@ export async function copyContract(db: Db, ctx: CommandCtx, id: string): Promise
   }
 
   const snapshot = source.snapshot as unknown as Snapshot;
+  const kept = splitInputs(snapshot);
   const built = await loadAndBuild(db, {
     templateId: source.template_id,
     customerId: source.customer_id,
-    values: { ...snapshot.inputs },
+    lines: kept.lines,
+    values: kept.values,
     now: ctx.now,
     manualStart: snapshot.dates.start !== snapshot.dates.doc_date,
   });

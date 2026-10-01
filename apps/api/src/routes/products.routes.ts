@@ -1,7 +1,8 @@
 import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { getDb } from "../db/client";
+import { problem, ProblemType, problemResponse, type ProblemTypeSlug } from "../dto/error";
 import {
   AddPriceBody,
   CreateProductBody,
@@ -20,10 +21,21 @@ import type { Variables } from "../openapi";
 import { requireAuth } from "../middleware/auth";
 import { withIdempotency } from "../middleware/idempotency";
 import { requirePerm } from "../middleware/require-permission";
+import {
+  addPrice,
+  cancelPrice,
+  createProduct,
+  getProductDetail,
+  listProducts,
+  patchProduct,
+  PRODUCT_LIMIT,
+  type ProductActor,
+  type ProductDeps,
+} from "../services/product-service";
 
 /**
- * SPEC-08 §3.5 / PLAN-08 §2b — products + dated price levels (FR-1/2/7). Contract only (C-08-003): handlers answer 501
- * after the real middleware; C-08-004 fills them.
+ * SPEC-08 §3.5 / PLAN-08 §2b — products + dated price levels (FR-1/2/3/7/8). Contract locked by C-08-003 (the 501
+ * response stays declared); handlers by C-08-004. The route owns `c`; `services/product-service.ts` never sees it.
  */
 
 type Env = { Bindings: Bindings; Variables: Variables };
@@ -32,8 +44,31 @@ const security = [{ cookieAuth: [] }];
 const PROBLEM_HEADERS = { "content-type": "application/problem+json" } as const;
 const tags = ["products"];
 
-const notImplemented = (c: Context<Env>) =>
-  c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, PROBLEM_HEADERS);
+const deps = (c: Context<Env>): ProductDeps => ({ db: getDb(c.env) });
+const actorOf = (c: Context<Env>): ProductActor => {
+  const principal = c.get("principal")!;
+  return { id: principal.id, permissions: principal.permissions, ip: c.req.header("cf-connecting-ip") ?? null };
+};
+
+function fail<S extends 403 | 404 | 409 | 422>(
+  c: Context<Env>,
+  status: S,
+  title: string,
+  slug: ProblemTypeSlug,
+  extra: { detail?: string; errors?: Array<{ path: string; message: string }> } = {},
+) {
+  return c.json(
+    problem(status, title, slug, { ...extra, instance: c.req.path, request_id: c.get("requestId") }),
+    status,
+    PROBLEM_HEADERS,
+  );
+}
+
+const notFound = (c: Context<Env>, what = "Product not found") => fail(c, 404, what, ProblemType.NotFound);
+const backdated = (c: Context<Env>) =>
+  fail(c, 422, "Price level starts too early", ProblemType.PriceBackdated, {
+    detail: "A product's first level starts today at the earliest; a later level starts tomorrow at the earliest.",
+  });
 
 const listRoute = createRoute({
   method: "get",
@@ -155,10 +190,80 @@ export function productsRoutes(app: OpenAPIHono<Env>): void {
   app.on("post", "/products/:id/prices", requireAuth(), requirePerm("price:write"), withIdempotency());
   app.on("delete", "/products/:id/prices/:priceId", requireAuth(), requirePerm("price:write"));
 
-  app.openapi(listRoute, (c) => notImplemented(c));
-  app.openapi(getRoute, (c) => notImplemented(c));
-  app.openapi(createProductRoute, (c) => notImplemented(c));
-  app.openapi(patchProductRoute, (c) => notImplemented(c));
-  app.openapi(addPriceRoute, (c) => notImplemented(c));
-  app.openapi(cancelPriceRoute, (c) => notImplemented(c));
+  app.openapi(listRoute, async (c) => {
+    return c.json(await listProducts(deps(c), actorOf(c), c.req.valid("query"), new Date()), 200);
+  });
+
+  app.openapi(getRoute, async (c) => {
+    const detail = await getProductDetail(deps(c), actorOf(c), c.req.valid("param").id, new Date());
+    if (detail === null) return notFound(c);
+    return c.json(detail, 200);
+  });
+
+  app.openapi(createProductRoute, async (c) => {
+    const res = await createProduct(deps(c), actorOf(c), { ...c.req.valid("json"), path: c.req.path }, new Date());
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.product, 201);
+      case "forbidden":
+        return fail(c, 403, "Forbidden", ProblemType.Forbidden, { detail: "Setting a first price needs price:write." });
+      case "price-backdated":
+        return backdated(c);
+      case "duplicate":
+        return fail(c, 409, "Product code already used", ProblemType.Duplicate, {
+          detail: "Another product has this code (case and spaces ignored).",
+        });
+      case "product-limit":
+        return fail(c, 409, "Too many products", ProblemType.ProductLimit, {
+          detail: `At most ${PRODUCT_LIMIT} products; stop selling one instead of adding more.`,
+        });
+    }
+  });
+
+  app.openapi(patchProductRoute, async (c) => {
+    const res = await patchProduct(deps(c), actorOf(c), { ...c.req.valid("json"), id: c.req.valid("param").id }, new Date());
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.product, 200);
+      case "not-found":
+        return notFound(c);
+      case "stale":
+        return fail(c, 409, "Product was changed by someone else", ProblemType.Stale, {
+          detail: "expected_version is out of date; reload the product and retry.",
+        });
+      case "invalid":
+        return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: res.errors });
+    }
+  });
+
+  app.openapi(addPriceRoute, async (c) => {
+    const res = await addPrice(deps(c), actorOf(c), { ...c.req.valid("json"), productId: c.req.valid("param").id }, new Date());
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.level, 201);
+      case "not-found":
+        return notFound(c);
+      case "price-backdated":
+        return backdated(c);
+      case "duplicate":
+        return fail(c, 409, "A level already starts that day", ProblemType.Duplicate, {
+          detail: "Cancel the scheduled level first or pick another day.",
+        });
+    }
+  });
+
+  app.openapi(cancelPriceRoute, async (c) => {
+    const { id, priceId } = c.req.valid("param");
+    const res = await cancelPrice(deps(c), actorOf(c), { productId: id, priceId }, new Date());
+    switch (res.kind) {
+      case "ok":
+        return c.body(null, 204);
+      case "not-found":
+        return notFound(c, "Price level not found");
+      case "price-in-effect":
+        return fail(c, 409, "Price level already in effect", ProblemType.PriceInEffect, {
+          detail: "Only a level that has not started yet can be cancelled; add a new level instead.",
+        });
+    }
+  });
 }

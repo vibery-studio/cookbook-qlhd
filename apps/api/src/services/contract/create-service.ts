@@ -15,6 +15,7 @@ export async function createContract(db: Db, ctx: CommandCtx, input: CreateContr
   const built = await loadAndBuild(db, {
     templateId: input.template_id,
     customerId: input.customer_id,
+    lines: input.lines,
     values: { ...input.values },
     now: ctx.now,
     manualStart: Object.prototype.hasOwnProperty.call(input.values, "ngay_bat_dau"),

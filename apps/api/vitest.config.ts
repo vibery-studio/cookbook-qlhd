@@ -50,6 +50,8 @@ export default defineWorkersConfig({
             READYZ_TOKEN: "test-readyz-token-min-16",
             // SPEC-05: no Chrome in vitest — GET /contracts/{id}/pdf renders with the fake renderer.
             PDF_RENDERER: "fake",
+            // Cheap scrypt for new hashes (≈80% of suite time was scrypt N=2^17); prod never sets it (utils/password-params.ts).
+            PASSWORD_HASH_PROFILE: "test-fast",
           },
         },
       },

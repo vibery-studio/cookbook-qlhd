@@ -26,16 +26,20 @@ export function isValueKey(key: string): key is ValueKey {
   return (VALUE_KEYS as readonly string[]).includes(key);
 }
 
-/** The keys the form shows: manual template fields among the 7 known, plus the two the API always needs. */
+/**
+ * The keys the form shows: manual template fields among the 7 known. C-08-005 shim (PLAN-08 R-2): template v2 has no
+ * `ma_goi` / `so_cua_hang` (products + quantities moved to `lines`), so they are no longer forced in and never sent;
+ * C-08-008 replaces them with the line block.
+ */
 export function activeKeys(fields: readonly FieldSpec[]): ValueKey[] {
   const manual = new Set(fields.filter((f) => f.source === "manual").map((f) => f.key));
-  return VALUE_KEYS.filter((k) => k === "ma_goi" || k === "so_cua_hang" || manual.has(k));
+  return VALUE_KEYS.filter((k) => manual.has(k));
 }
 
 const SERVER_DEFAULTED: ReadonlySet<ValueKey> = new Set<ValueKey>(["ngay_bat_dau", "giam_gia"]);
 
 export function requiredKeys(fields: readonly FieldSpec[]): Set<ValueKey> {
-  const req = new Set<ValueKey>(["ma_goi", "so_cua_hang"]);
+  const req = new Set<ValueKey>();
   // Fields the template gives a default (ngay_bat_dau = Ngày lập, giam_gia = 0): blank is valid, the server fills it.
   for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key) && !SERVER_DEFAULTED.has(f.key)) req.add(f.key);
   return req;
