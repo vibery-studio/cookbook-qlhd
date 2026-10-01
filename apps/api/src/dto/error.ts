@@ -47,6 +47,10 @@ export const ProblemDto = z
     permissions: z.array(z.string()).optional(),
     /** 409 `role-in-use` (SPEC-06): how many users carry the role */
     holders: z.number().int().optional(),
+    /** 409 `sod-conflict` (SPEC-07) on a role's permission set: the violated pairs `[perm_a, perm_b]` */
+    pairs: z.array(z.array(z.string())).optional(),
+    /** 409 `sod-conflict` (SPEC-07) on a new pair: roles already holding both codes */
+    roles: z.array(z.object({ id: z.string(), name: z.string(), label: z.string() })).optional(),
   })
   .openapi("Problem");
 
@@ -87,6 +91,17 @@ export const ProblemType = {
   RoleInUse: "role-in-use",
   RoleLimit: "role-limit",
   UnknownRole: "unknown-role",
+  // SPEC-07 (row 2b)
+  RequestPending: "request-pending",
+  NotPending: "not-pending",
+  Expired: "expired",
+  SodConflict: "sod-conflict",
+  JitActive: "jit-active",
+  AlreadyAdmin: "already-admin",
+  NotActive: "not-active",
+  ItemChanged: "item-changed",
+  ReviewClosed: "review-closed",
+  ReviewIncomplete: "review-incomplete",
 } as const;
 
 export type ProblemTypeSlug = (typeof ProblemType)[keyof typeof ProblemType];
@@ -107,6 +122,8 @@ export interface ProblemOptions {
   rule?: string;
   permissions?: string[];
   holders?: number;
+  pairs?: string[][];
+  roles?: { id: string; name: string; label: string }[];
 }
 
 /**
@@ -141,6 +158,8 @@ export function problem(
     ...(options.rule !== undefined && { rule: options.rule }),
     ...(options.permissions !== undefined && { permissions: options.permissions }),
     ...(options.holders !== undefined && { holders: options.holders }),
+    ...(options.pairs !== undefined && { pairs: options.pairs }),
+    ...(options.roles !== undefined && { roles: options.roles }),
   };
 }
 

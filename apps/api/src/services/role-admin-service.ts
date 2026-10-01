@@ -50,6 +50,16 @@ export interface RoleAdminDeps {
 }
 
 export type LockedReason = "system" | "own_role" | "admin" | null;
+/** SPEC-07 (PLAN-07 R-10): why the caller cannot send a permission change request. Computed in C-07-004. */
+export type RequestLockedReason = "request_pending" | "no_approver" | null;
+
+export interface PendingRequestSummary {
+  id: string;
+  added: string[];
+  removed: string[];
+  requested_by_name: string | null;
+  expires_at: number;
+}
 
 /** SPEC-06 §3.2 `Role`, computed for one caller. */
 export interface RoleView {
@@ -61,8 +71,10 @@ export interface RoleView {
   version: number;
   holders: number;
   permissions: string[];
-  can: { edit: boolean; delete: boolean };
+  can: { edit: boolean; delete: boolean; request: boolean };
   locked_reason: LockedReason;
+  request_locked_reason: RequestLockedReason;
+  pending_request: PendingRequestSummary | null;
 }
 
 export type RoleGuardRule = "admin_role" | "system_role" | "own_role" | "grant_not_held";
@@ -85,6 +97,8 @@ function toView(role: RoleDetailDto, actor: Actor): RoleView {
   const locked: LockedReason =
     role.name === "admin" ? "admin" : actor.roleIds.has(role.id) ? "own_role" : role.isSystem ? "system" : null;
   const writer = actor.permissions.has("roles:write");
+  const edit = writer && (locked === null || locked === "system");
+  // TODO(C-07-004): `request` / `request_locked_reason` / `pending_request` from the pending request + DEC-14.
   return {
     id: role.id,
     name: role.name,
@@ -95,10 +109,13 @@ function toView(role: RoleDetailDto, actor: Actor): RoleView {
     holders: role.holders,
     permissions: role.permissions,
     can: {
-      edit: writer && (locked === null || locked === "system"),
+      edit,
       delete: writer && locked === null,
+      request: edit,
     },
     locked_reason: locked,
+    request_locked_reason: null,
+    pending_request: null,
   };
 }
 

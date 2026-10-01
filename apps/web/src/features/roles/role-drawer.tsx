@@ -4,7 +4,7 @@ import type { Role } from "../../app/roles-query";
 import { Alert, Button, Field, LockedNote } from "../../ui";
 import { ConfirmDialog } from "../contracts/confirm-dialog";
 import { Dialog, DialogHeader } from "../contracts/dialog";
-import { asPerms, roleError, useDeleteRole, useUpdateRole, type RoleError } from "./api";
+import { roleError, useDeleteRole, useUpdateRole, type RoleError } from "./api";
 import { PermissionChecklist } from "./permission-checklist";
 import { roleDiffLabel } from "./role-diff";
 
@@ -80,7 +80,7 @@ export function RoleDrawer({
           expected_version: role.version,
           ...(!isSystem && label !== role.label ? { label } : {}),
           ...(value.description.trim() !== (role.description ?? "") ? { description: value.description.trim() } : {}),
-          ...(permsChanged ? { permissions: asPerms([...value.permissions]) } : {}),
+          // SPEC-07 DEC-1: PATCH carries no permissions; the permission change request UI lands in C-07-007.
         },
       });
       setEdits(null);

@@ -17,6 +17,10 @@ import { priceListRoutes } from "./price-list.routes";
 import { templatesRoutes } from "./templates.routes";
 import { templatesWriteRoutes } from "./templates-write.routes";
 import { rolesRoutes } from "./roles.routes";
+import { roleChangeRequestsRoutes } from "./role-change-requests.routes";
+import { sodPairsRoutes } from "./sod-pairs.routes";
+import { jitGrantsRoutes } from "./jit-grants.routes";
+import { accessReviewsRoutes } from "./access-reviews.routes";
 import { demoRoutes } from "./demo.routes";
 import { healthRoutes } from "./health.routes";
 
@@ -35,6 +39,10 @@ export function mountRoutes(app: OpenAPIHono<Env>): void {
   adminRoutes(app);
   adminUsersRoutes(app);
   rolesRoutes(app);
+  roleChangeRequestsRoutes(app);
+  sodPairsRoutes(app);
+  jitGrantsRoutes(app);
+  accessReviewsRoutes(app);
   auditRoutes(app);
   customersRoutes(app);
   priceListRoutes(app);

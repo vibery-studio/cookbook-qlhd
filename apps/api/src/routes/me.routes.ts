@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import { EmailSchema, UlidSchema } from "../dto/common";
 import { problem, ProblemDto, ProblemType } from "../dto/error";
+import { MeJitSchema } from "../dto/jit";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
@@ -24,6 +25,8 @@ const MeResponse = z
     display_name: z.string().nullable(),
     roles: z.array(z.string()),
     permissions: z.array(z.string()),
+    /** SPEC-07: the caller's active temporary admin grant (from D1), or null. */
+    jit: MeJitSchema,
   })
   .openapi("MeResponse");
 
@@ -76,6 +79,7 @@ export function meRoutes(app: OpenAPIHono<Env>): void {
         display_name: user.displayName,
         roles: [...principal.roles],
         permissions: [...principal.permissions],
+        jit: null, // TODO(C-07-005): active JIT grant from D1
       },
       200,
     );

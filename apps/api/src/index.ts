@@ -80,6 +80,8 @@ function buildApp(env: Bindings) {
 import { emailRetryConsumer } from "./queues/email-retry-consumer";
 import { verifyEmailSweeper } from "./crons/verify-email-sweeper";
 import { pruneExpiredRows } from "./crons/expired-rows-pruner";
+import { runJitExpiry } from "./crons/jit-expiry";
+import { runRbacDaily } from "./crons/rbac-daily";
 import type { EmailRetryPayload } from "./services/email-service";
 
 export default {
@@ -95,13 +97,17 @@ export default {
     // Dispatch by cron string. `event.cron` matches the exact
     // pattern from wrangler.toml — dispatch table stays in sync with
     // that config.
-    //   `*/5 * * * *` → verify-email sweeper (see docs/email.md)
+    //   `*/5 * * * *` → verify-email sweeper (see docs/email.md) + JIT
+    //                    expiry logger (SPEC-07 DEC-8)
     //   `0 3 * * *`   → nightly pruner of expired jwt_revocations +
-    //                    idempotency_keys (see docs/observability.md)
+    //                    idempotency_keys (see docs/observability.md) +
+    //                    RBAC nightly (quarter review, overdue requests)
+    // Branches are independent: `allSettled`, each logs its own errors.
+    const nowSeconds = Math.floor(event.scheduledTime / 1000);
     if (event.cron === "0 3 * * *") {
-      ctx.waitUntil(pruneExpiredRows(env));
+      ctx.waitUntil(Promise.allSettled([pruneExpiredRows(env), runRbacDaily(env, nowSeconds)]));
     } else if (event.cron === "*/5 * * * *") {
-      ctx.waitUntil(verifyEmailSweeper(env));
+      ctx.waitUntil(Promise.allSettled([verifyEmailSweeper(env), runJitExpiry(env, nowSeconds)]));
     } else {
       // Explicit no-op for unknown schedules. Silently running the
       // sweeper on a new cron would produce log noise and race with

@@ -59,7 +59,9 @@ const createRoleRoute = createRoute({
     201: { description: "Role created", content: { "application/json": { schema: RoleSchema } } },
     401: problemResponse("Not authenticated"),
     403: problemResponse(FORBIDDEN_403),
-    409: problemResponse("duplicate (label, case/space-insensitive) | role-limit (50 custom roles)"),
+    409: problemResponse(
+      "duplicate (label, case/space-insensitive) | role-limit (50 custom roles) | sod-conflict (+ `pairs`: declared pairs the set holds both codes of)",
+    ),
     422: problemResponse("Validation failed (unknown or repeated permission, label 1–60, description ≤ 200, extra keys)"),
     501: problemResponse("Not implemented"),
   },
@@ -69,7 +71,8 @@ const patchRoleRoute = createRoute({
   method: "patch",
   path: "/roles/{id}",
   tags: ["roles"],
-  summary: "Edit a role's label, description and/or full permission set (optimistic lock by expected_version)",
+  summary:
+    "Edit a role's label and/or description (optimistic lock by expected_version). Permission changes go through POST /roles/{id}/change-requests",
   security,
   request: {
     params: RoleIdParam,
@@ -80,8 +83,8 @@ const patchRoleRoute = createRoute({
     401: problemResponse("Not authenticated"),
     403: problemResponse(FORBIDDEN_403),
     404: problemResponse("Role not found"),
-    409: problemResponse("stale (version mismatch) | duplicate (label)"),
-    422: problemResponse("Validation failed"),
+    409: problemResponse("stale (version mismatch) | duplicate (label) | request-pending (the role has a pending change request)"),
+    422: problemResponse("Validation failed (incl. a `permissions` key — use a change request)"),
     501: problemResponse("Not implemented"),
   },
 });
@@ -98,7 +101,7 @@ const deleteRoleRoute = createRoute({
     401: problemResponse("Not authenticated"),
     403: problemResponse(FORBIDDEN_403),
     404: problemResponse("Role not found"),
-    409: problemResponse("stale (version mismatch) | role-in-use (+ `holders`)"),
+    409: problemResponse("stale (version mismatch) | role-in-use (+ `holders`) | request-pending (the role has a pending change request)"),
     422: problemResponse("Validation failed"),
     501: problemResponse("Not implemented"),
   },
@@ -201,7 +204,6 @@ export function rolesRoutes(app: OpenAPIHono<Env>): void {
       expectedVersion: body.expected_version,
       label: body.label,
       description: body.description,
-      permissions: body.permissions,
       ip: ipOf(c),
     });
     switch (res.kind) {

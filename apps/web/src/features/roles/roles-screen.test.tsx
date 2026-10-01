@@ -78,7 +78,7 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     await userEvent.click(save);
     expect(patch).toHaveBeenCalledWith("/roles/{id}", {
       params: { path: { id: "id_quan_ly" } },
-      body: { expected_version: 1, permissions: ["contract:read"] },
+      body: { expected_version: 1 }, // SPEC-07 DEC-1: no permissions on PATCH (request flow in C-07-007)
     });
     await waitFor(() => expect(within(drawer).queryByRole("button", { name: /^Lưu \(/ })).toBeNull());
   });

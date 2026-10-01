@@ -10,6 +10,8 @@
  * FR-13: audit_events is append-only (D1 trigger) → cleanup goes through `clearAuditEvents()` from `@runway/test-fixtures`,
  * which drops whatever triggers sit on the table, deletes, and recreates them from sqlite_master.
  * The tests mutate seeded system roles (quan_ly, giam_doc); `restoreSeedRoles()` puts them back before AND after each test.
+ * SPEC-07 (PLAN-07 R-1): PATCH /roles no longer takes `permissions` (DEC-1) — AC-2 / AC-3 / AC-5 keep their 2a intent but
+ * change permission sets through `POST /roles/{id}/change-requests` + someone else's approve (four-eyes).
  */
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -131,6 +133,13 @@ async function restoreSeedRoles(): Promise<void> {
       .run();
   }
   try {
+    await env.DB.prepare("DELETE FROM role_change_requests").run(); // SPEC-07: a pending request locks a role
+  } catch {
+    // table absent (red run)
+  }
+  // labels the tests rename (AC-3) back to the 0017 literals
+  await env.DB.prepare("UPDATE roles SET label = 'Quản lý', label_key = 'quản lý' WHERE name = 'quan_ly'").run();
+  try {
     await env.DB.prepare("UPDATE roles SET version = 1").run();
   } catch {
     // `version` not created yet (red run) — the assertions report the real failure
@@ -251,6 +260,26 @@ function patchRole(by: Person, id: string, body: Record<string, unknown>): Promi
   return by.session.fetch(`/roles/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
+/** SPEC-07 §3.2: full new permission set, pinned to the role's version. */
+function requestChangeRaw(by: Person, r: { id: string; version: number }, permissions: string[]): Promise<Response> {
+  return by.session.fetch(`/roles/${r.id}/change-requests`, {
+    method: "POST",
+    body: JSON.stringify({ expected_version: r.version, permissions }),
+  });
+}
+
+async function requestChange(by: Person, r: { id: string; version: number }, permissions: string[]): Promise<{ id: string }> {
+  const res = await requestChangeRaw(by, r, permissions);
+  expect(res.status, `change request on ${r.id}`).toBe(201);
+  return res.json();
+}
+
+async function approve(by: Person, requestId: string): Promise<{ role: RoleDto }> {
+  const res = await by.session.fetch(`/role-change-requests/${requestId}/approve`, { method: "POST", body: "{}" });
+  expect(res.status, `approve ${requestId}`).toBe(200);
+  return res.json();
+}
+
 function deleteRole(by: Person, id: string, version: number): Promise<Response> {
   return by.session.fetch(`/roles/${id}?expected_version=${version}`, { method: "DELETE" });
 }
@@ -330,7 +359,7 @@ describe("SPEC-06 roles API (acceptance)", () => {
     expect(asNv.items.every((r) => !r.can.edit && !r.can.delete)).toBe(true);
   }, 60_000);
 
-  it("AC-2: Giám đốc drops contract:issue from Quản lý → 200, version+1; logged-in Quản lý gets 403 on the next call (no re-login); one role.permissions_changed row", async () => {
+  it("AC-2: Giám đốc requests dropping contract:issue from Quản lý, admin approves → version+1; logged-in Quản lý gets 403 on the next call (no re-login); one role.permissions_changed row", async () => {
     const admin = await seedAdmin();
     const gd = await gdOf(admin);
     const ql = await qlOf(admin);
@@ -339,12 +368,8 @@ describe("SPEC-06 roles API (acceptance)", () => {
     expect(await permsOf(ql)).toContain("contract:issue");
 
     const before = await role(gd, "quan_ly");
-    const res = await patchRole(gd, before.id, {
-      expected_version: before.version,
-      permissions: without(before.permissions, "contract:issue"),
-    });
-    expect(res.status).toBe(200);
-    const after: RoleDto = await res.json();
+    const req = await requestChange(gd, before, without(before.permissions, "contract:issue"));
+    const { role: after } = await approve(admin, req.id);
     expect(after.version).toBe(before.version + 1);
     expect(after.permissions).not.toContain("contract:issue");
     expect(sorted(after.permissions)).toEqual(sorted(without(SEED_GRANTS["quan_ly"]!, "contract:issue")));
@@ -358,26 +383,25 @@ describe("SPEC-06 roles API (acceptance)", () => {
     expect(rows[0]).toMatchObject({ added: [], removed: ["contract:issue"] });
   }, 60_000);
 
-  it("AC-3: two PATCH with the same expected_version → one 200, one 409 stale; the winner's set is stored; one audit row; unknown id → 404", async () => {
+  it("AC-3: two PATCH (label) with the same expected_version → one 200, one 409 stale; the winner's label is stored; one audit row; unknown id → 404", async () => {
     const admin = await seedAdmin();
     const gd = await gdOf(admin);
     const v = await role(gd, "quan_ly");
 
-    const setA = without(v.permissions, "contract:issue"); // Giám đốc
-    const setB = without(v.permissions, "audit:read"); // admin (removing is never escalation)
     const [ra, rb] = await Promise.all([
-      patchRole(gd, v.id, { expected_version: v.version, permissions: setA }),
-      patchRole(admin, v.id, { expected_version: v.version, permissions: setB }),
+      patchRole(gd, v.id, { expected_version: v.version, label: "Quản lý A" }), // Giám đốc
+      patchRole(admin, v.id, { expected_version: v.version, label: "Quản lý B" }), // admin
     ]);
     expect(sorted([ra.status, rb.status])).toEqual([200, 409]);
     const loser = ra.status === 409 ? ra : rb;
     await problemOf(loser, 409, "stale");
-    const winnerSet = ra.status === 200 ? setA : setB;
+    const winnerLabel = ra.status === 200 ? "Quản lý A" : "Quản lý B";
 
     const now = await role(gd, "quan_ly");
     expect(now.version).toBe(v.version + 1);
-    expect(sorted(now.permissions)).toEqual(sorted(winnerSet));
-    expect(await auditMeta("role.permissions_changed")).toHaveLength(1);
+    expect(now.label).toBe(winnerLabel);
+    expect(sorted(now.permissions)).toEqual(sorted(v.permissions));
+    expect(await auditMeta("role.updated")).toHaveLength(1);
 
     // stale version on a later call, unknown id
     await problemOf(await patchRole(gd, v.id, { expected_version: v.version, label: "Quản lý cửa hàng" }), 409, "stale");
@@ -439,7 +463,7 @@ describe("SPEC-06 roles API (acceptance)", () => {
     await problemOf(await createRoleRaw(gd, { label: "Vai trò 51", permissions: [] }), 409, "role-limit");
   }, 60_000);
 
-  it("AC-5: guards — own_role · grant_not_held (+permissions) · admin_role · system_role · no roles:write; each 403 = one permission.denied; admin may drop users:write from giam_doc; 401 anonymous", async () => {
+  it("AC-5: guards — own_role · grant_not_held (+permissions, on change requests) · admin_role · system_role · no roles:write; each 403 = one permission.denied; admin may request dropping users:write from giam_doc (Giám đốc approves a removal); 401 anonymous", async () => {
     const admin = await seedAdmin();
     const gd = await gdOf(admin);
     const nv = await nvOf(admin);
@@ -451,12 +475,9 @@ describe("SPEC-06 roles API (acceptance)", () => {
     await expectRule(await patchRole(gd, id("giam_doc"), { expected_version: ver("giam_doc"), label: "Giám đốc điều hành" }), "own_role");
     expect(await deniedCount(gd.userId)).toBe(1);
 
-    // grant what you don't hold: Giám đốc adds settings:write to Quản lý
+    // grant what you don't hold: Giám đốc requests adding settings:write to Quản lý
     const gdGrant = await expectRule(
-      await patchRole(gd, id("quan_ly"), {
-        expected_version: ver("quan_ly"),
-        permissions: [...SEED_GRANTS["quan_ly"]!, "settings:write"],
-      }),
+      await requestChangeRaw(gd, { id: id("quan_ly"), version: ver("quan_ly") }, [...SEED_GRANTS["quan_ly"]!, "settings:write"]),
       "grant_not_held",
     );
     expect(gdGrant.permissions).toEqual(["settings:write"]);
@@ -465,26 +486,24 @@ describe("SPEC-06 roles API (acceptance)", () => {
     // admin has no contract:approve → cannot add it to "Kế toán" (contract:read is kept, not added)
     const ke = await createRole(gd, "Kế toán", ["contract:read"]);
     const adGrant = await expectRule(
-      await patchRole(admin, ke.id, { expected_version: ke.version, permissions: ["contract:read", "contract:approve"] }),
+      await requestChangeRaw(admin, ke, ["contract:read", "contract:approve"]),
       "grant_not_held",
     );
     expect(adGrant.permissions).toEqual(["contract:approve"]);
     expect(await deniedCount(admin.userId)).toBe(1);
     expect((await role(gd, ke.name)).permissions).toEqual(["contract:read"]);
-    // dropping a code you don't hold is fine (not escalation)
-    expect((await patchRole(admin, ke.id, { expected_version: ke.version, permissions: [] })).status).toBe(200);
+    // requesting to drop a code you don't hold is fine (not escalation)
+    expect((await requestChangeRaw(admin, ke, [])).status).toBe(201);
 
-    // admin (does not hold giam_doc) drops users:write from it → 200 (lockout: admin keeps roles:write + users:write)
-    const gdRes = await patchRole(admin, id("giam_doc"), {
-      expected_version: ver("giam_doc"),
-      permissions: without(SEED_GRANTS["giam_doc"]!, "users:write"),
-    });
-    expect(gdRes.status).toBe(200);
+    // admin (does not hold giam_doc) requests dropping users:write from it; Giám đốc approves a REMOVAL from their
+    // own role (SPEC-07 DEC-3) → Giám đốc loses users:write (lockout: admin keeps roles:write + users:write)
+    const drop = await requestChange(admin, { id: id("giam_doc"), version: ver("giam_doc") }, without(SEED_GRANTS["giam_doc"]!, "users:write"));
+    await approve(gd, drop.id);
     expect(await permsOf(gd)).not.toContain("users:write");
 
     // admin role is immutable through the API — for everyone, admin included
     await expectRule(await patchRole(gd, id("admin"), { expected_version: ver("admin"), label: "Admin" }), "admin_role");
-    await expectRule(await patchRole(admin, id("admin"), { expected_version: ver("admin"), permissions: CATALOG }), "admin_role");
+    await expectRule(await requestChangeRaw(admin, { id: id("admin"), version: ver("admin") }, CATALOG), "admin_role");
     await expectRule(await deleteRole(gd, id("admin"), ver("admin")), "admin_role");
     expect(await deniedCount(gd.userId)).toBe(4);
     expect(await deniedCount(admin.userId)).toBe(2);

@@ -14,12 +14,26 @@ export const RoleIdSchema = z
 
 export const PermissionKeySchema = z.enum(PERMISSIONS);
 
-const PermissionSet = z
+export const PermissionSet = z
   .array(PermissionKeySchema)
   .max(PERMISSIONS.length)
   .refine((xs) => new Set(xs).size === xs.length, { message: "permissions must not repeat" });
 
 export const LockedReason = z.enum(["system", "own_role", "admin"]).nullable();
+
+/** SPEC-07 (PLAN-07 R-10): why the caller cannot send a permission change request for the role. */
+export const RequestLockedReason = z.enum(["request_pending", "no_approver"]).nullable();
+
+/** SPEC-07 §3.2: the role's pending change request (not yet expired), if any. */
+export const PendingRequestSummary = z
+  .object({
+    id: z.string(),
+    added: z.array(z.string()),
+    removed: z.array(z.string()),
+    requested_by_name: z.string().nullable(),
+    expires_at: z.number().int(),
+  })
+  .openapi("PendingRequestSummary");
 
 export const RoleSchema = z
   .object({
@@ -31,8 +45,11 @@ export const RoleSchema = z
     version: z.number().int().min(1),
     holders: z.number().int().min(0),
     permissions: z.array(z.string()),
-    can: z.object({ edit: z.boolean(), delete: z.boolean() }),
+    /** `request` (SPEC-07): may send a permission change request. A pending request → all three false. */
+    can: z.object({ edit: z.boolean(), delete: z.boolean(), request: z.boolean() }),
     locked_reason: LockedReason,
+    request_locked_reason: RequestLockedReason,
+    pending_request: PendingRequestSummary.nullable(),
   })
   .openapi("Role");
 
@@ -61,8 +78,7 @@ export const PatchRoleBody = z
     expected_version: z.number().int().min(1),
     label: Label.optional(),
     description: Description.optional(),
-    /** The complete new set (not a diff). */
-    permissions: PermissionSet.optional(),
+    // SPEC-07 DEC-1: no `permissions` — a permission change is POST /roles/{id}/change-requests (extra key → 422).
   })
   .strict()
   .openapi("PatchRoleRequest");
