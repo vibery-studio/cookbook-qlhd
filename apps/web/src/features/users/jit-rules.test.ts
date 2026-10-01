@@ -1,31 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expiryText, GRANT_DURATIONS, hhmm, jitRowAction, remainingText, validReason } from "./jit-rules";
-
-const me = { id: "me", roles: ["giam_doc"] };
-const user = (over: Partial<{ id: string; status: "pending" | "active" | "disabled"; roles: string[] }> = {}) => ({
-  id: "u1", status: "active" as const, roles: ["nhan_vien"], ...over,
-});
-const grant = { id: "g1", user_id: "u1", expires_at: 1000 };
-
-describe("jitRowAction (SPEC-07 §3.4 Người dùng)", () => {
-  it("offers the grant to another active non-admin", () => {
-    expect(jitRowAction(user(), me, undefined)).toEqual({ kind: "grant" });
-  });
-  it("own row is locked", () => {
-    expect(jitRowAction(user({ id: "me" }), me, undefined)).toEqual({ kind: "locked", reason: "Không tự cấp cho mình" });
-  });
-  it("a permanent admin is locked", () => {
-    expect(jitRowAction(user({ roles: ["admin"] }), me, undefined).kind).toBe("locked");
-  });
-  it("a non-active account is locked", () => {
-    expect(jitRowAction(user({ status: "pending" }), me, undefined).kind).toBe("locked");
-    expect(jitRowAction(user({ status: "disabled" }), me, undefined).kind).toBe("locked");
-  });
-  it("an active grant → revoke (wins over the other locks except own row)", () => {
-    expect(jitRowAction(user(), me, grant)).toEqual({ kind: "revoke", grant });
-    expect(jitRowAction(user({ id: "me" }), me, { ...grant, user_id: "me" }).kind).toBe("locked");
-  });
-});
+import { expiryText, GRANT_DURATIONS, hhmm, remainingText, validReason } from "./jit-rules";
 
 describe("time text (Asia/Ho_Chi_Minh)", () => {
   it("hhmm reads the Vietnam wall clock", () => {

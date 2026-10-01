@@ -19,7 +19,8 @@ vi.mock("../../lib/client", () => ({
 import { CurrentUserProvider, type Me } from "../../app/me";
 import { ContractDrawer } from "./contract-drawer";
 
-const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
+const noReason = { edit: null, submit: null, approve: null, reject: null, issue: null, void: null, copy: null, withdraw: null, delete: null };
+const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, reason: noReason, create_child: [] };
 const contract = {
   id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", type: "contract", status: "pending", number: null, seq: null, series_year: null,
   template_id: "T", template_version_id: "V", customer_id: "C", customer_name: "Tạp hóa Cô Ba", total: 3665000,
@@ -39,7 +40,8 @@ const contract = {
   steps: [{ id: "s1", step_no: 1, label: "Quản lý duyệt", status: "waiting", required_permission: "contract:approve", required_role: "quan_ly", decided_by: null, decided_by_name: null, decided_at: null, note: null, snapshot_hash_at_decision: null }],
   timeline: [{ action: "contract.created", at: 1, actor: "An" }, { action: "contract.submitted", at: 5, actor: "An" }],
   valid_until: null, parent: null, children: [],
-  can: { ...noCan, withdraw: true, create_child: [] },
+  // FIX-06: the API says why each action is locked for this caller (the creator of a pending contract)
+  can: { ...noCan, withdraw: true, reason: { ...noReason, approve: "creator_cannot_approve", reject: "creator_cannot_approve", edit: "not_draft" }, create_child: [] },
 };
 const ref = (over: Record<string, unknown>) => ({ id: "01ARZ3NDEKTSV4RRFFQ69G5FAA", type: "contract", number: null, status: "draft", total: 2565000, doc_date: "2026-09-30", ...over });
 const issuedQuote = {

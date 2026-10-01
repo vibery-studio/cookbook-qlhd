@@ -1,75 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
-  adminTargetLocked,
-  NOT_GRANTABLE_REASON,
+  ADMIN_TARGET_REASON,
+  CHANGE_ROLE_LOCK_TEXT,
+  firstOpen,
+  OPTION_LOCK_TEXT,
   OWNER_ONLY_REASON,
-  ownerTargetLocked,
-  selectableRoles,
-  targetRoleLocked,
+  OWNER_TARGET_REASON,
+  rowLockNotes,
+  SELF_DISABLE_REASON,
+  SELF_ROLE_REASON,
 } from "./role-locks";
-import type { RoleOption } from "./role-locks";
+import type { AssignableRole } from "./role-locks";
 
-const roles: RoleOption[] = [
-  { name: "admin", label: "Quản trị hệ thống", permissions: ["settings:write", "users:write", "roles:write"], holders: 1 },
-  { name: "member", label: "Thành viên (nền)", permissions: [], holders: 0 },
-  { name: "giam_doc", label: "Giám đốc", permissions: ["contract:read", "contract:approve", "users:write", "roles:write"], holders: 1 },
-  { name: "nhan_vien", label: "Nhân viên", permissions: ["contract:read"], holders: 3 },
-  { name: "r_01abc", label: "Kế toán", permissions: ["contract:read"], holders: 0 },
-  { name: "r_01xyz", label: "Vận hành", permissions: ["settings:write"], holders: 0 },
-];
-const gd = { callerIsAdmin: false, callerIsOwner: true, callerPermissions: ["contract:read", "contract:approve", "users:write", "roles:write"] };
-const admin = { callerIsAdmin: true, callerIsOwner: false, callerPermissions: ["settings:write", "users:write", "roles:write"] };
+/** FIX-06: the API decides every lock; these only check that each API reason code gets its sentence. */
+const can = { change_role: true, set_status: true, reinvite: false, grant_jit: false, revoke_jit: false };
+const none = { change_role: null, set_status: null, grant_jit: null };
 
-describe("selectableRoles (SPEC-06 FR-9, FR-12, FIX-05)", () => {
-  it("never lists member; every other role is listed (locked ones show why); custom roles keep their label", () => {
-    const names = (c: typeof gd) => selectableRoles(roles, { ...c, mode: "assign" }).map((r) => r.name);
-    expect(names(gd)).toEqual(["admin", "giam_doc", "nhan_vien", "r_01abc", "r_01xyz"]);
-    expect(names(admin)).toEqual(["admin", "giam_doc", "nhan_vien", "r_01abc", "r_01xyz"]);
-    expect(selectableRoles(roles, { ...gd, mode: "invite" }).find((r) => r.name === "r_01abc")?.label).toBe("Kế toán");
+describe("rowLockNotes (API reasons → 🔒 lines)", () => {
+  it("own row: both locks, each sentence once", () => {
+    const row = { can: { ...can, change_role: false, set_status: false }, locked_reason: { ...none, change_role: "self_role" as const, set_status: "self_disable" as const } };
+    expect(rowLockNotes(row)).toEqual([SELF_ROLE_REASON, SELF_DISABLE_REASON]);
   });
-  it("FIX-05: roles carrying roles:write are 🔒 owner-only for admin; Giám đốc gives them (exempt from FR-12 there)", () => {
-    const adminList = selectableRoles(roles, { ...admin, mode: "invite" });
-    expect(adminList.find((r) => r.name === "admin")?.locked).toBe(OWNER_ONLY_REASON);
-    expect(adminList.find((r) => r.name === "giam_doc")?.locked).toBe(OWNER_ONLY_REASON);
-    expect(adminList.filter((r) => r.locked).map((r) => r.name)).toEqual(["admin", "giam_doc"]);
-    const gdList = selectableRoles(roles, { ...gd, mode: "invite" });
-    expect(gdList.find((r) => r.name === "admin")?.locked).toBeUndefined();
+  it("an admin row seen by a Giám đốc: admin_only on both → one line", () => {
+    const row = { can: { ...can, change_role: false, set_status: false }, locked_reason: { ...none, change_role: "admin_only" as const, set_status: "admin_only" as const } };
+    expect(rowLockNotes(row)).toEqual([ADMIN_TARGET_REASON]);
   });
-  it("FIX-05 bootstrap: nobody carries giam_doc yet → admin may invite the first Giám đốc", () => {
-    const fresh = roles.map((r) => (r.name === "giam_doc" ? { ...r, holders: 0 } : r));
-    expect(selectableRoles(fresh, { ...admin, mode: "invite" }).find((r) => r.name === "giam_doc")?.locked).toBeUndefined();
-  });
-  it("locks a role whose permissions the caller lacks (Giám đốc → settings:write); admin is exempt", () => {
-    const gdList = selectableRoles(roles, { ...gd, mode: "invite" });
-    expect(gdList.find((r) => r.name === "r_01xyz")?.locked).toBe(NOT_GRANTABLE_REASON);
-    expect(gdList.find((r) => r.name === "r_01abc")?.locked).toBeUndefined();
-    expect(selectableRoles(roles, { ...admin, mode: "invite" }).some((r) => r.locked === NOT_GRANTABLE_REASON)).toBe(false);
+  it("owner_only on the row = the row is a Giám đốc; nothing locked → no line", () => {
+    expect(CHANGE_ROLE_LOCK_TEXT.owner_only).toBe(OWNER_TARGET_REASON);
+    expect(rowLockNotes({ can, locked_reason: none })).toEqual([]);
   });
 });
 
-describe("ownerTargetLocked (FIX-05)", () => {
-  it("only Giám đốc changes a Giám đốc's role", () => {
-    expect(ownerTargetLocked(["giam_doc"], ["admin"])).toBe(true);
-    expect(ownerTargetLocked(["giam_doc"], ["giam_doc"])).toBe(false);
-    expect(ownerTargetLocked(["quan_ly"], ["admin"])).toBe(false);
+describe("role select options", () => {
+  const options: AssignableRole[] = [
+    { name: "admin", label: "Quản trị hệ thống", locked_reason: "owner_only" },
+    { name: "quan_ly", label: "Quản lý", locked_reason: "grant_not_held" },
+    { name: "nhan_vien", label: "Nhân viên", locked_reason: null },
+    { name: "r_01abc", label: "Kế toán", locked_reason: null },
+  ];
+  it("owner_only on an option = the role carries roles:write", () => {
+    expect(OPTION_LOCK_TEXT.owner_only).toBe(OWNER_ONLY_REASON);
   });
-});
-
-describe("targetRoleLocked (FR-12)", () => {
-  it("locks Đổi vai trò for a target holding a role the caller cannot grant", () => {
-    expect(targetRoleLocked(["r_01xyz"], roles, false, gd.callerPermissions)).toBe(true);
-    expect(targetRoleLocked(["r_01xyz"], roles, true, admin.callerPermissions)).toBe(false);
-    expect(targetRoleLocked(["nhan_vien"], roles, false, gd.callerPermissions)).toBe(false);
-    expect(targetRoleLocked(["unknown"], roles, false, gd.callerPermissions)).toBe(false);
-  });
-});
-
-describe("adminTargetLocked (FIX-03)", () => {
-  it("locks an admin row for a Giám đốc", () => {
-    expect(adminTargetLocked(["admin"], ["giam_doc"])).toBe(true);
-  });
-  it("leaves non-admin rows and admin callers alone", () => {
-    expect(adminTargetLocked(["quan_ly"], ["giam_doc"])).toBe(false);
-    expect(adminTargetLocked(["admin"], ["admin"])).toBe(false);
+  it("firstOpen keeps the current role if open, else Nhân viên, else the first open one", () => {
+    expect(firstOpen(options, "r_01abc")).toBe("r_01abc");
+    expect(firstOpen(options, "admin")).toBe("nhan_vien");
+    expect(firstOpen(options.filter((o) => o.name !== "nhan_vien"))).toBe("r_01abc");
+    expect(firstOpen([{ name: "admin", label: "x", locked_reason: "owner_only" }])).toBe("");
   });
 });

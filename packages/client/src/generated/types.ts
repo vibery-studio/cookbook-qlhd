@@ -581,7 +581,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List users (cursor-paginated) */
+        /** List users (cursor-paginated) with what the caller may do to each (FIX-06) */
         get: {
             parameters: {
                 query?: {
@@ -600,10 +600,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            items: components["schemas"]["AdminUserItem"][];
-                            next_cursor: string | null;
-                        };
+                        "application/json": components["schemas"]["AdminUsersPage"];
                     };
                 };
                 /** @description Not authenticated */
@@ -743,7 +740,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) | root_role (root is never given or taken through the app) */
+                /** @description Missing users:write permission, or rule self_role (own role) | self_disable (own account) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) | root_role (root is never given or taken through the app) */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5779,6 +5776,11 @@ export interface components {
         MeDeleteRequest: {
             password: string;
         };
+        AdminUsersPage: {
+            items: components["schemas"]["AdminUserItem"][];
+            next_cursor: string | null;
+            invite_roles: components["schemas"]["AssignableRole"][];
+        };
         AdminUserItem: {
             id: string;
             /** Format: email */
@@ -5787,6 +5789,32 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "active" | "disabled";
             roles: string[];
+            can: {
+                change_role: boolean;
+                set_status: boolean;
+                reinvite: boolean;
+                grant_jit: boolean;
+                revoke_jit: boolean;
+            };
+            locked_reason: {
+                /** @enum {string|null} */
+                change_role: "self_role" | "admin_only" | "owner_only" | "root_role" | "grant_not_held" | "no_role_option" | null;
+                /** @enum {string|null} */
+                set_status: "admin_only" | "self_disable" | "pending" | null;
+                /** @enum {string|null} */
+                grant_jit: "self_grant" | "jit_actor" | "not_active" | "already_admin" | "jit_active" | null;
+            };
+            role_options: components["schemas"]["AssignableRole"][];
+            jit_grant: {
+                id: string;
+                expires_at: number;
+            } | null;
+        };
+        AssignableRole: {
+            name: string;
+            label: string;
+            /** @enum {string|null} */
+            locked_reason: "self_role" | "admin_only" | "owner_only" | "root_role" | "grant_not_held" | null;
         };
         InviteUserResponse: {
             user: components["schemas"]["AdminUser"];
@@ -5821,6 +5849,7 @@ export interface components {
         RolesResponse: {
             items: components["schemas"]["Role"][];
             catalog: string[];
+            grantable: string[];
             two_layer: boolean;
         };
         Role: {
@@ -5838,6 +5867,7 @@ export interface components {
                 delete: boolean;
                 request: boolean;
                 direct: boolean;
+                grant: string[];
             };
             /** @enum {string|null} */
             locked_reason: "root" | "system" | "own_role" | "admin" | null;
@@ -6437,6 +6467,26 @@ export interface components {
             copy: boolean;
             withdraw: boolean;
             delete: boolean;
+            reason: {
+                /** @enum {string|null} */
+                edit: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                submit: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                approve: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                reject: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                issue: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                void: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                copy: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                withdraw: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+                /** @enum {string|null} */
+                delete: "no_write_permission" | "no_issue_permission" | "not_creator" | "not_draft" | "not_pending" | "not_approved" | "not_issued" | "step_role" | "creator_cannot_approve" | "one_person_one_step" | "step_decided" | "replaced" | "not_copyable" | null;
+            };
             create_child: {
                 type: components["schemas"]["DocType"];
                 allowed: boolean;
@@ -6466,6 +6516,7 @@ export interface components {
             items: components["schemas"]["ContractListItem"][];
             next_cursor: string | null;
             counts: components["schemas"]["ContractCounts"];
+            can_create: components["schemas"]["DocType"][];
         };
         ContractListItem: {
             id: string;

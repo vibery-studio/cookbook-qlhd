@@ -34,7 +34,10 @@ export function useGrantJit() {
       if (response.ok && data) return data;
       throw new ApiProblemError(asProblem(error, response.status));
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey: JIT_GRANTS_KEY }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: JIT_GRANTS_KEY });
+      void qc.invalidateQueries({ queryKey: ["users"] }); // FIX-06: the rows carry the grant + its locks
+    },
   });
 }
 
@@ -51,6 +54,7 @@ export function useRevokeJit() {
     mutationFn: (input: { id: string }) => revokeGrant(input.id),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: JIT_GRANTS_KEY });
+      void qc.invalidateQueries({ queryKey: ["users"] });
       void qc.invalidateQueries({ queryKey: ["me"] });
     },
   });

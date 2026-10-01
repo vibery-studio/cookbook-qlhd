@@ -85,7 +85,9 @@ interface Contract {
   void_reason: string | null;
   steps: Step[];
   timeline: Array<{ action: string; at: number }>;
-  can: Record<"edit" | "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw" | "delete", boolean>;
+  can: Record<"edit" | "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw" | "delete", boolean> & {
+    reason: Record<"edit" | "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw" | "delete", string | null>;
+  };
 }
 
 interface ProblemBody {
@@ -430,6 +432,31 @@ describe("SPEC-04b API (acceptance)", () => {
     expect((await get(t.ql, d.id)).can).toMatchObject({ delete: false, withdraw: false }); // not the creator
     await act(t.ql, d.id, "approve");
     expect((await get(t.nv, d.id)).can).toMatchObject({ delete: false, withdraw: false }); // a step is decided
+  });
+
+  it("FIX-06: can.reason is the write guard's own answer (not_creator → 403, step_role → 403, step_decided → 409); can_create = what POST accepts", async () => {
+    const t = await team();
+    const tpl = await templateId(t.nv);
+    const c = await customer(t.nv);
+    const d = await create(t.nv, tpl, c.id, { ...BASE_VALUES, giam_gia: 1500 }); // -15% → 2 steps
+    const qlDraft = (await get(t.ql, d.id)).can;
+    expect(qlDraft.reason).toMatchObject({ edit: "not_creator", delete: "not_creator", submit: "not_creator" });
+    expect((await del(t.ql, d.id)).status).toBe(403);
+
+    await act(t.nv, d.id, "submit");
+    const nvPending = (await get(t.nv, d.id)).can;
+    expect(nvPending.reason).toMatchObject({ approve: "step_role", reject: "step_role", issue: "no_issue_permission", edit: "not_draft", withdraw: null });
+    expect(nvPending.approve).toBe(false);
+    await act(t.nv, d.id, "approve", {}, 403);
+    expect((await get(t.ql, d.id)).can.reason.approve).toBeNull();
+
+    await act(t.ql, d.id, "approve");
+    expect((await get(t.nv, d.id)).can).toMatchObject({ withdraw: false, reason: { withdraw: "step_decided" } });
+    expect((await withdraw(t.nv, d.id)).status).toBe(409);
+    expect((await get(t.ql, d.id)).can.reason.approve).toBe("step_role"); // step 2 is the director's
+
+    const list = await (await t.nv.session.fetch("/contracts")).json<{ can_create: string[] }>();
+    expect(list.can_create).toEqual(["quote", "contract", "delivery_note"]);
   });
 
   it("AC-21: withdraw — creator, pending, no decision → draft; waiting steps gone; version+1; submitted_at null; one audit row; resubmit works", async () => {

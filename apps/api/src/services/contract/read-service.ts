@@ -14,8 +14,8 @@ import type { Db } from "../../db/client";
 import type { ApprovalQueueDto, ContractDto, ContractListDto, ContractRefDto } from "../../dto/contracts";
 import { childRules, isDocType, type DocType } from "../../domain/contract/doc-types";
 import { todayInVN } from "../../utils/vn-date";
-import { CONTRACT_ACTIONS, type RequiredStep } from "../../domain/contract/types";
-import { isEligible } from "../../domain/contract/assignment";
+import { CONTRACT_ACTIONS } from "../../domain/contract/types";
+import { actionLocks, creatableTypes } from "../../domain/contract/action-locks";
 import type { Principal } from "../../openapi";
 import { pdfStatusOf } from "../../domain/contract/pdf";
 import type { ValidationErrors } from "./types";
@@ -47,7 +47,7 @@ function decodeCursor(raw: string): { n: number; id: string } | null {
 
 export async function listContracts(
   db: Db,
-  _actor: Principal,
+  actor: Principal,
   q: {
     type?: DocType;
     status?: ContractDto["status"];
@@ -87,6 +87,7 @@ export async function listContracts(
     })),
     next_cursor: rows.length > q.limit && last !== undefined ? encodeCursor(last.updatedAt, last.id) : null,
     counts,
+    can_create: creatableTypes(actor.permissions),
   };
 }
 
@@ -131,32 +132,22 @@ function buildCan(
   today: string,
 ): ContractDto["can"] {
   const { contract: c, steps } = d;
-  const isCreator = c.createdBy === actor.id;
-  const has = (p: string) => actor.permissions.includes(p);
-  const current = c.status === "pending" ? steps.find((s) => s.status === "waiting") : undefined;
-  const lowestWaiting = current !== undefined && steps.every((s) => s.status !== "waiting" || s.stepNo >= current.stepNo);
-  let canDecide = false;
-  if (current !== undefined && lowestWaiting) {
-    const excluded = new Set<string>([c.createdBy]);
-    for (const s of steps) if (s.decidedBy !== null) excluded.add(s.decidedBy);
-    const req: RequiredStep = {
-      step_no: current.stepNo,
-      label: current.label,
-      required_permission: current.requiredPermission,
-      required_role: current.requiredRole,
-    };
-    canDecide = isEligible(req, actor, excluded);
-  }
+  // FIX-06: the same lock functions the write services refuse with (`domain/contract/action-locks.ts`).
+  const reason = actionLocks(
+    { type: docTypeOf(c.type), status: c.status, createdBy: c.createdBy, replacedById: c.replacedById, steps },
+    actor,
+  );
   return {
-    edit: isCreator && c.status === "draft",
-    submit: isCreator && c.status === "draft",
-    approve: canDecide,
-    reject: canDecide,
-    issue: has("contract:issue") && c.status === "approved",
-    void: has("contract:issue") && c.status === "issued",
-    withdraw: isCreator && c.status === "pending" && steps.every((s) => s.decidedBy === null),
-    delete: isCreator && c.status === "draft",
-    copy: has("contract:write") && (c.status === "rejected" || (c.status === "voided" && c.replacedById === null)),
+    edit: reason.edit === null,
+    submit: reason.submit === null,
+    approve: reason.approve === null,
+    reject: reason.reject === null,
+    issue: reason.issue === null,
+    void: reason.void === null,
+    withdraw: reason.withdraw === null,
+    delete: reason.delete === null,
+    copy: reason.copy === null,
+    reason,
     create_child: childRules({
       parent: { type: docTypeOf(c.type), status: c.status, valid_until: c.validUntil },
       liveChildren: children,

@@ -1,5 +1,6 @@
 import type { Db } from "../../db/client";
 import type { ContractDto } from "../../dto/contracts";
+import { copyLock } from "../../domain/contract/action-locks";
 import { WRITE_PERM } from "../../domain/contract/doc-types";
 import type { Snapshot } from "../../domain/contract/types";
 import { emitContractEvent } from "../../events/contract-events";
@@ -27,13 +28,10 @@ export async function copyContract(db: Db, ctx: CommandCtx, id: string): Promise
   const source = await getContractForWrite(db, id);
   if (source === null) return { kind: "not-found" };
   const permission = WRITE_PERM[source.type];
-  if (!ctx.actor.permissions.includes(permission)) return { kind: "forbidden", permission };
-  if (source.status !== "rejected" && source.status !== "voided") {
-    return { kind: "state-conflict", current: source.status };
-  }
-  if (source.status === "voided" && source.replaced_by_id !== null) {
-    return { kind: "state-conflict", current: source.status };
-  }
+  // FIX-06: one copy of the rule (`copyLock`) — `GET /contracts/{id}` `can.reason.copy` shows the same answer.
+  const lock = copyLock({ type: source.type, status: source.status, createdBy: source.created_by, replacedById: source.replaced_by_id, steps: [] }, ctx.actor);
+  if (lock === "no_write_permission") return { kind: "forbidden", permission };
+  if (lock !== null) return { kind: "state-conflict", current: source.status };
   const templateType = await templateTypeOf(db, source.template_id);
   if (templateType !== null && templateType !== source.type) return { kind: "template-type" }; // unknown → 404 below
 

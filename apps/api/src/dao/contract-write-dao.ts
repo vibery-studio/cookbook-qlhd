@@ -74,7 +74,8 @@ function insertValues(row: ContractInsertRow) {
 }
 
 function emptyCan(): ContractDto["can"] {
-  return { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
+  const reason = { edit: null, submit: null, approve: null, reject: null, issue: null, void: null, copy: null, withdraw: null, delete: null };
+  return { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, reason, create_child: [] };
 }
 
 function toDto(row: typeof contracts.$inferSelect): ContractDto {

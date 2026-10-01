@@ -9,6 +9,7 @@
 import { and, asc, count, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { permissions, rolePermissions, roles, userRoles } from "../db/schema";
+import { OWNER_ROLE as DOMAIN_OWNER_ROLE, ROOT_ROLE as DOMAIN_ROOT_ROLE } from "../domain/user-assign";
 
 export interface RoleDto {
   id: string;
@@ -197,7 +198,7 @@ export function userHasRole(userId: string, roleName: string): SQL {
 // ---------------------------------------------------------------------------
 
 /** The owner role: its holders alone assign roles carrying `roles:write` and approve changes to `admin`. */
-export const OWNER_ROLE = "giam_doc";
+export const OWNER_ROLE = DOMAIN_OWNER_ROLE;
 
 /** Predicate: the user (bound id or column reference) carries the owner role right now. */
 export function userIsOwnerSql(userId: SQL | string): SQL {
@@ -212,6 +213,12 @@ export function roleNameGrantsKeySql(roleName: string, key: string): SQL {
 /** Predicate: someone (any status) carries the owner role. */
 function anyOwnerSql(): SQL {
   return sql`EXISTS (SELECT 1 FROM user_roles aor JOIN roles aorl ON aorl.id = aor.role_id WHERE aorl.name = ${OWNER_ROLE})`;
+}
+
+/** Someone (any status) carries the owner role right now — the bootstrap condition of `ownerMayAssignSql`, read. */
+export async function anyOwnerExists(db: Db): Promise<boolean> {
+  const rows = await db.select({ one: sql<number>`1` }).from(userRoles).innerJoin(roles, eq(roles.id, userRoles.roleId)).where(eq(roles.name, OWNER_ROLE)).limit(1);
+  return rows.length > 0;
 }
 
 /**
@@ -237,7 +244,7 @@ export function ownerMayReassignSql(actorId: string, userId: string): SQL {
 // ---------------------------------------------------------------------------
 
 /** Seeder-only role (`security:write` + `audit:read`): never assigned, changed or requested through the app. */
-export const ROOT_ROLE = "root";
+export const ROOT_ROLE = DOMAIN_ROOT_ROLE;
 
 /** Roles whose permanent carriers may change permissions directly while two-layer approval is off. */
 export const DIRECT_EDITOR_ROLES = ["admin", OWNER_ROLE] as const;

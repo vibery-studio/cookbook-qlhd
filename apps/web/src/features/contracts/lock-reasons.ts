@@ -5,11 +5,8 @@ import { statusLabel } from "./status";
 
 export type ActionKey = "edit" | "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw" | "delete";
 
-export type LockContext = {
-  contract: Pick<Contract, "status" | "created_by" | "steps" | "can" | "replaced_by_id">;
-  meId: string;
-  permissions: readonly string[];
-};
+/** FIX-06: the API's reason code for a locked action (`GET /contracts/{id}` `can.reason`). */
+export type LockCode = NonNullable<Contract["can"]["reason"][ActionKey]>;
 
 /** Which actions make sense for a status; the rest are simply not offered (SPEC-04b 3.4). */
 export function visibleActions(status: Contract["status"]): ActionKey[] {
@@ -32,53 +29,50 @@ const ROLE_LABELS: Record<string, string> = { giam_doc: "Giám đốc", quan_ly:
 
 const NO_PERMISSION = "Bạn không có quyền thực hiện thao tác này.";
 
-/** The one sentence that explains a locked action; null when `can[action]` is true. Fixed copy, never the server's words. */
-export function lockReason(action: ActionKey, ctx: LockContext): string | null {
-  const { contract: c, meId, permissions } = ctx;
+/**
+ * The one sentence that explains a locked action; null when `can[action]` is true. FIX-06: WHY it is locked is decided by
+ * the API (`can.reason[action]`, the same functions the write guards refuse with) — this only words the code, using the
+ * contract's own data for names (the waiting step, whether Rút về nháp is offered). Fixed copy, never the server's words.
+ */
+export function lockReason(action: ActionKey, c: Pick<Contract, "can" | "steps">): string | null {
   if (c.can[action]) return null;
-  const isCreator = c.created_by === meId;
-  const decided = c.steps.some((s) => s.status !== "waiting");
-
-  switch (action) {
-    case "edit":
-    case "submit":
-      if (!isCreator) return "Chỉ người tạo mới sửa/gửi duyệt hợp đồng nháp.";
-      if (c.status !== "draft") {
-        return c.can.withdraw
-          ? "Hợp đồng đã gửi duyệt, không sửa được nữa. Muốn sửa, hãy Rút về nháp."
-          : "Hợp đồng đã gửi duyệt, không sửa được nữa.";
-      }
-      return NO_PERMISSION;
-    case "approve":
-    case "reject": {
-      if (c.status !== "pending") return "Hợp đồng không ở trạng thái chờ duyệt.";
-      if (isCreator) return "Bạn là người tạo nên không tự duyệt được.";
-      if (c.steps.some((s) => s.decided_by === meId)) return "Bạn đã quyết một bước của hợp đồng này; mỗi người chỉ quyết một bước.";
+  const code: LockCode | null = c.can.reason[action];
+  switch (code) {
+    case "not_creator":
+      if (action === "withdraw") return "Chỉ người tạo mới rút về nháp được.";
+      if (action === "delete") return "Chỉ người tạo mới xóa được nháp.";
+      return "Chỉ người tạo mới sửa/gửi duyệt hợp đồng nháp.";
+    case "not_draft":
+      if (action === "delete") return "Chỉ xóa được hợp đồng còn là nháp.";
+      return c.can.withdraw
+        ? "Hợp đồng đã gửi duyệt, không sửa được nữa. Muốn sửa, hãy Rút về nháp."
+        : "Hợp đồng đã gửi duyệt, không sửa được nữa.";
+    case "not_pending":
+      return "Hợp đồng không ở trạng thái chờ duyệt.";
+    case "creator_cannot_approve":
+      return "Bạn là người tạo nên không tự duyệt được.";
+    case "one_person_one_step":
+      return "Bạn đã quyết một bước của hợp đồng này; mỗi người chỉ quyết một bước.";
+    case "step_role": {
       const step = c.steps.filter((s) => s.status === "waiting").sort((a, b) => a.step_no - b.step_no)[0];
-      if (step) {
-        const role = (step.required_role && ROLE_LABELS[step.required_role]) || "Quản lý hoặc Giám đốc";
-        return `Bước «${step.label}» do ${role} duyệt.`;
-      }
-      return NO_PERMISSION;
+      if (!step) return NO_PERMISSION;
+      const role = (step.required_role && ROLE_LABELS[step.required_role]) || "Quản lý hoặc Giám đốc";
+      return `Bước «${step.label}» do ${role} duyệt.`;
     }
-    case "issue":
-      if (!permissions.includes("contract:issue")) return "Chỉ Quản lý hoặc Giám đốc phát hành.";
-      if (c.status !== "approved") return "Cần duyệt xong mọi bước mới phát hành được.";
-      return NO_PERMISSION;
-    case "void":
-      if (!permissions.includes("contract:issue")) return "Chỉ Quản lý hoặc Giám đốc phát hành.";
-      if (c.status !== "issued") return "Chỉ hủy được hợp đồng đã phát hành.";
-      return NO_PERMISSION;
-    case "withdraw":
-      if (!isCreator) return "Chỉ người tạo mới rút về nháp được.";
-      if (decided) return "Đã có người duyệt/từ chối một bước, không rút về nháp được.";
-      return NO_PERMISSION;
-    case "delete":
-      if (!isCreator) return "Chỉ người tạo mới xóa được nháp.";
-      if (c.status !== "draft") return "Chỉ xóa được hợp đồng còn là nháp.";
-      return NO_PERMISSION;
-    case "copy":
-      if (c.status === "voided" && c.replaced_by_id) return "Đã có bản thay thế";
+    case "no_issue_permission":
+      return "Chỉ Quản lý hoặc Giám đốc phát hành.";
+    case "not_approved":
+      return "Cần duyệt xong mọi bước mới phát hành được.";
+    case "not_issued":
+      return "Chỉ hủy được hợp đồng đã phát hành.";
+    case "step_decided":
+      return "Đã có người duyệt/từ chối một bước, không rút về nháp được.";
+    case "replaced":
+      return "Đã có bản thay thế";
+    case "not_copyable":
+      return "Chỉ sao chép được hợp đồng bị từ chối hoặc đã hủy.";
+    case "no_write_permission":
+    case null:
       return NO_PERMISSION;
   }
 }

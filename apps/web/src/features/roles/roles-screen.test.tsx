@@ -32,16 +32,22 @@ import { CurrentUserProvider, type Me } from "../../app/me";
 import { RolesScreen } from "./roles-screen";
 
 const catalog = ["contract:read", "contract:write", "contract:approve", "audit:read", "roles:write", "users:read"];
-const role = (name: string, label: string, permissions: string[], extra: Record<string, unknown> = {}) => ({
-  id: `id_${name}`, name, label, description: null, is_system: true, version: 1, holders: 1, permissions,
-  can: { edit: true, delete: false, request: true }, locked_reason: "system", request_locked_reason: null, pending_request: null, ...extra,
-});
+/** `can.grant` defaults to what the API gives a director holding the whole catalog: every code the role lacks (FIX-06). */
+const role = (name: string, label: string, permissions: string[], extra: Record<string, unknown> = {}) => {
+  const { can, ...rest } = extra as { can?: Record<string, unknown> };
+  return {
+    id: `id_${name}`, name, label, description: null, is_system: true, version: 1, holders: 1, permissions,
+    can: { edit: true, delete: false, request: true, direct: false, grant: catalog.filter((c) => !permissions.includes(c)), ...can },
+    locked_reason: "system", request_locked_reason: null, pending_request: null, ...rest,
+  };
+};
 const roles = {
   items: [
     role("giam_doc", "Giám đốc", catalog, { can: { edit: false, delete: false, request: false }, locked_reason: "own_role" }),
     role("quan_ly", "Quản lý", ["contract:read", "audit:read"]),
   ],
   catalog,
+  grantable: catalog,
 };
 const ok = (data: unknown) => Promise.resolve({ data, response: { ok: true, status: 200 } });
 const problem = (slug: string, status: number, extra: Record<string, unknown> = {}) =>
@@ -118,13 +124,16 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("admin is not a wildcard: a permission the admin lacks is greyed (disabled + tooltip), one note on top, no per-row 🔒", async () => {
-    const admin: Me = { id: "a", email: "a@x.y", display_name: "QT", roles: ["admin"], permissions: ["audit:read", "roles:write", "users:read"] };
+  it("FIX-06: greyed boxes come from the API's can.grant, not /me — admin is not a wildcard (disabled + tooltip, one note, no per-row 🔒)", async () => {
+    // /me even claims contract:approve; the API (D1, grant_not_held) says the admin may add only roles:write + users:read here
+    const admin: Me = { id: "a", email: "a@x.y", display_name: "QT", roles: ["admin"], permissions: catalog };
+    serve({ ...roles, grantable: ["audit:read", "roles:write", "users:read"], items: [roles.items[0], role("quan_ly", "Quản lý", ["contract:read", "audit:read"], { can: { grant: ["roles:write", "users:read"] } })] });
     renderScreen(admin);
     await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
     const drawer = await screen.findByRole("dialog", { name: "Vai trò · Quản lý" });
-    expect(within(drawer).getByRole("checkbox", { name: /Duyệt/ })).toHaveProperty("disabled", true); // contract:approve — admin lacks it
-    expect(within(drawer).getByRole("checkbox", { name: /Xem nhật ký/ })).toHaveProperty("disabled", false); // held → still removable/addable
+    expect(within(drawer).getByRole("checkbox", { name: /Duyệt/ })).toHaveProperty("disabled", true); // contract:approve — not in can.grant
+    expect(within(drawer).getByRole("checkbox", { name: /Xem nhật ký/ })).toHaveProperty("disabled", false); // in the role → removable
+    expect(within(drawer).getByRole("checkbox", { name: /Quản lý vai trò/ })).toHaveProperty("disabled", false); // in can.grant
     expect(drawer.textContent).toContain("Quyền mờ: bạn không có nên không cấp được.");
     expect(drawer.textContent).not.toContain("🔒 Bạn không có quyền này");
   });
@@ -353,5 +362,17 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     expect(within(add).getByRole("checkbox", { name: /Xem hợp đồng/ })).toHaveProperty("checked", true);
     expect(within(add).getByRole("checkbox", { name: /Tạo & sửa nháp/ })).toHaveProperty("checked", false);
     expect(within(add).getByRole("button", { name: "Tạo vai trò" })).toBeTruthy();
+  });
+
+  it("FIX-06: clone drops (and greys) the codes the API's grantable leaves out — even ones /me lists", async () => {
+    serve({ ...roles, grantable: ["audit:read"] });
+    renderScreen(director); // /me holds the whole catalog
+    await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Vai trò · Quản lý" })).getByRole("button", { name: "Clone" }));
+    const add = await screen.findByRole("dialog", { name: "Thêm vai trò" });
+    expect(within(add).getByRole("checkbox", { name: /Xem hợp đồng/ })).toHaveProperty("checked", false);
+    expect(within(add).getByRole("checkbox", { name: /Xem hợp đồng/ })).toHaveProperty("disabled", true);
+    expect(within(add).getByRole("checkbox", { name: /Xem nhật ký/ })).toHaveProperty("checked", true);
+    expect(add.textContent).toContain("Đã bỏ sẵn các quyền bạn không có nên không cấp được");
   });
 });

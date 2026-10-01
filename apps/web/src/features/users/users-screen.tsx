@@ -1,27 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useCurrentUser } from "../../app/me";
-import { useRoleLabelOf, useRoles } from "../../app/roles-query";
+import { useRoleLabelOf } from "../../app/roles-query";
 import { Alert, Button, EmptyState, ErrorState, Field, Modal, Pill, Skeleton } from "../../ui";
 import type { PillTone } from "../../ui";
 import { errorText, useInviteUser, useReinvite, useUpdateUser, useUsers } from "./api";
 import type { ActivationLink, AdminUser } from "./api";
 import { LinkBox } from "./link-box";
 import { GrantJitDialog, JitControls } from "./jit-controls";
-import { useActiveJitGrants } from "./jit-api";
-import { jitRowAction } from "./jit-rules";
-import {
-  ADMIN_TARGET_REASON,
-  adminTargetLocked,
-  FALLBACK_ROLES,
-  OWNER_TARGET_REASON,
-  ownerTargetLocked,
-  NOT_GRANTABLE_REASON,
-  SELF_DISABLE_REASON,
-  SELF_ROLE_REASON,
-  selectableRoles,
-  targetRoleLocked,
-} from "./role-locks";
-import type { RoleOption, SelectableRole } from "./role-locks";
+import { CHANGE_ROLE_LOCK_TEXT, firstOpen, OPTION_LOCK_TEXT, rowLockNotes, STATUS_LOCK_TEXT } from "./role-locks";
+import type { AssignableRole } from "./role-locks";
 
 const statusLabel: Record<AdminUser["status"], string> = { pending: "Chưa kích hoạt", active: "Đang hoạt động", disabled: "Đã khóa" };
 const statusTone: Record<AdminUser["status"], PillTone> = { pending: "pending", active: "success", disabled: "danger" };
@@ -36,12 +23,13 @@ function roleText(user: AdminUser, labelOf: (name: string) => string): string {
   return user.roles.map(labelOf).join(", ") || "Chưa có vai trò";
 }
 
-function RoleOptions({ options }: { options: SelectableRole[] }) {
+/** The role select, exactly as the API lists it (FIX-06: locked options carry the API's reason). */
+function RoleOptions({ options }: { options: readonly AssignableRole[] }) {
   return (
     <>
       {options.map((r) => (
-        <option key={r.name} value={r.name} disabled={r.locked !== undefined}>
-          {r.locked ? `🔒 ${r.label} — ${r.locked}` : r.label}
+        <option key={r.name} value={r.name} disabled={r.locked_reason !== null}>
+          {r.locked_reason ? `🔒 ${r.label} — ${OPTION_LOCK_TEXT[r.locked_reason]}` : r.label}
         </option>
       ))}
     </>
@@ -59,25 +47,18 @@ export function UsersScreen() {
   const me = useCurrentUser();
   const canWrite = me.permissions.includes("users:write");
   const canGrant = me.permissions.includes("jit:grant");
-  const grants = useActiveJitGrants(canGrant);
   const users = useUsers();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const reinvite = useReinvite();
   const [notice, setNotice] = useState<string | null>(null);
 
-  const rolesQuery = useRoles();
   const labelOf = useRoleLabelOf();
-  const roles: RoleOption[] = rolesQuery.data?.items ?? FALLBACK_ROLES;
-  const callerIsAdmin = me.roles.includes("admin");
-  const roleCtx = { callerIsAdmin, callerIsOwner: me.roles.includes("giam_doc"), callerPermissions: me.permissions };
 
-  const jitFor = (user: AdminUser) =>
-    canGrant
-      ? <JitControls user={user} action={jitRowAction(user, me, grants.data?.find((g) => g.user_id === user.id && g.state === "active"))} onGrant={(u) => setDialog({ kind: "jit", user: u })} />
-      : null;
+  const jitFor = (user: AdminUser) => <JitControls user={user} onGrant={(u) => setDialog({ kind: "jit", user: u })} />;
   const showActions = canWrite || canGrant;
 
   const items = useMemo(() => users.data?.pages.flatMap((page) => page.items) ?? [], [users.data]);
+  const inviteRoles = users.data?.pages[0]?.invite_roles ?? [];
 
   async function onReinvite(user: AdminUser) {
     setNotice(null);
@@ -124,7 +105,7 @@ export function UsersScreen() {
                   <Pill tone="accent">{roleText(user, labelOf)}</Pill>
                   <Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill>
                 </div>
-                {showActions ? <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} ownerLocked={ownerTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
+                {showActions ? <Actions canWrite={canWrite} jit={jitFor(user)} user={user} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} /> : null}
               </li>
             ))}
           </ul>
@@ -148,7 +129,7 @@ export function UsersScreen() {
                     <td className="px-s4 py-s3"><Pill tone={statusTone[user.status]}>{statusLabel[user.status]}</Pill></td>
                     {showActions ? (
                       <td className="px-s4 py-s3">
-                        <Actions canWrite={canWrite} jit={jitFor(user)} user={user} isSelf={user.id === me.id} adminLocked={adminTargetLocked(user.roles, me.roles)} ownerLocked={ownerTargetLocked(user.roles, me.roles)} grantLocked={targetRoleLocked(user.roles, roles, callerIsAdmin, me.permissions)} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
+                        <Actions canWrite={canWrite} jit={jitFor(user)} user={user} onReinvite={(u) => void onReinvite(u)} onDialog={setDialog} busy={reinvite.isPending} />
                       </td>
                     ) : null}
                   </tr>
@@ -164,27 +145,24 @@ export function UsersScreen() {
         </>
       )}
 
-      {dialog?.kind === "invite" ? <InviteDialog roles={selectableRoles(roles, { ...roleCtx, mode: "invite" })} onClose={() => setDialog(null)} onDone={(link, name) => setDialog({ kind: "link", link, name })} /> : null}
+      {dialog?.kind === "invite" ? <InviteDialog roles={inviteRoles} onClose={() => setDialog(null)} onDone={(link, name) => setDialog({ kind: "link", link, name })} /> : null}
       {dialog?.kind === "link" ? (
         <Modal open title="Link kích hoạt" onClose={() => setDialog(null)} footer={<Button onClick={() => setDialog(null)}>Đóng</Button>}>
           <LinkBox link={dialog.link} name={dialog.name} />
         </Modal>
       ) : null}
-      {dialog?.kind === "role" ? <RoleDialog user={dialog.user} roles={selectableRoles(roles, { ...roleCtx, mode: "assign" })} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "role" ? <RoleDialog user={dialog.user} roles={dialog.user.role_options} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "jit" ? <GrantJitDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "status" ? <StatusDialog user={dialog.user} onClose={() => setDialog(null)} /> : null}
     </section>
   );
 }
 
+/** Row actions, straight from the API's `can` / `locked_reason` (FIX-06): the web decides nothing, it only words the reason. */
 function Actions({
   canWrite,
   jit,
   user,
-  isSelf,
-  adminLocked,
-  ownerLocked,
-  grantLocked,
   busy,
   onReinvite,
   onDialog,
@@ -192,15 +170,11 @@ function Actions({
   canWrite: boolean;
   jit: ReactNode;
   user: AdminUser;
-  isSelf: boolean;
-  adminLocked: boolean;
-  ownerLocked: boolean;
-  grantLocked: boolean;
   busy: boolean;
   onReinvite: (user: AdminUser) => void | Promise<void>;
   onDialog: (dialog: Dialog) => void;
 }) {
-  const locked = (label: string, reason: string, testId: string) => (
+  const locked = (label: string, reason: string | undefined, testId: string) => (
     <Button
       variant="secondary"
       data-testid={testId}
@@ -212,50 +186,41 @@ function Actions({
       🔒 {label}
     </Button>
   );
+  const statusLabel = user.status === "disabled" ? "Mở khóa" : "Khóa";
+  const roleLock = user.locked_reason.change_role;
+  const statusLock = user.locked_reason.set_status;
+  const notes = rowLockNotes(user);
   return (
     <div className="grid justify-items-start gap-s2">
       {canWrite ? (
         <>
           <div className="flex flex-wrap gap-s2">
-            {user.status === "pending" ? (
+            {user.can.reinvite ? (
               <Button variant="secondary" disabled={busy} onClick={() => void onReinvite(user)}>Tạo lại link</Button>
             ) : null}
-            {adminLocked ? (
-              locked("Đổi vai trò", ADMIN_TARGET_REASON, "action-role")
-            ) : isSelf ? (
-              locked("Đổi vai trò", SELF_ROLE_REASON, "action-role")
-            ) : ownerLocked ? (
-              locked("Đổi vai trò", OWNER_TARGET_REASON, "action-role")
-            ) : grantLocked ? (
-              locked("Đổi vai trò", NOT_GRANTABLE_REASON, "action-role")
-            ) : (
+            {user.can.change_role ? (
               <Button variant="secondary" data-testid="action-role" onClick={() => onDialog({ kind: "role", user })}>
                 Đổi vai trò
               </Button>
-            )}
-            {adminLocked ? (
-              locked(user.status === "disabled" ? "Mở khóa" : "Khóa", ADMIN_TARGET_REASON, "action-status")
-            ) : user.status === "disabled" ? (
-              <Button variant="secondary" onClick={() => onDialog({ kind: "status", user })}>Mở khóa</Button>
-            ) : isSelf ? (
-              locked("Khóa", SELF_DISABLE_REASON, "action-status")
             ) : (
-              <Button variant="danger" data-testid="action-status" onClick={() => onDialog({ kind: "status", user })}>
-                Khóa
+              locked("Đổi vai trò", roleLock ? CHANGE_ROLE_LOCK_TEXT[roleLock] : undefined, "action-role")
+            )}
+            {user.can.set_status ? (
+              <Button variant={user.status === "disabled" ? "secondary" : "danger"} data-testid="action-status" onClick={() => onDialog({ kind: "status", user })}>
+                {statusLabel}
               </Button>
+            ) : (
+              locked(statusLabel, statusLock ? STATUS_LOCK_TEXT[statusLock] : undefined, "action-status")
             )}
           </div>
-          {adminLocked ? (
-            <p className="text-sm text-muted">🔒 {ADMIN_TARGET_REASON}</p>
-          ) : isSelf ? (
+          {notes.length === 1 ? (
+            <p className="text-sm text-muted">🔒 {notes[0]}</p>
+          ) : notes.length > 1 ? (
             <ul className="grid gap-s1 text-sm text-muted">
-              <li>🔒 {SELF_ROLE_REASON}</li>
-              {user.status !== "disabled" ? <li>🔒 {SELF_DISABLE_REASON}</li> : null}
+              {notes.map((n) => (
+                <li key={n}>🔒 {n}</li>
+              ))}
             </ul>
-          ) : ownerLocked ? (
-            <p className="text-sm text-muted">🔒 {OWNER_TARGET_REASON}</p>
-          ) : grantLocked ? (
-            <p className="text-sm text-muted">🔒 {NOT_GRANTABLE_REASON}</p>
           ) : null}
         </>
       ) : null}
@@ -264,11 +229,11 @@ function Actions({
   );
 }
 
-function InviteDialog({ roles, onClose, onDone }: { roles: SelectableRole[]; onClose: () => void; onDone: (link: ActivationLink, name: string) => void }) {
+function InviteDialog({ roles, onClose, onDone }: { roles: readonly AssignableRole[]; onClose: () => void; onDone: (link: ActivationLink, name: string) => void }) {
   const invite = useInviteUser();
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState(() => (roles.find((r) => r.name === "nhan_vien" && !r.locked) ?? roles.find((r) => !r.locked))?.name ?? "");
+  const [role, setRole] = useState(() => firstOpen(roles));
   const [key] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
 
@@ -317,12 +282,10 @@ function InviteDialog({ roles, onClose, onDone }: { roles: SelectableRole[]; onC
   );
 }
 
-function RoleDialog({ user, roles, onClose }: { user: AdminUser; roles: SelectableRole[]; onClose: () => void }) {
+function RoleDialog({ user, roles, onClose }: { user: AdminUser; roles: readonly AssignableRole[]; onClose: () => void }) {
   const update = useUpdateUser();
   const current = user.roles[0] ?? "nhan_vien";
-  const [role, setRole] = useState(() =>
-    roles.some((r) => r.name === current && !r.locked) ? current : (roles.find((r) => r.name === "nhan_vien" && !r.locked) ?? roles.find((r) => !r.locked))?.name ?? current,
-  );
+  const [role, setRole] = useState(() => firstOpen(roles, current) || current);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {

@@ -12,7 +12,7 @@ import { ContractFormModal } from "./contract-form-modal";
 import { CustomerCombobox } from "./customer-combobox";
 import { errorMessage, useContractList, useTemplates, type ContractListItem } from "./api";
 import { DOC_TYPE_LABEL, DOC_TYPE_SHORT, type DocType } from "./doc-type-labels";
-import { TYPE_TABS, createLabel, creatableTypes, hasFilters, parseListParams, typeEmptyTitle } from "./list-params";
+import { TYPE_TABS, createLabel, hasFilters, parseListParams, typeEmptyTitle } from "./list-params";
 import { STATUS_TONE, TABS, numberLabel, statusLabel } from "./status";
 
 const ULID = /^[0-9A-Z]{26}$/;
@@ -82,8 +82,6 @@ function CreateMenu({ types, onPick, className }: { types: readonly DocType[]; o
 
 export function ContractsScreen() {
   const me = useCurrentUser();
-  const creatable = creatableTypes(me.permissions);
-  const canWrite = creatable.length > 0;
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -96,6 +94,9 @@ export function ContractsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const list = useContractList(tab === "all" ? undefined : tab, filters, type);
+  // FIX-06: the types "+ Tạo" offers are the API's (`can_create` = what POST /contracts accepts), not a client map.
+  const creatable = list.data?.pages[0]?.can_create ?? [];
+  const canWrite = creatable.length > 0;
   const templates = useTemplates();
   const customerFilter = useCustomer(filters.customerId);
 

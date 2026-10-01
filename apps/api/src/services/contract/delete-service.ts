@@ -4,6 +4,7 @@ import { deleteDraft } from "../../dao/contract-delete-dao";
 import { contractStatus } from "../../dao/contract-issue-dao";
 import { getContractForWrite } from "../../dao/contract-write-dao";
 import type { Db } from "../../db/client";
+import { draftWriteLock } from "../../domain/contract/action-locks";
 import { WRITE_PERM } from "../../domain/contract/doc-types";
 import type { CommandCtx, TypeForbidden } from "./types";
 
@@ -18,8 +19,10 @@ export async function deleteContract(db: Db, ctx: CommandCtx, id: string): Promi
   const doc = await getContractForWrite(db, id);
   if (doc === null) return { kind: "not-found" };
   const permission = WRITE_PERM[doc.type];
-  if (!ctx.actor.permissions.includes(permission)) return { kind: "forbidden", permission };
-  if (doc.created_by !== ctx.actor.id) {
+  // FIX-06: `draftWriteLock` (same as `can.reason.delete`); the draft state itself is the CAS below.
+  const lock = draftWriteLock({ type: doc.type, status: doc.status, createdBy: doc.created_by, replacedById: doc.replaced_by_id, steps: [] }, ctx.actor);
+  if (lock === "no_write_permission") return { kind: "forbidden", permission };
+  if (lock === "not_creator") {
     await writeAuditEvent(db, {
       actor: ctx.actor.id,
       action: "permission.denied",

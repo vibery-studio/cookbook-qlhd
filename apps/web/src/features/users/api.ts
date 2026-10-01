@@ -3,7 +3,9 @@ import type { components, Problem } from "@runway/client";
 import { ApiProblemError, client } from "../../lib/client";
 import { networkProblemMessage, problemMessage, problemSlug } from "../../lib/problem-messages";
 
-export type AdminUser = components["schemas"]["AdminUser"];
+/** A `GET /admin/users` row: `can` / `locked_reason` / `role_options` are decided by the API (FIX-06). */
+export type AdminUser = components["schemas"]["AdminUserItem"];
+export type UsersPage = components["schemas"]["AdminUsersPage"];
 export type ActivationLink = { url: string; expiresAt: number };
 
 const PAGE_SIZE = 50;
@@ -36,12 +38,9 @@ export function useUsers(enabled = true) {
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const data = await unwrap(
-        client.typed.GET("/admin/users", { params: { query: { limit: PAGE_SIZE, ...(pageParam ? { cursor: pageParam } : {}) } } }) as Raw<{
-          items: AdminUser[];
-          next_cursor: string | null;
-        }>,
+        client.typed.GET("/admin/users", { params: { query: { limit: PAGE_SIZE, ...(pageParam ? { cursor: pageParam } : {}) } } }) as Raw<UsersPage>,
       );
-      return data ?? { items: [], next_cursor: null };
+      return data ?? { items: [], next_cursor: null, invite_roles: [] };
     },
     getNextPageParam: (last) => last.next_cursor ?? undefined,
     staleTime: 0,
@@ -88,7 +87,7 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: async (input: { id: string; role?: string; status?: "active" | "disabled" }) => {
       const { id, ...body } = input;
-      await unwrap(client.typed.PATCH("/admin/users/{id}", { params: { path: { id } }, body }) as Raw<AdminUser>);
+      await unwrap(client.typed.PATCH("/admin/users/{id}", { params: { path: { id } }, body }) as Raw<unknown>);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });

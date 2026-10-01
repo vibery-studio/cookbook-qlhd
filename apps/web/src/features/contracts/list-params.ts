@@ -16,17 +16,6 @@ const lower = (t: DocType): string => DOC_TYPE_LABEL[t].toLocaleLowerCase("vi");
 export const typeEmptyTitle = (t: DocType): string => `Chưa có ${lower(t)} nào`;
 export const createLabel = (t: DocType): string => `Tạo ${lower(t)}`;
 
-/** DNTT is never made from "+ Tạo" (SPEC-09 §3.5: it comes from an issued contract). */
-export const CREATE_MENU_TYPES: readonly DocType[] = ["quote", "contract", "delivery_note"];
-export const WRITE_PERMISSION: Readonly<Record<DocType, string>> = {
-  quote: "quote:write",
-  contract: "contract:write",
-  payment_request: "payment_request:write",
-  delivery_note: "delivery_note:write",
-};
-/** The types the "+ Tạo" menu offers this user (the API still decides; this only hides what would 403). */
-export const creatableTypes = (permissions: readonly string[]): DocType[] => CREATE_MENU_TYPES.filter((t) => permissions.includes(WRITE_PERMISSION[t]));
-
 const ulid = (v: string | null): string | undefined => (v && ULID.test(v) ? v : undefined);
 
 /** URL -> list state. Only ULIDs and the tab name live in the URL; anything else is ignored. */

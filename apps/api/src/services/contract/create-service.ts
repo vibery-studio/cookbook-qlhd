@@ -1,6 +1,7 @@
 import { generateUlid } from "../../utils/id";
 import type { Db } from "../../db/client";
 import type { ContractDto, CreateContractInput } from "../../dto/contracts";
+import { createLock } from "../../domain/contract/action-locks";
 import { WRITE_PERM } from "../../domain/contract/doc-types";
 import { emitContractEvent } from "../../events/contract-events";
 import { insertContract, templateTypeOf } from "../../dao/contract-write-dao";
@@ -22,8 +23,10 @@ export async function createContract(db: Db, ctx: CommandCtx, input: CreateContr
   const type = await templateTypeOf(db, input.template_id);
   if (type === null) return { kind: "not-found", what: "template" };
   const permission = WRITE_PERM[type];
-  if (!ctx.actor.permissions.includes(permission)) return { kind: "forbidden", permission };
-  if (type === "payment_request") return { kind: "parent-required" };
+  // FIX-06: one copy of the rule (`createLock`) — `GET /contracts` `can_create` lists the types it lets through.
+  const lock = createLock(type, ctx.actor.permissions);
+  if (lock === "no_write_permission") return { kind: "forbidden", permission };
+  if (lock === "parent_required") return { kind: "parent-required" };
 
   const built = await loadAndBuild(db, {
     templateId: input.template_id,

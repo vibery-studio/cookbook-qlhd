@@ -39,7 +39,6 @@ const metaOf = (r: Role): Meta => ({ label: r.label, description: r.description 
 export function RoleDrawer({
   role,
   catalog,
-  holds,
   twoLayerOff = false,
   onClose,
   onClone,
@@ -48,8 +47,6 @@ export function RoleDrawer({
 }: {
   role: Role;
   catalog: readonly string[];
-  /** Does the caller hold this permission? (hint only — the API decides) */
-  holds: (code: string) => boolean;
   /** C-11-001: two-layer approval is off — a permission edit the caller may make directly is saved at once. */
   twoLayerOff?: boolean;
   onClose: () => void;
@@ -77,6 +74,8 @@ export function RoleDrawer({
   const noApprover = role.request_locked_reason === "no_approver";
   const direct = twoLayerOff && role.can.direct;
   const canEditPerms = direct || role.can.request || noApprover;
+  // FIX-06: `role.can.grant` = the codes the API lets the caller ADD (grant_not_held); a code already held can always go
+  const cannotAdd = (code: string) => !role.permissions.includes(code) && !role.can.grant.includes(code);
   const isSystem = role.is_system;
   const metaDirty = meta.label.trim() !== role.label || meta.description.trim() !== (role.description ?? "");
   const { added, removed } = roleDiff(role.permissions, [...perms]);
@@ -237,7 +236,7 @@ export function RoleDrawer({
               catalog={catalog}
               selected={perms}
               lockedAll={!canEditPerms}
-              cannotGrant={(code) => !holds(code) && !role.permissions.includes(code)}
+              cannotGrant={cannotAdd}
               onToggle={toggle}
             />
             {broken.map(([a, b]) => (

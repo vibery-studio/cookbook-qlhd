@@ -31,6 +31,7 @@ type Env = { Bindings: Bindings; Variables: Variables };
 
 const ESCALATION_DETAIL: Record<EscalationRule, string> = {
   self_role: "Không tự đổi vai trò của mình.",
+  self_disable: "Không tự khóa tài khoản của mình.",
   admin_only: "Chỉ Quản trị hệ thống mới sửa được tài khoản quản trị.",
   owner_only: "Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò.",
   root_role: "Vai trò Root admin chỉ tạo bằng công cụ cài đặt, không gán hay gỡ trong ứng dụng.",
@@ -113,7 +114,7 @@ const updateUserRoute = createRoute({
     },
     401: problemResponse("Not authenticated"),
     403: problemResponse(
-      "Missing users:write permission, or rule self_role (own role) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) | root_role (root is never given or taken through the app)",
+      "Missing users:write permission, or rule self_role (own role) | self_disable (own account) | admin_only (only an admin edits a user holding admin) | owner_only (only a giam_doc holder assigns a role carrying roles:write) | root_role (root is never given or taken through the app)",
     ),
     404: problemResponse("User not found"),
     409: problemResponse("last_admin: cannot disable or demote the last active admin"),

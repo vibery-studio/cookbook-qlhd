@@ -207,9 +207,10 @@ describe("SPEC-01 foundation (acceptance)", () => {
     const admin = await seedAdmin();
     const { id }: { id: string } = await (await admin.fetch("/me")).json();
     const off = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) });
-    expect(off.status).toBe(409);
-    const offBody: { type: string } = await off.json();
-    expect(offBody.type).toContain("last-admin");
+    // FIX-06: disabling yourself is refused before the last-admin guard → 403 self_disable
+    expect(off.status).toBe(403);
+    const offBody: { rule?: string } = await off.json();
+    expect(offBody.rule).toBe("self_disable");
     // FIX-03 (SPEC-06 DEC-5): changing your own role is refused before the last-admin guard → 403 self_role
     const rerole = await admin.fetch(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ role: "giam_doc" }) });
     expect(rerole.status).toBe(403);

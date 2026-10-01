@@ -25,9 +25,8 @@ export function RolesScreen() {
   const canWrite = me.permissions.includes("roles:write");
   // C-11-001: only an explicit `false` means off (older payloads / fixtures without the field = on).
   const twoLayerOff = query.data?.two_layer === false;
-  // Hint only (the API checks again): the admin role is exempt from "only grant what you hold".
-  // the server checks added codes ⊆ the caller's permissions for everyone (admin included) — mirror it exactly
-  const holds = (code: string) => me.permissions.includes(code);
+  // FIX-06: what the caller may put in a new role is decided by the API (grant_not_held, D1) — never from /me.
+  const grantable = query.data?.grantable ?? [];
 
   const roles = sortRoles(query.data?.items ?? []);
   const catalog = query.data?.catalog ?? [...new Set(roles.flatMap((r) => r.permissions))];
@@ -219,12 +218,11 @@ export function RolesScreen() {
           key={selected.id}
           role={selected}
           catalog={catalog}
-          holds={holds}
           twoLayerOff={twoLayerOff}
           onClose={() => setSelectedId(null)}
           onClone={(role) => {
             setSelectedId(null);
-            setForm(cloneSeed(role, holds));
+            setForm(cloneSeed(role, grantable));
           }}
           onDeleted={(role) => {
             setSelectedId(null);
@@ -237,7 +235,7 @@ export function RolesScreen() {
         <RoleFormModal
           seed={form}
           catalog={catalog}
-          holds={holds}
+          grantable={grantable}
           onClose={() => setForm(null)}
           onCreated={(role) => {
             setForm(null);

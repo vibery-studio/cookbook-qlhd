@@ -9,8 +9,8 @@
  * Escalation guards (FIX-03, SPEC-06 DEC-5, FIX-05): nobody changes their OWN role (`self_role`); only an
  * admin touches a user who holds `admin` (`admin_only`: role, status, name); only an owner (`giam_doc` holder)
  * invites into / assigns a role that carries `roles:write` (`owner_only`: admin, giam_doc, custom; bootstrap: the
- * first `giam_doc` while nobody carries it) or changes a Giám đốc's role (`owner_only`) — the read
- * gives the 403, and the same rule sits in the WHERE of the batch's first write (`ownerMayAssignSql`), so a
+ * first `giam_doc` while nobody carries it) or changes a Giám đốc's role (`owner_only`) — the pure rules of
+ * `domain/user-assign.ts` (FIX-06: the same functions build `GET /admin/users` `can` / `locked_reason`) give the 403, and the same rule sits in the WHERE of the batch's first write (`ownerMayAssignSql`), so a
  * role or actor changing in between grants nothing. Owners skip FR-12 only for that owner-only class.
  * The actor's roles are read from D1 in the same request, not the principal cache. Each refusal writes one
  * `permission.denied` row before the caller sees 403.
@@ -37,6 +37,7 @@ import {
   findUserByEmail,
   findUserById,
   insertInvitedUserStmt,
+  listUsersPaginated,
   notLastActiveAdmin,
   revokeUserRefreshTokensStmt,
   updateUserFieldsStmt,
@@ -50,18 +51,34 @@ import {
   inviteConsumedAt,
   invalidateOtherInviteTokensStmt,
 } from "../dao/verification-token-dao";
-import { listPermissionKeysForRoleNames, listPermissionKeysForUser, roleNameExists } from "../dao/permission-dao";
+import { listPermissionKeysForUser, roleNameExists } from "../dao/permission-dao";
 import {
+  anyOwnerExists,
   dropOtherRolesStmt,
   grantRoleByNameStmt,
+  listRoleDetails,
   listRoleNamesForUser,
-  OWNER_ROLE,
-  ROOT_ROLE,
   ownerMayAssignSql,
   ownerMayReassignSql,
   userHasRole,
 } from "../dao/role-dao";
-import { holds } from "../dao/role-change-dao";
+import {
+  assignRefusal,
+  changeRoleLock,
+  editRefusal,
+  jitGrantRefusal,
+  mayRevokeJit,
+  roleOptions,
+  statusLock,
+  type AssignContext,
+  type AssignRefusal,
+  type ChangeRoleLock,
+  type EscalationRule,
+  type JitGrantRefusal,
+  type RoleOption,
+  type StatusLock,
+} from "../domain/user-assign";
+import { listJitGrants } from "../dao/jit-dao";
 import { generateUlid } from "../utils/id";
 import { passwordHashParams } from "../utils/password-params";
 
@@ -102,10 +119,72 @@ export function activationUrl(env: Bindings, rawToken: string): string {
   return `${env.APP_ORIGIN}/activate?token=${encodeURIComponent(rawToken)}`;
 }
 
+// ------------------------------- list --------------------------------------
+
+export interface AdminUserRow extends AdminUserView {
+  can: { change_role: boolean; set_status: boolean; reinvite: boolean; grant_jit: boolean; revoke_jit: boolean };
+  locked_reason: { change_role: ChangeRoleLock | null; set_status: StatusLock | null; grant_jit: JitGrantRefusal | null };
+  role_options: Array<RoleOption & { label: string }>;
+  jit_grant: { id: string; expires_at: number } | null;
+}
+
+/**
+ * FIX-06: `GET /admin/users` for one caller — every lock the screen shows comes from the rules the write guards use
+ * (`assignRefusal`, `editRefusal`, `jitGrantRefusal`, `mayRevokeJit`). `callerPermissions` = the route gates' view (the
+ * principal): no `users:write` → no user action; no `jit:grant` → no grant. Reads: the page, the caller + catalog,
+ * active JIT grants — no per-user rule query.
+ */
+export async function listUsersFor(
+  db: Db,
+  input: { actorId: string; callerPermissions: readonly string[]; cursor?: string; limit: number; now: number },
+): Promise<{ items: AdminUserRow[]; next_cursor: string | null; invite_roles: Array<RoleOption & { label: string }> }> {
+  const [page, ctx, grants, roles] = await Promise.all([
+    listUsersPaginated(db, { cursor: input.cursor, limit: input.limit }),
+    loadAssignContext(db, input.actorId),
+    listJitGrants(db, { activeOnly: true, now: input.now }),
+    listRoleDetails(db),
+  ]);
+  const labels = new Map(roles.map((r) => [r.name, r.label]));
+  const labelled = (options: RoleOption[]) => options.map((o) => ({ ...o, label: labels.get(o.name) ?? o.name }));
+  const writer = input.callerPermissions.includes("users:write");
+  const granter = input.callerPermissions.includes("jit:grant");
+  const activeJit = new Map(grants.filter((g) => g.state === "active").map((g) => [g.user_id, g]));
+  const items = await Promise.all(
+    page.items.map(async (u): Promise<AdminUserRow> => {
+      const roleNames = await listRoleNamesForUser(db, u.id);
+      const target = { id: u.id, roles: roleNames, status: u.status };
+      const options = writer ? roleOptions(ctx, target) : [];
+      const changeLock = writer ? changeRoleLock(ctx, target, options) : null;
+      const statusLocked = writer ? statusLock(ctx, target) : null;
+      const grant = activeJit.get(u.id);
+      const jitLock = granter
+        ? jitGrantRefusal({ actorId: input.actorId, actorJitActive: activeJit.has(input.actorId), target, targetJitActive: grant !== undefined })
+        : null;
+      return {
+        id: u.id,
+        email: u.email,
+        displayName: u.displayName,
+        status: u.status,
+        roles: roleNames,
+        can: {
+          change_role: writer && changeLock === null,
+          set_status: writer && statusLocked === null,
+          reinvite: writer && u.status === "pending",
+          grant_jit: granter && jitLock === null,
+          revoke_jit: grant !== undefined && mayRevokeJit({ actorId: input.actorId, actorPermissions: ctx.actorPermissions, recipientId: u.id }),
+        },
+        locked_reason: { change_role: changeLock, set_status: statusLocked, grant_jit: jitLock },
+        role_options: labelled(options),
+        jit_grant: grant === undefined ? null : { id: grant.id, expires_at: grant.expires_at },
+      };
+    }),
+  );
+  return { items, next_cursor: page.next_cursor, invite_roles: writer ? labelled(roleOptions(ctx, null)) : [] };
+}
+
 // ------------------------------- invite ------------------------------------
 
-/** C-11-001: `root_role` — nobody is given, or loses, the seeder-only `root` role through the app. */
-export type EscalationRule = "self_role" | "admin_only" | "owner_only" | "root_role";
+export type { EscalationRule } from "../domain/user-assign";
 
 export type InviteResult =
   | { kind: "ok"; user: AdminUserView; rawToken: string; expiresAt: number }
@@ -114,78 +193,41 @@ export type InviteResult =
   | { kind: "unknown-role" }
   | { kind: "grant-not-held"; missing: string[] };
 
-/** `member` is the RUNWAY base role nobody carries (SPEC-06 DEC-7): never assignable, same answer as a missing name. */
-const UNASSIGNABLE_ROLES = new Set(["member"]);
-
-async function roleAssignable(db: Db, name: string): Promise<boolean> {
-  return !UNASSIGNABLE_ROLES.has(name) && (await roleNameExists(db, name));
+/**
+ * The caller + role catalog as D1 sees them now (never the principal cache) — the input of the FIX-06 pure rules
+ * (`domain/user-assign.ts`) that both the write guards below and `GET /admin/users` use.
+ */
+export async function loadAssignContext(db: Db, actorId: string): Promise<AssignContext> {
+  const [actorRoles, actorPermissions, roles, ownerExists] = await Promise.all([
+    listRoleNamesForUser(db, actorId),
+    listPermissionKeysForUser(db, actorId),
+    listRoleDetails(db),
+    anyOwnerExists(db),
+  ]);
+  return {
+    actorId,
+    actorRoles,
+    actorPermissions: new Set(actorPermissions),
+    rolePermissions: new Map(roles.map((r) => [r.name, r.permissions])),
+    ownerExists,
+  };
 }
 
-/**
- * FR-12 (SPEC-06): a non-admin actor may only grant or take away roles whose permissions their own cover.
- * missing = (perms(new role) ∪ perms(old roles)) − perms(actor), read from D1 now (no principal cache). Admin exempt;
- * an owner (`giam_doc`) is exempt only when the new role carries `roles:write` — the owner-only class (FIX-05 R3),
- * e.g. Giám đốc assigning `admin` without holding settings:* / flags:*.
- * Writes one `permission.denied` row when non-empty. Read-then-write like FIX-03 (accepted there).
- */
-async function checkGrantHeld(
+/** Writes the one `permission.denied` row of a refusal (403) and returns it; other refusals pass through. */
+async function refuse(
   db: Db,
-  input: { actorId: string; target: string; newRole: string; oldRoles: string[]; ip?: string | null },
-): Promise<{ kind: "grant-not-held"; missing: string[] } | null> {
-  const [actorRoles, newRoleKeys] = await Promise.all([
-    listRoleNamesForUser(db, input.actorId),
-    listPermissionKeysForRoleNames(db, [input.newRole]),
-  ]);
-  if (actorRoles.includes("admin")) return null;
-  if (actorRoles.includes(OWNER_ROLE) && newRoleKeys.includes("roles:write")) return null;
-  const [needed, held] = await Promise.all([
-    listPermissionKeysForRoleNames(db, [input.newRole, ...input.oldRoles]),
-    listPermissionKeysForUser(db, input.actorId),
-  ]);
-  const heldSet = new Set(held);
-  const missing = needed.filter((k) => !heldSet.has(k)).sort();
-  if (missing.length === 0) return null;
+  refusal: AssignRefusal,
+  input: { actorId: string; target: string; role: string; ip?: string | null },
+): Promise<AssignRefusal> {
+  if (refusal.kind === "unknown-role") return refusal;
   await writeAuditEvent(db, {
     actor: input.actorId,
     action: "permission.denied",
     target: input.target,
-    metadata: { rule: "grant_not_held", permission: "users:write", role: input.newRole },
+    metadata: { rule: refusal.kind === "forbidden" ? refusal.rule : "grant_not_held", permission: "users:write", role: input.role },
     ip: input.ip ?? null,
   });
-  return { kind: "grant-not-held", missing };
-}
-
-/** Writes the `permission.denied` row for an escalation refusal and returns the typed outcome. */
-async function denyEscalation(
-  db: Db,
-  input: { actorId: string; target: string; rule: EscalationRule; role: string; ip?: string | null },
-): Promise<{ kind: "forbidden"; rule: EscalationRule }> {
-  await writeAuditEvent(db, {
-    actor: input.actorId,
-    action: "permission.denied",
-    target: input.target,
-    metadata: { rule: input.rule, permission: "users:write", role: input.role },
-    ip: input.ip ?? null,
-  });
-  return { kind: "forbidden", rule: input.rule };
-}
-
-async function actorIsAdmin(db: Db, actorId: string): Promise<boolean> {
-  return (await listRoleNamesForUser(db, actorId)).includes("admin");
-}
-
-/**
- * FIX-05 R3: giving `roleName` needs an owner when the role carries `roles:write` (bootstrap: the first `giam_doc`).
- * True = refuse. The same predicate the batch repeats (`ownerMayAssignSql`). An unknown role is not refused here
- * (→ unknown-role later).
- */
-async function needsOwner(db: Db, actorId: string, roleName: string): Promise<boolean> {
-  return !(await holds(db, ownerMayAssignSql(actorId, roleName)));
-}
-
-/** FIX-05: only an owner changes the role of a `giam_doc` holder (same predicate as the batch). */
-async function needsOwnerToReassign(db: Db, actorId: string, userId: string): Promise<boolean> {
-  return !(await holds(db, ownerMayReassignSql(actorId, userId)));
+  return refusal;
 }
 
 /**
@@ -197,21 +239,8 @@ export async function inviteUser(
   input: { actorId: string; email: string; displayName: string; role: string; ip?: string | null },
 ): Promise<InviteResult> {
   const email = input.email.trim().toLowerCase();
-  if (input.role === ROOT_ROLE) {
-    return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "root_role", role: input.role, ip: input.ip });
-  }
-  if (await needsOwner(deps.db, input.actorId, input.role)) {
-    return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "owner_only", role: input.role, ip: input.ip });
-  }
-  if (!(await roleAssignable(deps.db, input.role))) return { kind: "unknown-role" };
-  const notHeld = await checkGrantHeld(deps.db, {
-    actorId: input.actorId,
-    target: "user:new",
-    newRole: input.role,
-    oldRoles: [],
-    ip: input.ip,
-  });
-  if (notHeld !== null) return notHeld;
+  const refusal = assignRefusal(await loadAssignContext(deps.db, input.actorId), { target: null, newRole: input.role });
+  if (refusal !== null) return refuse(deps.db, refusal, { actorId: input.actorId, target: "user:new", role: input.role, ip: input.ip });
   if ((await findUserByEmail(deps.db, email)) !== null) return { kind: "duplicate-email" };
 
   const now = deps.now();
@@ -254,8 +283,10 @@ export async function inviteUser(
     throw err;
   }
   if (Array.isArray(granted) && granted.length === 0) {
-    if (await needsOwner(deps.db, input.actorId, input.role)) {
-      return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "owner_only", role: input.role, ip: input.ip });
+    // Refused inside the batch: the role vanished, or the owner rule changed meanwhile — classify against D1 now.
+    const late = assignRefusal(await loadAssignContext(deps.db, input.actorId), { target: null, newRole: input.role });
+    if (late?.kind === "forbidden" && late.rule === "owner_only") {
+      return refuse(deps.db, late, { actorId: input.actorId, target: "user:new", role: input.role, ip: input.ip });
     }
     return { kind: "unknown-role" };
   }
@@ -383,28 +414,17 @@ export async function updateUser(
   const roleChange =
     input.role !== undefined && !(currentRoles.length === 1 && currentRoles[0] === input.role);
   const deny = { actorId: input.actorId, target: `user:${id}`, role: input.role ?? currentRoles[0] ?? "", ip: input.ip };
+  const ctx = await loadAssignContext(db, input.actorId);
+  const target = { id, roles: currentRoles };
   // Any PATCH on a user who holds `admin` (role, status, name) needs an admin caller.
-  if (currentRoles.includes("admin") && !(await actorIsAdmin(db, input.actorId))) {
-    return denyEscalation(db, { ...deny, rule: "admin_only" });
-  }
+  if (editRefusal(ctx, target) !== null) return refuse(db, { kind: "forbidden", rule: "admin_only" }, deny);
   if (roleChange && input.role !== undefined) {
-    if (input.role === ROOT_ROLE || currentRoles.includes(ROOT_ROLE)) return denyEscalation(db, { ...deny, rule: "root_role" });
-    if (input.actorId === id) return denyEscalation(db, { ...deny, rule: "self_role" });
-    if (
-      (await needsOwnerToReassign(db, input.actorId, id)) ||
-      (await needsOwner(db, input.actorId, input.role))
-    ) {
-      return denyEscalation(db, { ...deny, rule: "owner_only" });
-    }
-    if (!(await roleAssignable(db, input.role))) return { kind: "unknown-role" };
-    const notHeld = await checkGrantHeld(db, {
-      actorId: input.actorId,
-      target: `user:${id}`,
-      newRole: input.role,
-      oldRoles: currentRoles,
-      ip: input.ip,
-    });
-    if (notHeld !== null) return notHeld;
+    const refusal = assignRefusal(ctx, { target, newRole: input.role });
+    if (refusal !== null) return refuse(db, refusal, deny);
+  }
+
+  if (input.status === "disabled" && id === input.actorId && user.status !== "disabled") {
+    return refuse(db, { kind: "forbidden", rule: "self_disable" }, deny);
   }
 
   if (input.status !== undefined && user.status === "pending") return { kind: "pending" };
@@ -475,9 +495,8 @@ export async function updateUser(
   // Role path: 0 rows from the grant and the user still lacks the role = refused: either the role vanished since
   // the check above (→ unknown-role) or the last-admin guard said no. Nothing else in the batch took effect.
   if (roleChange && newRole !== undefined && firstRows === 0 && !currentRoles.includes(newRole)) {
-    if ((await needsOwnerToReassign(db, input.actorId, id)) || (await needsOwner(db, input.actorId, newRole))) {
-      return denyEscalation(db, { ...deny, rule: "owner_only" });
-    }
+    const late = assignRefusal(await loadAssignContext(db, input.actorId), { target: { id, roles: await listRoleNamesForUser(db, id) }, newRole });
+    if (late?.kind === "forbidden" && late.rule === "owner_only") return refuse(db, late, deny);
     return (await roleNameExists(db, newRole)) ? { kind: "last-admin" } : { kind: "unknown-role" };
   }
   // Status path: 0 rows from the guarded UPDATE = refused (the user row exists, we read it above).

@@ -13,13 +13,14 @@ export type RoleSeed = { label: string; description: string; permissions: readon
 export function RoleFormModal({
   seed,
   catalog,
-  holds,
+  grantable,
   onClose,
   onCreated,
 }: {
   seed: RoleSeed;
   catalog: readonly string[];
-  holds: (code: string) => boolean;
+  /** FIX-06: `GET /roles` `grantable` — the codes the API lets the caller put in a new role. */
+  grantable: readonly string[];
   onClose: () => void;
   onCreated: (role: Role) => void;
 }) {
@@ -90,7 +91,7 @@ export function RoleFormModal({
           <Field id="new-role-description" label="Mô tả" name="description" value={description} maxLength={200} autoComplete="off" onChange={(e) => setDescription(e.target.value)} />
         </div>
         {seed.droppedNote ? <p className="text-sm text-muted text-wrap-pretty">🔒 {seed.droppedNote}</p> : null}
-        <PermissionChecklist catalog={catalog} selected={perms} lockedAll={false} cannotGrant={(code) => !holds(code)} onToggle={toggle} />
+        <PermissionChecklist catalog={catalog} selected={perms} lockedAll={false} cannotGrant={(code) => !grantable.includes(code)} onToggle={toggle} />
         {error && error.slug !== "duplicate" && Object.keys(error.fieldErrors).length === 0 && error.message ? (
           <Alert tone="danger">
             <p>{error.message}</p>
@@ -111,10 +112,10 @@ export function RoleFormModal({
   );
 }
 
-/** Seed for a clone: the source's label/permissions minus the codes the caller cannot grant (reported in `droppedNote`). */
-export function cloneSeed(source: Role, holds: (code: string) => boolean): RoleSeed {
-  const kept = source.permissions.filter(holds);
-  const dropped = source.permissions.filter((c) => !holds(c));
+/** Seed for a clone: the source's label/permissions minus the codes the API says the caller cannot grant (`droppedNote`). */
+export function cloneSeed(source: Role, grantable: readonly string[]): RoleSeed {
+  const kept = source.permissions.filter((c) => grantable.includes(c));
+  const dropped = source.permissions.filter((c) => !grantable.includes(c));
   return {
     label: `Bản sao của ${source.label}`.slice(0, 60),
     description: source.description ?? "",

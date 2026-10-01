@@ -174,8 +174,7 @@ export function ContractDrawer({
   const flow = contract ? buildFlow(contract) : [];
   const creator = flow.find((f) => f.kind === "created")?.actor ?? null;
   const templateName = contract ? (templates.data?.find((t) => t.id === contract.template_id)?.name ?? "Mẫu hợp đồng") : "";
-  const lock = contract ? { contract, meId: me.id, permissions: me.permissions } : null;
-  const actions = contract && lock ? visibleActions(contract.status).map((a) => ({ a, reason: lockReason(a, lock) })) : [];
+  const actions = contract ? visibleActions(contract.status).map((a) => ({ a, reason: lockReason(a, contract) })) : [];
   const docType: DocType = contract?.type ?? "contract";
   const typeName = DOC_TYPE_LABEL[docType].toLowerCase();
   const childActions = contract ? contract.can.create_child.map((entry) => ({ entry, reason: childLockReason(entry, contract) })) : [];

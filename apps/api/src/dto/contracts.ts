@@ -99,6 +99,25 @@ export const ContractTimelineItem = z
   .object({ action: z.string(), at: TimestampSchema, actor: z.string().nullable().optional() })
   .openapi("ContractTimelineItem");
 
+/** FIX-06: why an action is locked for the caller (`domain/contract/action-locks.ts`); null = allowed. */
+export const ContractLockEnum = z.enum([
+  "no_write_permission",
+  "no_issue_permission",
+  "not_creator",
+  "not_draft",
+  "not_pending",
+  "not_approved",
+  "not_issued",
+  "step_role",
+  "creator_cannot_approve",
+  "one_person_one_step",
+  "step_decided",
+  "replaced",
+  "not_copyable",
+]);
+
+const lock = ContractLockEnum.nullable();
+
 export const ContractCan = z
   .object({
     edit: z.boolean(),
@@ -110,6 +129,18 @@ export const ContractCan = z
     copy: z.boolean(),
     withdraw: z.boolean(),
     delete: z.boolean(),
+    /** FIX-06: the reason behind each `false` above (the same functions the write services refuse with). */
+    reason: z.object({
+      edit: lock,
+      submit: lock,
+      approve: lock,
+      reject: lock,
+      issue: lock,
+      void: lock,
+      copy: lock,
+      withdraw: lock,
+      delete: lock,
+    }),
     /** FR-10 / P-9: one entry per type in CHILD_OF[type] (`[]` for DNTT/PXK); first reason wins in this order */
     create_child: z.array(
       z.object({
@@ -206,7 +237,13 @@ export const ContractCounts = z
   .openapi("ContractCounts");
 
 export const ContractListResponse = z
-  .object({ items: z.array(ContractListItem), next_cursor: z.string().nullable(), counts: ContractCounts })
+  .object({
+    items: z.array(ContractListItem),
+    next_cursor: z.string().nullable(),
+    counts: ContractCounts,
+    /** FIX-06: document types the caller may create standalone ("+ Tạo") — what `POST /contracts` accepts (DNTT: from a HĐ). */
+    can_create: z.array(DocTypeEnum),
+  })
   .openapi("ContractList");
 
 export const ContractAuditQuery = z.object({

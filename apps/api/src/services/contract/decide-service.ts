@@ -8,10 +8,11 @@
  * `requirePerm({ownerId})`); each refusal leaves a `permission.denied` row (target `contract:<id>`) before the 403.
  * `one_person_one_step` is ALSO inside the step CAS, so two parallel requests by one person cannot both win.
  */
-import { decideCas, getDecisionState, listCandidates, type DecisionState, type DecisionStep } from "../../dao/approval-dao";
+import { decideCas, getDecisionState, listCandidates, type DecisionStep } from "../../dao/approval-dao";
 import { writeAuditEvent } from "../../dao/audit-dao";
 import type { Db } from "../../db/client";
-import { eligibleAssignment, isEligible } from "../../domain/contract/assignment";
+import { eligibleAssignment } from "../../domain/contract/assignment";
+import { currentStep, decideLock } from "../../domain/contract/action-locks";
 import type { RequiredStep } from "../../domain/contract/types";
 import type { ContractDto } from "../../dto/contracts";
 import { emitContractEvent } from "../../events/contract-events";
@@ -54,7 +55,6 @@ async function sod(
   return { kind: "sod", rule };
 }
 
-const currentStep = (state: DecisionState): DecisionStep | undefined => state.steps.find((s) => s.status === "waiting");
 
 export async function decideContract(
   db: Db,
@@ -66,12 +66,12 @@ export async function decideContract(
   const state = await getDecisionState(db, id);
   if (state === null) return { kind: "not-found" };
   if (state.status !== "pending") return { kind: "state-conflict", current: state.status };
-  const step = currentStep(state);
+  const step = currentStep(state.steps);
   if (step === undefined) return { kind: "state-conflict", current: state.status };
 
-  // the step's permission + role, checked on the caller's live principal (creator is checked separately below)
-  const required = toRequired(step);
-  if (!isEligible(required, { id: actor.id, roles: actor.roles, permissions: actor.permissions }, new Set())) {
+  // FIX-06: one copy of the rule (`decideLock`) — `GET /contracts/{id}` `can.reason.approve` shows the same answer.
+  const lock = decideLock({ type: "contract", status: state.status, createdBy: state.createdBy, replacedById: null, steps: state.steps }, actor);
+  if (lock === "step_role") {
     await denied(db, ctx, id, {
       permission: step.requiredPermission,
       ...(step.requiredRole !== null ? { role: step.requiredRole } : {}),
@@ -79,8 +79,7 @@ export async function decideContract(
     });
     return { kind: "forbidden-permission", permission: step.requiredPermission, label: step.label };
   }
-  if (actor.id === state.createdBy) return sod(db, ctx, id, "creator_cannot_approve");
-  if (state.steps.some((s) => s.decidedBy === actor.id)) return sod(db, ctx, id, "one_person_one_step");
+  if (lock === "creator_cannot_approve" || lock === "one_person_one_step") return sod(db, ctx, id, lock);
 
   const waiting = state.steps.filter((s) => s.status === "waiting");
   const isLast = waiting.length === 1;

@@ -1,85 +1,68 @@
-import { roleLabels } from "../../app/me";
-
-/** FIX-03 (SPEC-06 DEC-5). The server is the guard (403 self_role / admin_only); this only avoids offering dead ends. */
-export const SELF_ROLE_REASON = "Không tự đổi vai trò của mình";
-export const SELF_DISABLE_REASON = "Không tự khóa tài khoản của mình";
-
-export const NOT_GRANTABLE_REASON = "Bạn không có quyền này nên không cấp được";
-
-/** FIX-05 R3: a role carrying roles:write (admin, giam_doc, custom) is given only by Giám đốc (server: 403 owner_only). */
-export const OWNER_ONLY_REASON = "Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò";
-/** FIX-05: only Giám đốc changes a Giám đốc's role (server: 403 owner_only). */
-export const OWNER_TARGET_REASON = "Chỉ Giám đốc đổi vai trò của Giám đốc";
-
-export type RoleOption = { name: string; label: string; permissions: readonly string[]; holders?: number };
-export type SelectableRole = { name: string; label: string; locked?: string };
-export type SelectCtx = {
-  mode: "invite" | "assign";
-  callerIsAdmin: boolean;
-  /** Carries `giam_doc` (the owner). */
-  callerIsOwner: boolean;
-  callerPermissions: readonly string[];
-};
-
-/** Shown while GET /roles has not loaded: the built-in business roles (no permission info → no 🔒). */
-export const FALLBACK_ROLES: RoleOption[] = ["giam_doc", "quan_ly", "nhan_vien", "admin"].map((name) => ({
-  name,
-  label: roleLabels[name] ?? name,
-  permissions: [],
-}));
-
-function notHeld(role: RoleOption, callerIsAdmin: boolean, callerPermissions: readonly string[]): boolean {
-  return !callerIsAdmin && role.permissions.some((p) => !callerPermissions.includes(p));
-}
-
-/** The role carries roles:write (`admin` counts even before GET /roles loads its permissions). */
-const carriesRolesWrite = (role: RoleOption) => role.name === "admin" || role.permissions.includes("roles:write");
-
-/** FIX-05 R3: the caller may not give this role — not an owner, and not the bootstrap (first Giám đốc). */
-function ownerOnly(role: RoleOption, ctx: SelectCtx): boolean {
-  if (ctx.callerIsOwner || !carriesRolesWrite(role)) return false;
-  return !(role.name === "giam_doc" && role.holders === 0);
-}
+import type { components } from "@runway/client";
+import type { AdminUser } from "./api";
 
 /**
- * Roles for the invite / change-role select (SPEC-06 §3.4, FR-12, FIX-05). Never `member`. A role carrying roles:write
- * is 🔒 for a non-owner (owner_only); a role whose permissions the caller lacks is 🔒 (admin exempt; an owner exempt
- * for roles:write roles) — listed so the reason shows; the server decides.
+ * FIX-06 — wording only. Every lock of the Người dùng screen is DECIDED by the API (`GET /admin/users` `can` /
+ * `locked_reason` / `role_options` / `invite_roles`, built from the same rules the write guards use). This file maps a
+ * reason code to its Vietnamese sentence; it holds no rule.
  */
-export function selectableRoles(roles: readonly RoleOption[], ctx: SelectCtx): SelectableRole[] {
-  return roles
-    .filter((r) => r.name !== "member")
-    .map((r) => {
-      const locked = ownerOnly(r, ctx)
-        ? OWNER_ONLY_REASON
-        : !(ctx.callerIsOwner && carriesRolesWrite(r)) && notHeld(r, ctx.callerIsAdmin, ctx.callerPermissions)
-          ? NOT_GRANTABLE_REASON
-          : undefined;
-      return { name: r.name, label: r.label, ...(locked !== undefined ? { locked } : {}) };
-    });
-}
+export type AssignableRole = components["schemas"]["AssignableRole"];
+type OptionLock = NonNullable<AssignableRole["locked_reason"]>;
+type ChangeRoleLock = NonNullable<AdminUser["locked_reason"]["change_role"]>;
+type StatusLock = NonNullable<AdminUser["locked_reason"]["set_status"]>;
+type JitLock = NonNullable<AdminUser["locked_reason"]["grant_jit"]>;
 
-/** FIX-05: a non-owner cannot change the role of a user who holds `giam_doc`. */
-export function ownerTargetLocked(targetRoles: readonly string[], myRoles: readonly string[]): boolean {
-  return targetRoles.includes("giam_doc") && !myRoles.includes("giam_doc");
-}
-
-/** The target holds a role the caller could not grant → "Đổi vai trò" is 🔒 (server: grant_not_held on removal). */
-export function targetRoleLocked(
-  targetRoles: readonly string[],
-  roles: readonly RoleOption[],
-  callerIsAdmin: boolean,
-  callerPermissions: readonly string[],
-): boolean {
-  return targetRoles.some((name) => {
-    const role = roles.find((r) => r.name === name);
-    return role !== undefined && notHeld(role, callerIsAdmin, callerPermissions);
-  });
-}
-
+export const SELF_ROLE_REASON = "Không tự đổi vai trò của mình";
+export const SELF_DISABLE_REASON = "Không tự khóa tài khoản của mình";
+export const NOT_GRANTABLE_REASON = "Bạn không có quyền này nên không cấp được";
+export const OWNER_ONLY_REASON = "Chỉ Giám đốc gán vai trò có quyền Quản lý vai trò";
+export const OWNER_TARGET_REASON = "Chỉ Giám đốc đổi vai trò của Giám đốc";
 export const ADMIN_TARGET_REASON = "Chỉ quản trị hệ thống sửa được tài khoản quản trị";
+const ROOT_REASON = "Root admin chỉ tạo bằng công cụ cài đặt, không gán hay gỡ trong ứng dụng";
 
-/** A non-admin cannot change role/status/name of a user who holds `admin` (server: 403 admin_only). */
-export function adminTargetLocked(targetRoles: readonly string[], myRoles: readonly string[]): boolean {
-  return targetRoles.includes("admin") && !myRoles.includes("admin");
+/** A locked option of the role select (invite / Đổi vai trò). */
+export const OPTION_LOCK_TEXT: Record<OptionLock, string> = {
+  owner_only: OWNER_ONLY_REASON,
+  grant_not_held: NOT_GRANTABLE_REASON,
+  root_role: ROOT_REASON,
+  self_role: SELF_ROLE_REASON,
+  admin_only: ADMIN_TARGET_REASON,
+};
+
+/** "Đổi vai trò" of a row is locked. `owner_only` here = the row is a Giám đốc. */
+export const CHANGE_ROLE_LOCK_TEXT: Record<ChangeRoleLock, string> = {
+  self_role: SELF_ROLE_REASON,
+  admin_only: ADMIN_TARGET_REASON,
+  owner_only: OWNER_TARGET_REASON,
+  root_role: ROOT_REASON,
+  grant_not_held: NOT_GRANTABLE_REASON,
+  no_role_option: "Không có vai trò nào bạn gán được cho người này",
+};
+
+export const STATUS_LOCK_TEXT: Record<StatusLock, string> = {
+  admin_only: ADMIN_TARGET_REASON,
+  self_disable: SELF_DISABLE_REASON,
+  pending: "Tài khoản chưa kích hoạt — dùng Tạo lại link",
+};
+
+export const JIT_LOCK_TEXT: Record<JitLock, string> = {
+  self_grant: "Không tự cấp cho mình",
+  jit_actor: "Bạn đang có quyền quản trị tạm thời nên không cấp được",
+  not_active: "Chỉ cấp cho tài khoản đang hoạt động",
+  already_admin: "Đã là quản trị hệ thống thường trực",
+  jit_active: "Đang có quyền quản trị tạm thời",
+};
+
+/** The 🔒 lines under a row's buttons: the API's reasons for the locked actions, each sentence once. */
+export function rowLockNotes(user: Pick<AdminUser, "can" | "locked_reason">): string[] {
+  const notes: string[] = [];
+  if (!user.can.change_role && user.locked_reason.change_role) notes.push(CHANGE_ROLE_LOCK_TEXT[user.locked_reason.change_role]);
+  if (!user.can.set_status && user.locked_reason.set_status) notes.push(STATUS_LOCK_TEXT[user.locked_reason.set_status]);
+  return [...new Set(notes)];
+}
+
+/** First option the API leaves open, preferring `prefer` (the current role) then Nhân viên. */
+export function firstOpen(options: readonly AssignableRole[], prefer?: string): string {
+  const open = (name: string | undefined) => options.find((o) => o.name === name && o.locked_reason === null)?.name;
+  return open(prefer) ?? open("nhan_vien") ?? options.find((o) => o.locked_reason === null)?.name ?? "";
 }

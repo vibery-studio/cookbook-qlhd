@@ -29,6 +29,7 @@ import { listPermissionKeysForUser } from "../dao/permission-dao";
 import { listRoleNamesForUser } from "../dao/role-dao";
 import { invalidatePrincipalCache } from "../dao/session-cache";
 import { auditInsertWhen, findUserById } from "../dao/user-dao";
+import { jitGrantRefusal, mayRevokeJit } from "../domain/user-assign";
 import { generateUlid } from "../utils/id";
 
 export interface JitDeps {
@@ -86,17 +87,25 @@ export async function grantJit(
 
   const user = await findUserById(db, input.userId);
   if (user === null) return { kind: "not-found" };
-  if (input.userId === input.actorId) {
-    await deny(db, { actorId: input.actorId, target, rule: "self_grant", ip: input.ip });
-    return { kind: "forbidden", rule: "self_grant" };
+  // FIX-06: the one copy of the order (`domain/user-assign.ts`) — `GET /admin/users` shows the same answer.
+  const [actorJit, targetRoles, targetJit] = await Promise.all([
+    findActiveJit(db, input.actorId, now),
+    listRoleNamesForUser(db, input.userId),
+    findActiveJit(db, input.userId, now),
+  ]);
+  const refusal = jitGrantRefusal({
+    actorId: input.actorId,
+    actorJitActive: actorJit !== null,
+    target: { id: user.id, status: user.status, roles: targetRoles },
+    targetJitActive: targetJit !== null,
+  });
+  if (refusal === "self_grant" || refusal === "jit_actor") {
+    await deny(db, { actorId: input.actorId, target, rule: refusal, ip: input.ip });
+    return { kind: "forbidden", rule: refusal };
   }
-  if ((await findActiveJit(db, input.actorId, now)) !== null) {
-    await deny(db, { actorId: input.actorId, target, rule: "jit_actor", ip: input.ip });
-    return { kind: "forbidden", rule: "jit_actor" };
-  }
-  if (user.status !== "active") return { kind: "not-active-user" };
-  if ((await listRoleNamesForUser(db, input.userId)).includes(JIT_ROLE)) return { kind: "already-admin" };
-  if ((await findActiveJit(db, input.userId, now)) !== null) return { kind: "jit-active" };
+  if (refusal === "not_active") return { kind: "not-active-user" };
+  if (refusal === "already_admin") return { kind: "already-admin" };
+  if (refusal === "jit_active") return { kind: "jit-active" };
 
   const id = generateUlid();
   const expiresAt = now + input.minutes * 60;
@@ -153,8 +162,8 @@ export async function revokeJit(
   const target = `user:${grant.user_id}`;
   if (input.actorId !== grant.user_id) {
     // A PERMANENT jit:grant holder (D1 user_roles). A JIT principal never carries it (admin only), so no bypass.
-    const held = await listPermissionKeysForUser(db, input.actorId);
-    if (!held.includes("jit:grant")) {
+    const held = new Set(await listPermissionKeysForUser(db, input.actorId));
+    if (!mayRevokeJit({ actorId: input.actorId, actorPermissions: held, recipientId: grant.user_id })) {
       await deny(db, { actorId: input.actorId, target, ip: input.ip });
       return { kind: "forbidden" };
     }

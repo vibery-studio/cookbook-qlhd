@@ -49,7 +49,14 @@ export const RoleSchema = z
      * `request` (SPEC-07): may send a permission change request. A pending request → all false. `direct` (C-11-001):
      * two-layer approval is off and the caller may change the set at once (PUT /roles/{id}/permissions).
      */
-    can: z.object({ edit: z.boolean(), delete: z.boolean(), request: z.boolean(), direct: z.boolean() }),
+    can: z.object({
+      edit: z.boolean(),
+      delete: z.boolean(),
+      request: z.boolean(),
+      direct: z.boolean(),
+      /** FIX-06: catalog codes the caller may ADD to this role (grant_not_held: only codes the caller holds, D1). */
+      grant: z.array(z.string()),
+    }),
     locked_reason: LockedReason,
     request_locked_reason: RequestLockedReason,
     pending_request: PendingRequestSummary.nullable(),
@@ -61,6 +68,8 @@ export const RolesResponse = z
     items: z.array(RoleSchema),
     /** Full permission catalog (packages/rbac PERMISSIONS), so the screen can grant codes no role holds yet. */
     catalog: z.array(z.string()),
+    /** FIX-06: catalog codes the caller may put in a NEW role (create / clone) — the same grant_not_held rule. */
+    grantable: z.array(z.string()),
     /** C-11-001: two-layer approval of permission changes is on (default). Off → `can.direct` may be true. */
     two_layer: z.boolean(),
   })

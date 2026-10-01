@@ -463,7 +463,7 @@ export function contractsRoutes(app: OpenAPIHono<Env>): void {
   app.openapi(listRouteDef, async (c) => {
     const r = await listContracts(getDb(c.env), c.get("principal")!, c.req.valid("query"));
     if (r.kind === "invalid") return fail(c, 422, "Validation failed", ProblemType.Validation, { errors: r.errors });
-    return c.json({ items: r.items, next_cursor: r.next_cursor, counts: r.counts }, 200);
+    return c.json({ items: r.items, next_cursor: r.next_cursor, counts: r.counts, can_create: r.can_create }, 200);
   });
 
   app.openapi(getRouteDef, async (c) => {

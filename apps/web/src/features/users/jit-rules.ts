@@ -1,7 +1,8 @@
-/** SPEC-07 §3.4 — temporary admin (JIT) rules for the UI. The API decides; these only avoid offering dead ends. */
-export const SELF_GRANT_REASON = "Không tự cấp cho mình";
-export const ALREADY_ADMIN_REASON = "Đã là quản trị hệ thống thường trực";
-export const NOT_ACTIVE_REASON = "Chỉ cấp cho tài khoản đang hoạt động";
+/**
+ * SPEC-07 §3.4 — temporary admin (JIT) form + time text. Who may be granted / revoked is decided by the API
+ * (`GET /admin/users` `can.grant_jit` / `can.revoke_jit` / `locked_reason.grant_jit`, FIX-06); `validReason` only mirrors
+ * the request schema (10–500 chars) so the button waits for a valid reason.
+ */
 
 export const GRANT_DURATIONS: ReadonlyArray<{ minutes: number; label: string }> = [
   { minutes: 15, label: "15 phút" },
@@ -18,25 +19,6 @@ export const REASON_MAX = 500;
 export function validReason(reason: string): boolean {
   const n = reason.trim().length;
   return n >= REASON_MIN && n <= REASON_MAX;
-}
-
-export type ActiveGrant = { id: string; user_id: string; expires_at: number };
-export type JitRowAction =
-  | { kind: "grant" }
-  | { kind: "revoke"; grant: ActiveGrant }
-  | { kind: "locked"; reason: string };
-
-/** What the JIT control of a Người dùng row shows, for a caller holding `jit:grant`. */
-export function jitRowAction(
-  user: { id: string; status: "pending" | "active" | "disabled"; roles: readonly string[] },
-  me: { id: string },
-  activeGrant: ActiveGrant | undefined,
-): JitRowAction {
-  if (user.id === me.id) return { kind: "locked", reason: SELF_GRANT_REASON };
-  if (activeGrant) return { kind: "revoke", grant: activeGrant };
-  if (user.roles.includes("admin")) return { kind: "locked", reason: ALREADY_ADMIN_REASON };
-  if (user.status !== "active") return { kind: "locked", reason: NOT_ACTIVE_REASON };
-  return { kind: "grant" };
 }
 
 const clock = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hour12: false });

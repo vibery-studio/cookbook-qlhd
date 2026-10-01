@@ -1,14 +1,14 @@
-import { createRoute, z } from "@hono/zod-openapi";
+import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import { EmailSchema, UlidSchema } from "../dto/common";
 import { ProblemDto } from "../dto/error";
-import { CursorQuery, paginatedResponse } from "../dto/pagination";
+import { CursorQuery } from "../dto/pagination";
+import { AdminUsersPageSchema } from "../dto/users";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
 import { requireAuth } from "../middleware/auth";
 import { requirePerm } from "../middleware/require-permission";
-import { listUsers } from "../services/admin-service";
+import { listUsersFor } from "../services/user-admin-service";
 
 /**
  * Admin user-management routes. RBAC is enforced by `requirePerm`
@@ -19,27 +19,17 @@ import { listUsers } from "../services/admin-service";
 
 type Env = { Bindings: Bindings; Variables: Variables };
 
-const AdminUserItem = z
-  .object({
-    id: UlidSchema,
-    email: EmailSchema,
-    display_name: z.string().nullable(),
-    status: z.enum(["pending", "active", "disabled"]),
-    roles: z.array(z.string()),
-  })
-  .openapi("AdminUserItem");
-
 const listUsersRoute = createRoute({
   method: "get",
   path: "/admin/users",
   tags: ["admin"],
-  summary: "List users (cursor-paginated)",
+  summary: "List users (cursor-paginated) with what the caller may do to each (FIX-06)",
   security: [{ cookieAuth: [] }],
   request: { query: CursorQuery },
   responses: {
     200: {
       description: "Paginated user list",
-      content: { "application/json": { schema: paginatedResponse(AdminUserItem) } },
+      content: { "application/json": { schema: AdminUsersPageSchema } },
     },
     401: {
       description: "Not authenticated",
@@ -59,11 +49,21 @@ export function adminRoutes(app: OpenAPIHono<Env>): void {
 
   app.openapi(listUsersRoute, async (c) => {
     const query = c.req.valid("query");
-    const db = getDb(c.env);
-    const page = await listUsers(
-      { db, kv: c.env.SESSIONS, env: c.env },
-      { cursor: query.cursor, limit: query.limit },
+    const principal = c.get("principal")!;
+    const page = await listUsersFor(getDb(c.env), {
+      actorId: principal.id,
+      callerPermissions: principal.permissions,
+      cursor: query.cursor,
+      limit: query.limit,
+      now: Math.floor(Date.now() / 1000),
+    });
+    return c.json(
+      {
+        items: page.items.map(({ displayName, ...u }) => ({ ...u, display_name: displayName })),
+        next_cursor: page.next_cursor,
+        invite_roles: page.invite_roles,
+      },
+      200,
     );
-    return c.json(page, 200);
   });
 }

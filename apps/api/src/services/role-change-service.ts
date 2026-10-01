@@ -61,6 +61,7 @@ import {
 } from "../dao/role-write-dao";
 import { listSodPairs, sodClearSql } from "../dao/sod-dao";
 import { sodViolations } from "../domain/sod";
+import { grantMissing } from "../domain/grant";
 import { generateUlid } from "../utils/id";
 import { purgeHolders, roleViewFor, type RoleView } from "./role-admin-service";
 
@@ -210,7 +211,6 @@ async function deny(
   return out;
 }
 
-const missingFrom = (keys: Iterable<string>, held: Set<string>): string[] => [...keys].filter((k) => !held.has(k)).sort();
 
 type Batch = [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]];
 
@@ -292,7 +292,7 @@ async function classifyCreate(
   if (added.length === 0 && removed.length === 0) return { kind: "no-change" };
   const pairs = sodViolations(input.permissions, await listSodPairs(db));
   if (pairs.length > 0) return { kind: "sod-conflict", pairs };
-  const missing = missingFrom(added, actor.permissions);
+  const missing = grantMissing(added, actor.permissions);
   if (missing.length > 0) {
     return deny(db, { actorId: actor.id, target, rule: "grant_not_held", permissions: missing, ip: input.ip });
   }
@@ -408,7 +408,7 @@ async function classifyDirect(
   if (added.length === 0 && removed.length === 0) return { kind: "no-change" };
   const pairs = sodViolations(input.permissions, await listSodPairs(db));
   if (pairs.length > 0) return { kind: "sod-conflict", pairs };
-  const missing = missingFrom(added, actor.permissions);
+  const missing = grantMissing(added, actor.permissions);
   if (missing.length > 0) return denyAs("grant_not_held", missing);
   if (await holds(db, openRequestSql(role.id, now))) return { kind: "request-pending" };
   if (role.version !== input.expectedVersion) return { kind: "stale" };
@@ -535,7 +535,7 @@ async function classifyApprove(
   const pairs = sodViolations(after, await listSodPairs(db));
   if (pairs.length > 0) return { kind: "sod-conflict", pairs };
   const requesterPerms = new Set(await listPermissionKeysForUser(db, req.requestedBy));
-  const lost = missingFrom(req.added, requesterPerms);
+  const lost = grantMissing(req.added, requesterPerms);
   if (lost.length > 0) {
     return deny(db, { actorId: actor.id, target: `role:${req.roleId}`, rule: "grant_not_held", permissions: lost, ip: input.ip });
   }

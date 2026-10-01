@@ -1,63 +1,64 @@
 import { describe, expect, it } from "vitest";
-import { lockReason, visibleActions, type LockContext } from "./lock-reasons";
+import { lockReason, visibleActions } from "./lock-reasons";
+import type { Contract } from "./api";
 import { buildValues, buildLines, rowsFromInputs, previewBody, bpsToPercentText, emptyForm, formFromInputs, activeKeys, productsFor, VALUE_LABELS, requiredKeys, type FieldSpec } from "./values";
 import { buildFlow } from "./flow";
-import { parseListParams, TYPE_TABS, typeEmptyTitle, createLabel, creatableTypes } from "./list-params";
+import { parseListParams, TYPE_TABS, typeEmptyTitle, createLabel } from "./list-params";
 import { parseSnapshot } from "./snapshot";
 
-const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
-type C = LockContext["contract"];
-const step = (o: Partial<C["steps"][number]>): C["steps"][number] => ({
+type Can = Contract["can"];
+type Code = Can["reason"]["edit"];
+const noReason = { edit: null, submit: null, approve: null, reject: null, issue: null, void: null, copy: null, withdraw: null, delete: null };
+const noCan: Can = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, reason: noReason, create_child: [] };
+type Step = Contract["steps"][number];
+const step = (o: Partial<Step>): Step => ({
   id: "s", step_no: 1, label: "Quản lý duyệt", status: "waiting", required_permission: "contract:approve", required_role: "quan_ly",
   decided_by: null, decided_by_name: null, decided_at: null, note: null, snapshot_hash_at_decision: null, ...o,
 });
-const ctx = (c: Partial<C>, meId = "me", permissions: string[] = []): LockContext => ({
-  contract: { status: "pending", created_by: "creator", steps: [step({})], can: noCan, replaced_by_id: null, ...c },
-  meId,
-  permissions,
+/** A contract whose `can.reason` the API filled — FIX-06: the web only words the code. */
+const c = (reason: Partial<Record<keyof typeof noReason, Code>>, over: { can?: Partial<Can>; steps?: Step[] } = {}) => ({
+  steps: over.steps ?? [step({})],
+  can: { ...noCan, ...over.can, reason: { ...noReason, ...reason } },
 });
 
-describe("lockReason (SPEC-04b 3.4)", () => {
+describe("lockReason words the API's can.reason (SPEC-04b 3.4, FIX-06)", () => {
   it("returns null when the API says can", () => {
-    expect(lockReason("approve", ctx({ can: { ...noCan, approve: true } }))).toBeNull();
+    expect(lockReason("approve", c({}, { can: { approve: true } }))).toBeNull();
   });
-  it("creator cannot approve their own contract", () => {
-    expect(lockReason("approve", ctx({}, "creator"))).toBe("Bạn là người tạo nên không tự duyệt được.");
+  it("approve: creator / one person one step", () => {
+    expect(lockReason("approve", c({ approve: "creator_cannot_approve" }))).toBe("Bạn là người tạo nên không tự duyệt được.");
+    expect(lockReason("approve", c({ approve: "one_person_one_step" }))).toContain("mỗi người chỉ quyết một bước");
   });
-  it("one person, one step", () => {
-    const c = ctx({ steps: [step({ status: "approved", decided_by: "me" }), step({ step_no: 2, label: "Giám đốc duyệt", required_role: "giam_doc" })] });
-    expect(lockReason("approve", c)).toContain("mỗi người chỉ quyết một bước");
-  });
-  it("names the waiting step and its role", () => {
-    expect(lockReason("approve", ctx({}))).toBe("Bước «Quản lý duyệt» do Quản lý duyệt.");
-    expect(lockReason("approve", ctx({ steps: [step({ label: "Giám đốc duyệt", required_role: null })] }))).toBe("Bước «Giám đốc duyệt» do Quản lý hoặc Giám đốc duyệt.");
+  it("step_role names the waiting step and its role", () => {
+    expect(lockReason("approve", c({ approve: "step_role" }))).toBe("Bước «Quản lý duyệt» do Quản lý duyệt.");
+    expect(lockReason("approve", c({ approve: "step_role" }, { steps: [step({ status: "approved" }), step({ step_no: 2, label: "Giám đốc duyệt", required_role: null })] }))).toBe(
+      "Bước «Giám đốc duyệt» do Quản lý hoặc Giám đốc duyệt.",
+    );
   });
   it("edit on a sent contract hints Rút về nháp only when withdraw is possible", () => {
-    expect(lockReason("edit", ctx({ can: { ...noCan, withdraw: true } }, "creator"))).toContain("Rút về nháp");
-    expect(lockReason("edit", ctx({}, "creator"))).toBe("Hợp đồng đã gửi duyệt, không sửa được nữa.");
-    expect(lockReason("edit", ctx({ status: "draft" }, "someone"))).toBe("Chỉ người tạo mới sửa/gửi duyệt hợp đồng nháp.");
+    expect(lockReason("edit", c({ edit: "not_draft" }, { can: { withdraw: true } }))).toContain("Rút về nháp");
+    expect(lockReason("edit", c({ edit: "not_draft" }))).toBe("Hợp đồng đã gửi duyệt, không sửa được nữa.");
+    expect(lockReason("edit", c({ edit: "not_creator" }))).toBe("Chỉ người tạo mới sửa/gửi duyệt hợp đồng nháp.");
   });
   it("withdraw: creator-only, blocked once a step was decided", () => {
-    expect(lockReason("withdraw", ctx({}, "someone"))).toBe("Chỉ người tạo mới rút về nháp được.");
-    const decided = ctx({ steps: [step({ status: "approved", decided_by: "x" })] }, "creator");
-    expect(lockReason("withdraw", decided)).toBe("Đã có người duyệt/từ chối một bước, không rút về nháp được.");
+    expect(lockReason("withdraw", c({ withdraw: "not_creator" }))).toBe("Chỉ người tạo mới rút về nháp được.");
+    expect(lockReason("withdraw", c({ withdraw: "step_decided" }))).toBe("Đã có người duyệt/từ chối một bước, không rút về nháp được.");
   });
-  it("issue / void / delete", () => {
-    expect(lockReason("issue", ctx({ status: "approved" }, "me", []))).toBe("Chỉ Quản lý hoặc Giám đốc phát hành.");
-    expect(lockReason("issue", ctx({ status: "pending" }, "me", ["contract:issue"]))).toBe("Cần duyệt xong mọi bước mới phát hành được.");
-    expect(lockReason("void", ctx({ status: "approved" }, "me", ["contract:issue"]))).toBe("Chỉ hủy được hợp đồng đã phát hành.");
-    expect(lockReason("delete", ctx({ status: "pending" }, "creator"))).toBe("Chỉ xóa được hợp đồng còn là nháp.");
-    expect(lockReason("delete", ctx({ status: "draft" }, "someone"))).toBe("Chỉ người tạo mới xóa được nháp.");
+  it("issue / void / delete / copy", () => {
+    expect(lockReason("issue", c({ issue: "no_issue_permission" }))).toBe("Chỉ Quản lý hoặc Giám đốc phát hành.");
+    expect(lockReason("issue", c({ issue: "not_approved" }))).toBe("Cần duyệt xong mọi bước mới phát hành được.");
+    expect(lockReason("void", c({ void: "not_issued" }))).toBe("Chỉ hủy được hợp đồng đã phát hành.");
+    expect(lockReason("delete", c({ delete: "not_draft" }))).toBe("Chỉ xóa được hợp đồng còn là nháp.");
+    expect(lockReason("delete", c({ delete: "not_creator" }))).toBe("Chỉ người tạo mới xóa được nháp.");
+    expect(lockReason("copy", c({ copy: "replaced" }))).toBe("Đã có bản thay thế");
   });
-  it("a locked action always has a sentence (never a silent dead button)", () => {
+  it("a locked action always has a sentence, whatever code (or none) the API sent", () => {
+    const codes: Code[] = [null, "no_write_permission", "no_issue_permission", "not_creator", "not_draft", "not_pending", "not_approved", "not_issued", "step_role", "creator_cannot_approve", "one_person_one_step", "step_decided", "replaced", "not_copyable"];
     for (const status of ["draft", "pending", "approved", "issued", "rejected", "voided"] as const) {
       for (const action of visibleActions(status)) {
-        expect(lockReason(action, ctx({ status }, "stranger")), `${status}/${action}`).toMatch(/\S/);
+        for (const code of codes) expect(lockReason(action, c({ [action]: code })), `${status}/${action}/${code}`).toMatch(/\S/);
       }
     }
-  });
-  it("voided contract with a replacement says so", () => {
-    expect(lockReason("copy", ctx({ status: "voided", replaced_by_id: "R" }))).toBe("Đã có bản thay thế");
   });
 });
 
@@ -227,11 +228,6 @@ describe("type tabs (SPEC-09 §3.5) — `?loai=` in the URL", () => {
     expect(typeEmptyTitle("payment_request")).toBe("Chưa có đề nghị thanh toán nào");
     expect(createLabel("quote")).toBe("Tạo báo giá");
     expect(createLabel("delivery_note")).toBe("Tạo phiếu xuất kho");
-  });
-  it("+ Tạo offers BG · HĐ · PXK by permission, never DNTT", () => {
-    expect(creatableTypes(["quote:write", "contract:write", "delivery_note:write", "payment_request:write"])).toEqual(["quote", "contract", "delivery_note"]);
-    expect(creatableTypes(["contract:write"])).toEqual(["contract"]);
-    expect(creatableTypes(["contract:read"])).toEqual([]);
   });
 });
 

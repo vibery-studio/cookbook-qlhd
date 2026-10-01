@@ -53,6 +53,7 @@ import { invalidatePrincipalCache } from "../dao/session-cache";
 import { listSodPairs } from "../dao/sod-dao";
 import { normalizeLabel } from "../domain/role-label";
 import { sodViolations } from "../domain/sod";
+import { grantableCodes, grantMissing } from "../domain/grant";
 import { generateUlid } from "../utils/id";
 
 export const CUSTOM_ROLE_LIMIT = 50;
@@ -87,7 +88,8 @@ export interface RoleView {
   holders: number;
   permissions: string[];
   /** `direct` (C-11-001): two-layer approval is off and the caller may change the permission set at once. */
-  can: { edit: boolean; delete: boolean; request: boolean; direct: boolean };
+  /** `grant` (FIX-06): catalog codes the caller may ADD to this role (`grant_not_held` passes) — removing is always allowed. */
+  can: { edit: boolean; delete: boolean; request: boolean; direct: boolean; grant: string[] };
   locked_reason: LockedReason;
   request_locked_reason: RequestLockedReason;
   pending_request: PendingRequestSummary | null;
@@ -178,6 +180,7 @@ function toView(role: RoleDetailDto, actor: Actor, ctx: RequestContext, direct: 
         pending === undefined &&
         locked !== "root" &&
         (role.name === "admin" ? direct.owner : locked !== "own_role"),
+      grant: grantableCodes(PERMISSIONS, role.permissions, actor.permissions),
     },
     locked_reason: locked,
     request_locked_reason,
@@ -210,7 +213,6 @@ async function deny(
     : { kind: "forbidden", rule: input.rule, permissions: input.permissions };
 }
 
-const missingFrom = (keys: Iterable<string>, held: Set<string>): string[] => [...keys].filter((k) => !held.has(k)).sort();
 
 type Batch = [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]];
 
@@ -235,7 +237,7 @@ export async function listRolesFor(
   db: Db,
   actorId: string,
   now: number = nowSeconds(),
-): Promise<{ items: RoleView[]; catalog: string[]; two_layer: boolean }> {
+): Promise<{ items: RoleView[]; catalog: string[]; grantable: string[]; two_layer: boolean }> {
   const [roles, actor, open, hasApprover, hasOwnerApprover, direct] = await Promise.all([
     listRoleDetails(db),
     loadActor(db, actorId),
@@ -248,6 +250,7 @@ export async function listRolesFor(
   return {
     items: roles.map((r) => toView(r, actor, { pending: byRole.get(r.id), hasApprover, hasOwnerApprover }, direct)),
     catalog: [...PERMISSIONS],
+    grantable: grantableCodes(PERMISSIONS, [], actor.permissions),
     two_layer: !direct.off,
   };
 }
@@ -287,7 +290,7 @@ export async function createRole(
   // SoD BEFORE grant_not_held (PLAN-07 R-9): pairs are public (GET /sod-pairs), nothing leaks.
   const conflict = sodViolations(input.permissions, await listSodPairs(db));
   if (conflict.length > 0) return { kind: "sod-conflict", pairs: conflict };
-  const missing = missingFrom(input.permissions, actor.permissions);
+  const missing = grantMissing(input.permissions, actor.permissions);
   if (missing.length > 0) return deny(db, { actorId: actor.id, target, rule: "grant_not_held", permissions: missing, ip: input.ip });
   if ((await countCustomRoles(db)) >= CUSTOM_ROLE_LIMIT) return { kind: "role-limit" };
 
@@ -337,7 +340,7 @@ export async function createRole(
     const lateConflict = sodViolations(input.permissions, await listSodPairs(db));
     if (lateConflict.length > 0) return { kind: "sod-conflict", pairs: lateConflict };
     const now2 = await loadActor(db, actor.id);
-    const lost = missingFrom(input.permissions, now2.permissions);
+    const lost = grantMissing(input.permissions, now2.permissions);
     if (lost.length > 0) return deny(db, { actorId: actor.id, target, rule: "grant_not_held", permissions: lost, ip: input.ip });
     return { kind: "role-limit" };
   }

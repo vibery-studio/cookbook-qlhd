@@ -1,5 +1,6 @@
 import type { Db } from "../../db/client";
 import type { ContractDto, UpdateContractInput } from "../../dto/contracts";
+import { draftWriteLock } from "../../domain/contract/action-locks";
 import { WRITE_PERM } from "../../domain/contract/doc-types";
 import type { Snapshot } from "../../domain/contract/types";
 import { writeAuditEvent } from "../../dao/audit-dao";
@@ -31,8 +32,10 @@ export async function updateContract(
   const current = await getContractForWrite(db, id);
   if (current === null) return { kind: "not-found" };
   const permission = WRITE_PERM[current.type];
-  if (!ctx.actor.permissions.includes(permission)) return { kind: "forbidden", permission };
-  if (current.created_by !== ctx.actor.id) {
+  // FIX-06: one copy of the rule (`draftWriteLock`) — `GET /contracts/{id}` `can.reason.edit` shows the same answer.
+  const lock = draftWriteLock({ type: current.type, status: current.status, createdBy: current.created_by, replacedById: current.replaced_by_id, steps: [] }, ctx.actor);
+  if (lock === "no_write_permission") return { kind: "forbidden", permission };
+  if (lock === "not_creator") {
     await writeAuditEvent(db, {
       actor: ctx.actor.id,
       action: "permission.denied",
@@ -42,7 +45,7 @@ export async function updateContract(
     });
     return { kind: "not-creator" };
   }
-  if (current.status !== "draft") return { kind: "state-conflict", current: current.status };
+  if (lock === "not_draft") return { kind: "state-conflict", current: current.status };
 
   const previous = current.snapshot as unknown as Snapshot;
   const parentId = current.parent?.id ?? previous.parent?.id ?? null;
