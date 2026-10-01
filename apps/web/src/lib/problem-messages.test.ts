@@ -239,3 +239,36 @@ describe("product, price and line-item problems (SPEC-08 §3.5, C-08-007)", () =
     expect(m.message).toBe(expected);
   });
 });
+
+describe("SPEC-09 problem messages", () => {
+  const p = (slug: string, status: number, extra: Record<string, unknown> = {}) =>
+    ({ type: `https://runway.dev/errors/${slug}`, title: "Raw English title", status, detail: "Raw English detail", ...extra }) as ProblemWithExtensions;
+  const cases: Array<[string, ProblemWithExtensions, string, Parameters<typeof problemMessage>[2]?]> = [
+    ["parent-not-issued", p("parent-not-issued", 409), "Chỉ lập từ tài liệu đã phát hành"],
+    ["child-exists", p("child-exists", 409), "Đã có hợp đồng cho tài liệu này", { docType: "contract" }],
+    ["child-exists (no type)", p("child-exists", 409), "Đã có tài liệu con cho tài liệu này"],
+    ["quote-expired", p("quote-expired", 409), "Báo giá đã hết hạn — hãy sao chép báo giá để lấy giá hôm nay"],
+    ["child-type", p("child-type", 422), "Không lập được loại tài liệu này từ tài liệu đã chọn."],
+    ["lines-locked", p("lines-locked", 422), "Dòng hàng và giảm giá giữ theo tài liệu gốc"],
+    ["has-children", p("has-children", 409, { children: [{ id: "C", type: "contract", number: "HD-2026-004", status: "pending", total: 1, doc_date: "2026-01-01" }] }), "Còn tài liệu con chưa hủy: hợp đồng HD-2026-004 (Chờ duyệt)."],
+    ["has-children (no list)", p("has-children", 409), "Còn tài liệu con chưa hủy — hủy tài liệu con trước."],
+    ["parent-required", p("parent-required", 422), "Đề nghị thanh toán chỉ lập từ hợp đồng đã phát hành"],
+    ["template-type", p("template-type", 422), "Mẫu này không thuộc loại tài liệu đang lập. Chọn mẫu khác."],
+    ["nothing-to-pay", p("nothing-to-pay", 422), "Hợp đồng 0 đồng — không có gì để đề nghị thanh toán"],
+  ];
+  it.each(cases)("%s", (_n, problem, expected, options) => {
+    const m = problemMessage(problem, {}, { resource: "contract", ...options });
+    expect(m.message).toBe(expected);
+    expect(m.message).not.toContain("Raw English");
+  });
+  it("all 9 slugs are known", () => {
+    for (const s of ["parent-not-issued", "child-exists", "quote-expired", "child-type", "lines-locked", "has-children", "parent-required", "template-type", "nothing-to-pay"]) {
+      expect(KNOWN_PROBLEM_SLUGS).toContain(s);
+    }
+  });
+  it("a PXK `lines` error is about goods, not the service package", () => {
+    const m = problemMessage(p("validation", 422, { errors: [{ path: "lines", message: "x" }] }), {}, { resource: "contract", docType: "delivery_note" });
+    expect(m.fieldErrors["lines"]).toBe("Phiếu xuất kho chỉ nhận hàng hóa");
+  });
+});
+

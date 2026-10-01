@@ -19,12 +19,15 @@ import {
   useTemplates,
   type ContractAction,
 } from "./api";
+import { ChildFormModal, vnDatePlus } from "./child-form-modal";
 import { ConfirmDialog, type ConfirmSpec } from "./confirm-dialog";
 import { ContractFormModal } from "./contract-form-modal";
 import { Dialog, DialogHeader } from "./dialog";
+import { DOC_TYPE_LABEL, DRAWER_TITLE, type DocType } from "./doc-type-labels";
 import { STEP_STATE_TEXT, buildFlow } from "./flow";
-import { lockReason, visibleActions, type ActionKey } from "./lock-reasons";
+import { childLockReason, createChildLabel, lockReason, retype, visibleActions, type ActionKey } from "./lock-reasons";
 import { PaperOverlay } from "./paper-overlay";
+import { RelatedDocs } from "./related-docs";
 import { parseSnapshot } from "./snapshot";
 import { vatRateText, TotalsBox } from "./totals-box";
 import { STATUS_TONE, numberLabel, statusLabel } from "./status";
@@ -86,6 +89,7 @@ export function ContractDrawer({
   onClosePaper,
   onGoDetail,
   onDeleted,
+  onGoPaper,
   notify,
 }: {
   id: string;
@@ -95,6 +99,8 @@ export function ContractDrawer({
   onClosePaper: () => void;
   onGoDetail: (id: string) => void;
   onDeleted: (message: string) => void;
+  /** After a child is made: open its paper (route /hop-dong/<id>/van-ban). Absent: its drawer. */
+  onGoPaper?: (id: string) => void;
   notify: (message: string) => void;
 }) {
   const me = useCurrentUser();
@@ -109,6 +115,7 @@ export function ContractDrawer({
   const [busy, setBusy] = useState<ActionKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [childType, setChildType] = useState<DocType | null>(null);
 
   const contract = query.data;
   const problem = query.isError ? errorMessage(query.error) : null;
@@ -139,10 +146,10 @@ export function ContractDrawer({
       refreshLists();
       void queryClient.invalidateQueries({ queryKey: ["contract-audit", id] });
       if (action === "copy") {
-        notify(ACTION_DONE.copy ?? "");
+        notify(retype(ACTION_DONE.copy ?? "", docType));
         onGoDetail(next.id);
       } else {
-        notify(action === "issue" ? `Đã phát hành ${next.number ?? ""}`.trim() : (ACTION_DONE[action] ?? "Xong"));
+        notify(action === "issue" ? `Đã phát hành ${next.number ?? ""}`.trim() : retype(ACTION_DONE[action] ?? "Xong", docType));
       }
     } catch (e) {
       const info = errorMessage(e);
@@ -169,15 +176,24 @@ export function ContractDrawer({
   const templateName = contract ? (templates.data?.find((t) => t.id === contract.template_id)?.name ?? "Mẫu hợp đồng") : "";
   const lock = contract ? { contract, meId: me.id, permissions: me.permissions } : null;
   const actions = contract && lock ? visibleActions(contract.status).map((a) => ({ a, reason: lockReason(a, lock) })) : [];
-  const reasons = [...new Set(actions.flatMap((x) => (x.reason ? [x.reason] : [])))];
+  const docType: DocType = contract?.type ?? "contract";
+  const typeName = DOC_TYPE_LABEL[docType].toLowerCase();
+  const childActions = contract ? contract.can.create_child.map((entry) => ({ entry, reason: childLockReason(entry, contract) })) : [];
+  const reasons = [
+    ...new Set([
+      ...actions.flatMap((x) => (x.reason ? [retype(x.reason, docType)] : [])),
+      ...childActions.flatMap((x) => (x.reason ? [x.reason] : [])),
+    ]),
+  ];
+  const expired = contract?.valid_until != null && contract.valid_until < vnDatePlus(0);
   // SPEC-05: issued/voided → the server makes the PDF on the first click, then serves the stored file
   const hasPdf = contract !== undefined && contract.pdf_status !== "none";
 
   return (
     <>
-      <Dialog label="Chi tiết hợp đồng" variant="drawer" onClose={onClose} testId="contract-drawer">
+      <Dialog label={DRAWER_TITLE[docType]} variant="drawer" onClose={onClose} testId="contract-drawer">
         <DialogHeader
-          eyebrow="Hợp đồng"
+          eyebrow={DOC_TYPE_LABEL[docType]}
           onClose={onClose}
           title={
             contract ? (
@@ -203,7 +219,7 @@ export function ContractDrawer({
             problem.status === 403 ? (
               <LockedNote>{problem.message.replace(/^🔒\s*/, "")}</LockedNote>
             ) : problem.status === 404 ? (
-              <EmptyState title="Không tìm thấy hợp đồng." action={<Button variant="secondary" onClick={onClose}>Về danh sách</Button>} />
+              <EmptyState title="Không tìm thấy tài liệu." action={<Button variant="secondary" onClick={onClose}>Về danh sách</Button>} />
             ) : (
               <ErrorState message={problem.message} onRetry={() => void query.refetch()} />
             )
@@ -213,11 +229,29 @@ export function ContractDrawer({
                 <dl>
                   <InfoRow label="Mẫu">{templateName}{snap.templateVersionNo ? ` · v${snap.templateVersionNo}` : ""}</InfoRow>
                   <InfoRow label="Ngày lập">{formatIsoDate(contract.doc_date)}</InfoRow>
-                  <InfoRow label="Thời hạn">{formatIsoDate(snap.start)} → {formatIsoDate(snap.end)}</InfoRow>
-                  <InfoRow label="Gói">{snap.lines.find((l) => l.kind === "service")?.name ?? "—"}</InfoRow>
+                  {docType === "contract" ? (
+                    <>
+                      <InfoRow label="Thời hạn">{formatIsoDate(snap.start)} → {formatIsoDate(snap.end)}</InfoRow>
+                      <InfoRow label="Gói">{snap.lines.find((l) => l.kind === "service")?.name ?? "—"}</InfoRow>
+                    </>
+                  ) : null}
+                  {docType === "payment_request" ? (
+                    <>
+                      <InfoRow label="Số tiền đề nghị">{formatVietnameseMoney(snap.amountRequested ?? contract.total)}</InfoRow>
+                      <InfoRow label="Hạn thanh toán">{formatIsoDate(snap.paymentDue)}</InfoRow>
+                    </>
+                  ) : null}
                   <InfoRow label="Người tạo">{creator ?? "—"}</InfoRow>
                 </dl>
+                {docType === "quote" && contract.valid_until ? (
+                  <p className="flex flex-wrap items-center gap-s2 text-md text-body" data-testid="valid-until">
+                    Hiệu lực đến {formatIsoDate(contract.valid_until)}
+                    {expired ? <Pill tone="danger">Hết hạn</Pill> : null}
+                  </p>
+                ) : null}
               </Section>
+
+              <RelatedDocs parent={contract.parent} children={contract.children} onOpen={onGoDetail} />
 
               <Section title="Dòng hàng">
                 <div className="shell-scroll overflow-x-auto">
@@ -274,18 +308,18 @@ export function ContractDrawer({
                           {f.at ? formatVietnamTimestamp(f.at) : ""}
                         </p>
                       ) : null}
-                      {f.note ? <p className="text-md text-body text-wrap-pretty">{f.kind === "voided" ? "Lý do hủy: " : f.state === "rejected" ? "Lý do từ chối: " : "Ghi chú: "}{f.note}</p> : null}
+                      {f.note ? <p className="text-md text-body text-wrap-pretty">{f.kind === "created" ? "" : f.kind === "voided" ? "Lý do hủy: " : f.state === "rejected" ? "Lý do từ chối: " : "Ghi chú: "}{f.note}</p> : null}
                     </li>
                   ))}
                 </ol>
               </Section>
 
               <div>
-                <Button type="button" variant="secondary" onClick={onOpenPaper}>Xem văn bản hợp đồng</Button>
+                <Button type="button" variant="secondary" onClick={onOpenPaper}>Xem văn bản</Button>
               </div>
 
               {canAudit ? (
-                <Section title="Nhật ký của hợp đồng">
+                <Section title={`Nhật ký của ${typeName}`}>
                   {audit.isPending ? (
                     <Skeleton className="h-row w-full" />
                   ) : audit.isError ? (
@@ -333,8 +367,10 @@ export function ContractDrawer({
                   Tải PDF
                 </a>
               ) : null}
-              {actions.map(({ a, reason }) =>
-                reason ? (
+              {actions.map(({ a, reason: rawReason }) => {
+                const reason = rawReason ? retype(rawReason, docType) : null;
+                const text = retype(ACTION_LABELS[a], docType);
+                return reason ? (
                   <Button
                     key={a}
                     type="button"
@@ -345,7 +381,7 @@ export function ContractDrawer({
                     className="cursor-not-allowed opacity-60"
                     onClick={(event) => event.preventDefault()}
                   >
-                    🔒 {ACTION_LABELS[a]}
+                    🔒 {text}
                   </Button>
                 ) : (
                   <Button
@@ -362,7 +398,37 @@ export function ContractDrawer({
                       else void run(a);
                     }}
                   >
-                    {ACTION_LABELS[a]}
+                    {text}
+                  </Button>
+                );
+              })}
+              {childActions.map(({ entry, reason }) =>
+                reason ? (
+                  <Button
+                    key={`child-${entry.type}`}
+                    type="button"
+                    variant="secondary"
+                    data-testid="action-create-child"
+                    aria-disabled="true"
+                    aria-describedby={`lock-${reasons.indexOf(reason)}`}
+                    className="cursor-not-allowed opacity-60"
+                    onClick={(event) => event.preventDefault()}
+                  >
+                    🔒 {createChildLabel(entry.type)}
+                  </Button>
+                ) : (
+                  <Button
+                    key={`child-${entry.type}`}
+                    type="button"
+                    variant="primary"
+                    data-testid="action-create-child"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      setError(null);
+                      setChildType(entry.type);
+                    }}
+                  >
+                    {createChildLabel(entry.type)}
                   </Button>
                 ),
               )}
@@ -389,10 +455,37 @@ export function ContractDrawer({
       </Dialog>
 
       {confirm && CONFIRMS[confirm] ? (
-        <ConfirmDialog spec={CONFIRMS[confirm]} pending={busy !== null} onCancel={() => setConfirm(null)} onConfirm={(reason) => void run(confirm, reason)} />
+        <ConfirmDialog spec={{ ...CONFIRMS[confirm], message: retype(CONFIRMS[confirm].message, docType) }} pending={busy !== null} onCancel={() => setConfirm(null)} onConfirm={(reason) => void run(confirm, reason)} />
       ) : null}
 
-      {editing && contract ? (
+      {editing && contract && contract.parent ? (
+        <ChildFormModal
+          mode="edit"
+          contract={contract}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            notify("Đã lưu");
+            void queryClient.invalidateQueries({ queryKey: ["contract-audit", id] });
+          }}
+        />
+      ) : null}
+
+      {childType && contract ? (
+        <ChildFormModal
+          mode="create"
+          parent={contract}
+          type={childType}
+          onClose={() => setChildType(null)}
+          onCreated={(child) => {
+            setChildType(null);
+            notify(`Đã lập ${DOC_TYPE_LABEL[child.type].toLowerCase()} (nháp)`);
+            (onGoPaper ?? onGoDetail)(child.id);
+          }}
+        />
+      ) : null}
+
+      {editing && contract && !contract.parent ? (
         <ContractFormModal
           mode="edit"
           contract={contract}
@@ -405,7 +498,7 @@ export function ContractDrawer({
         />
       ) : null}
 
-      {paperOpen && contract ? <PaperOverlay contractId={contract.id} hasPdf={hasPdf} version={contract.version} onClose={onClosePaper} /> : null}
+      {paperOpen && contract ? <PaperOverlay contractId={contract.id} type={docType} hasPdf={hasPdf} version={contract.version} onClose={onClosePaper} /> : null}
     </>
   );
 }

@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import { Button } from "../../ui";
 import { Dialog } from "./dialog";
+import { PAPER_TITLE, type DocType } from "./doc-type-labels";
 
 /**
- * The printed contract: the server's own HTML inside a sandboxed same-origin iframe (SPEC-04b 3.6).
+ * The printed document (title by type, SPEC-09): the server's own HTML inside a sandboxed same-origin iframe (SPEC-04b 3.6).
  * No allow-scripts (server CSP is default-src 'none'), nothing from the frame is read or rewritten here.
  * "In" calls the frame's print(); if the browser refuses, the new-tab link is the fallback (DEC-4).
  */
-export function PaperOverlay({ contractId, version, hasPdf = false, onClose }: { contractId: string; version: number; hasPdf?: boolean; onClose: () => void }) {
+export function PaperOverlay({ contractId, version, hasPdf = false, type = "contract", onClose }: { contractId: string; version: number; hasPdf?: boolean; type?: DocType; onClose: () => void }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [printFailed, setPrintFailed] = useState(false);
+  const title = PAPER_TITLE[type];
   const src = `/contracts/${contractId}/render`;
 
   function print() {
@@ -25,9 +27,9 @@ export function PaperOverlay({ contractId, version, hasPdf = false, onClose }: {
   }
 
   return (
-    <Dialog label="Văn bản hợp đồng" variant="paper" onClose={onClose}>
+    <Dialog label={title} variant="paper" onClose={onClose}>
       <div className="flex flex-wrap items-center justify-between gap-s3 border-b border-line bg-surface px-s5 py-s3 max-mobile:px-s3">
-        <h2 className="text-lg font-bold leading-head text-strong">Văn bản hợp đồng</h2>
+        <h2 className="text-lg font-bold leading-head text-strong">{title}</h2>
         <div className="flex flex-wrap items-center gap-s2">
           <Button type="button" variant="secondary" onClick={print}>In</Button>
           {hasPdf ? (
@@ -58,7 +60,7 @@ export function PaperOverlay({ contractId, version, hasPdf = false, onClose }: {
       <iframe
         key={version}
         ref={frameRef}
-        title="Văn bản hợp đồng"
+        title={title}
         src={src}
         sandbox="allow-same-origin allow-modals"
         referrerPolicy="no-referrer"

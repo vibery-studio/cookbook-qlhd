@@ -19,7 +19,7 @@ vi.mock("../../lib/client", () => ({
 import { CurrentUserProvider, type Me } from "../../app/me";
 import { ContractDrawer } from "./contract-drawer";
 
-const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false };
+const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
 const contract = {
   id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", type: "contract", status: "pending", number: null, seq: null, series_year: null,
   template_id: "T", template_version_id: "V", customer_id: "C", customer_name: "Tạp hóa Cô Ba", total: 3665000,
@@ -38,16 +38,27 @@ const contract = {
   voided_by: null, voided_at: null, void_reason: null, created_at: 1, updated_at: 5,
   steps: [{ id: "s1", step_no: 1, label: "Quản lý duyệt", status: "waiting", required_permission: "contract:approve", required_role: "quan_ly", decided_by: null, decided_by_name: null, decided_at: null, note: null, snapshot_hash_at_decision: null }],
   timeline: [{ action: "contract.created", at: 1, actor: "An" }, { action: "contract.submitted", at: 5, actor: "An" }],
-  can: { ...noCan, withdraw: true },
+  valid_until: null, parent: null, children: [],
+  can: { ...noCan, withdraw: true, create_child: [] },
 };
+const ref = (over: Record<string, unknown>) => ({ id: "01ARZ3NDEKTSV4RRFFQ69G5FAA", type: "contract", number: null, status: "draft", total: 2565000, doc_date: "2026-09-30", ...over });
+const issuedQuote = {
+  type: "quote", status: "issued", number: "BG-2026-001", seq: 1, series_year: 2026, steps: [], valid_until: "2999-01-01",
+  can: { ...noCan, create_child: [{ type: "contract", allowed: true, reason_code: null }] },
+};
+function serve(over: Record<string, unknown>) {
+  get.mockImplementation((path) =>
+    Promise.resolve(path === "/contracts/{id}" ? { data: { ...contract, ...over }, response: { ok: true, status: 200 } } : { data: { items: [], next_cursor: null }, response: { ok: true, status: 200 } }),
+  );
+}
 const me: Me = { id: "me", email: "a@b.c", display_name: "An", roles: ["nhan_vien"], permissions: ["contract:read", "contract:write", "contract:submit"] };
 
-function renderDrawer(paperOpen = false) {
+function renderDrawer(paperOpen = false, onGoDetail: (id: string) => void = () => {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <CurrentUserProvider user={me}>
-        <ContractDrawer id={contract.id} paperOpen={paperOpen} onClose={() => {}} onOpenPaper={() => {}} onClosePaper={() => {}} onGoDetail={() => {}} onDeleted={() => {}} notify={() => {}} />
+        <ContractDrawer id={contract.id} paperOpen={paperOpen} onClose={() => {}} onOpenPaper={() => {}} onClosePaper={() => {}} onGoDetail={onGoDetail} onDeleted={() => {}} notify={() => {}} />
       </CurrentUserProvider>
     </QueryClientProvider>,
   );
@@ -134,5 +145,131 @@ describe("ContractDrawer", () => {
     const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
     await within(dialog).findByTestId("action-withdraw");
     expect(within(dialog).queryByRole("link", { name: "Tải PDF" })).toBeNull();
+  });
+});
+
+describe("ContractDrawer — SPEC-09 document types", () => {
+  it("names the drawer and the paper by document type", async () => {
+    for (const [type, drawer, paper] of [
+      ["quote", "Chi tiết báo giá", "Văn bản báo giá"],
+      ["payment_request", "Chi tiết đề nghị thanh toán", "Văn bản đề nghị thanh toán"],
+      ["delivery_note", "Chi tiết phiếu xuất kho", "Văn bản phiếu xuất kho"],
+    ] as const) {
+      serve({ type });
+      const r = renderDrawer(true);
+      await screen.findByRole("dialog", { name: drawer });
+      const dialog = await screen.findByRole("dialog", { name: paper });
+      await waitFor(() => expect(dialog.querySelector("iframe")?.getAttribute("title")).toBe(paper));
+      r.unmount();
+    }
+  });
+
+  it("quote: 'Hiệu lực đến dd/mm/yyyy', and the 'Hết hạn' pill only once it is past", async () => {
+    serve({ type: "quote", valid_until: "2999-01-15" });
+    const a = renderDrawer();
+    const live = await screen.findByRole("dialog", { name: "Chi tiết báo giá" });
+    await within(live).findByText(/Hiệu lực đến 15\/01\/2999/);
+    expect(live.textContent).not.toContain("Hết hạn");
+    a.unmount();
+
+    serve({ type: "quote", valid_until: "2020-01-15" });
+    renderDrawer();
+    const dead = await screen.findByRole("dialog", { name: "Chi tiết báo giá" });
+    await within(dead).findByText(/Hiệu lực đến 15\/01\/2020/);
+    expect(dead.textContent).toContain("Hết hạn");
+  });
+
+  it("related docs: parent ↑ and children ↓ as 'loại · số · trạng thái · tổng'; a click opens that document", async () => {
+    serve({
+      parent: ref({ id: "01ARZ3NDEKTSV4RRFFQ69G5PAR", type: "quote", number: "BG-2026-001", status: "issued", total: 2565000 }),
+      children: [ref({ id: "01ARZ3NDEKTSV4RRFFQ69G5KID", type: "payment_request", number: null, status: "draft", total: 3665000 })],
+    });
+    const onGoDetail = vi.fn();
+    renderDrawer(false, onGoDetail);
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+    const block = await within(dialog).findByTestId("related-docs");
+    expect(block.textContent).toContain("Tài liệu liên quan");
+    const rows = within(block).getAllByTestId("related-doc");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain("↑");
+    for (const t of ["Báo giá", "BG-2026-001", "Đã phát hành", "2.565.000"]) expect(rows[0]?.textContent).toContain(t);
+    expect(rows[1]?.textContent).toContain("↓");
+    for (const t of ["Đề nghị thanh toán", "Nháp · chưa có số", "Nháp", "3.665.000"]) expect(rows[1]?.textContent).toContain(t);
+    await userEvent.click(rows[0] as HTMLElement);
+    expect(onGoDetail).toHaveBeenCalledWith("01ARZ3NDEKTSV4RRFFQ69G5PAR");
+  });
+
+  it("no parent and no children → no 'Tài liệu liên quan' block", async () => {
+    renderDrawer();
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+    await within(dialog).findByTestId("action-withdraw");
+    expect(within(dialog).queryByTestId("related-docs")).toBeNull();
+  });
+
+  it("issued quote: 'Lập hợp đồng' is live and opens the child form with the lines locked at the quote's price", async () => {
+    serve(issuedQuote);
+    renderDrawer();
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết báo giá" });
+    const button = await within(dialog).findByTestId("action-create-child");
+    expect(button.textContent).toBe("Lập hợp đồng");
+    expect(button.getAttribute("aria-disabled")).toBeNull();
+    await userEvent.click(button);
+    const form = await screen.findByRole("dialog", { name: "Lập hợp đồng từ báo giá BG-2026-001" });
+    expect(form.textContent).toContain("Giữ giá báo giá BG-2026-001");
+    expect(within(form).getAllByTestId("locked-line-row")).toHaveLength(2);
+    expect(within(form).getByTestId("totals").textContent).toContain("3.665.000");
+    expect(within(form).getByLabelText("Chức vụ người ký")).toBeTruthy();
+    expect(within(form).queryByLabelText("Giảm giá (%)")).toBeNull();
+  });
+
+  it("locked create-child: aria-disabled + 🔒 + the reason for each reason_code, nothing sent on click", async () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ ...issuedQuote, valid_until: "2026-01-05", can: { ...noCan, create_child: [{ type: "contract", allowed: false, reason_code: "quote-expired" }] } }, "Báo giá đã hết hạn ngày 05/01/2026"],
+      [
+        { ...issuedQuote, children: [ref({ type: "contract", number: "HD-2026-004", status: "pending" })], can: { ...noCan, create_child: [{ type: "contract", allowed: false, reason_code: "child-exists" }] } },
+        "Đã có hợp đồng HD-2026-004 (Chờ duyệt)",
+      ],
+      [{ ...issuedQuote, status: "draft", number: null, can: { ...noCan, create_child: [{ type: "contract", allowed: false, reason_code: "parent-not-issued" }] } }, "Chỉ lập từ tài liệu đã phát hành"],
+      [{ ...issuedQuote, can: { ...noCan, create_child: [{ type: "contract", allowed: false, reason_code: "forbidden" }] } }, "Bạn không có quyền lập hợp đồng"],
+    ];
+    for (const [over, sentence] of cases) {
+      serve(over);
+      const r = renderDrawer();
+      const dialog = await screen.findByRole("dialog", { name: "Chi tiết báo giá" });
+      const button = await within(dialog).findByTestId("action-create-child");
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.textContent).toContain("🔒");
+      expect(dialog.textContent).toContain(sentence);
+      await userEvent.click(button);
+      expect(screen.queryByRole("dialog", { name: /Lập hợp đồng từ/ })).toBeNull();
+      expect(post).not.toHaveBeenCalled();
+      r.unmount();
+    }
+  });
+
+  it("issued contract: 'Lập đề nghị thanh toán' → form shows the contract total as the amount and a due date", async () => {
+    serve({ ...issuedQuote, type: "contract", number: "HD-2026-001", can: { ...noCan, create_child: [{ type: "payment_request", allowed: true, reason_code: null }] } });
+    renderDrawer();
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+    await userEvent.click(await within(dialog).findByTestId("action-create-child"));
+    const form = await screen.findByRole("dialog", { name: "Lập đề nghị thanh toán" });
+    expect(form.textContent).toContain("Số tiền đề nghị");
+    expect(form.textContent).toContain("3.665.000");
+    expect(form.textContent).toMatch(/Hạn thanh toán\s*\d{2}\/\d{2}\/\d{4}/);
+  });
+
+  it("child draft: the edit form shows the lines locked (🔒 Giữ giá báo giá …) and has no 'Giảm giá (%)' input", async () => {
+    serve({
+      status: "draft", steps: [], can: { ...noCan, edit: true, submit: true, delete: true, create_child: [] },
+      parent: ref({ id: "01ARZ3NDEKTSV4RRFFQ69G5PAR", type: "quote", number: "BG-2026-001", status: "issued" }),
+    });
+    renderDrawer();
+    const dialog = await screen.findByRole("dialog", { name: "Chi tiết hợp đồng" });
+    await userEvent.click(await within(dialog).findByTestId("action-edit"));
+    const form = await screen.findByRole("dialog", { name: "Sửa hợp đồng nháp" });
+    expect(form.textContent).toContain("Giữ giá báo giá BG-2026-001");
+    expect(within(form).getAllByTestId("locked-line-row")).toHaveLength(2);
+    expect(within(form).queryByLabelText("Giảm giá (%)")).toBeNull();
+    expect(within(form).getByLabelText("Chức vụ người ký")).toBeTruthy();
   });
 });

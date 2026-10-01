@@ -6,7 +6,13 @@ import { cn } from "../../lib/cn";
 import { client } from "../../lib/client";
 import { problemMessage } from "../../lib/problem-messages";
 import { Button, EmptyState, ErrorState, Icon, LockedNote, Pill, Skeleton } from "../../ui";
+import { DOC_TYPE_LABEL, DOC_TYPE_SHORT, DOC_TYPES, type DocType } from "../contracts/doc-type-labels";
 import { policySteps } from "./approval-rules";
+
+const asDocType = (type: string): DocType => ((DOC_TYPES as readonly string[]).includes(type) ? (type as DocType) : "contract");
+const typeShort = (type: string) => DOC_TYPE_SHORT[asDocType(type)];
+/** "báo giá" · "hợp đồng" · "phiếu xuất kho" — for the "Tạo … từ mẫu này →" button. */
+const typeName = (type: string) => DOC_TYPE_LABEL[asDocType(type)].toLowerCase();
 
 class LoadError extends Error {
   constructor(
@@ -87,7 +93,10 @@ function TemplateCard({ t, active }: { t: NonNullable<ReturnType<typeof useTempl
     >
       <div className="flex items-start justify-between gap-s3">
         <h2 className="text-lg font-bold leading-head text-strong text-wrap-pretty">{t.name}</h2>
-        <Pill tone="neutral">v{t.current_version.version_no}</Pill>
+        <div className="flex shrink-0 flex-wrap items-center gap-s1">
+          <Pill tone="accent">{typeShort(t.type)}</Pill>
+          <Pill tone="neutral">v{t.current_version.version_no}</Pill>
+        </div>
       </div>
       <div className="grid gap-s2">
         <p className="text-sm font-semibold text-strong">Trường bắt buộc ({t.required_fields.length})</p>
@@ -254,8 +263,10 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
 
         <div className="grid gap-s3 border-t border-line bg-sunken px-s5 py-s4">
           {detail ? (
-            canWrite ? (
-              <Button onClick={() => void navigate(`/hop-dong?tao=${encodeURIComponent(detail.id)}`)}>Tạo hợp đồng từ mẫu này →</Button>
+            detail.type === "payment_request" ? (
+              <p className="text-md text-muted">Lập từ hợp đồng đã phát hành</p>
+            ) : canWrite ? (
+              <Button onClick={() => void navigate(`/hop-dong?tao=${encodeURIComponent(detail.id)}`)}>Tạo {typeName(detail.type)} từ mẫu này →</Button>
             ) : (
               <LockedNote>Bạn không có quyền tạo hợp đồng (cần quyền contract:write).</LockedNote>
             )

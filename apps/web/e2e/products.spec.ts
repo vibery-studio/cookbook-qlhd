@@ -115,8 +115,9 @@ test("SPEC-08: Quản lý adds a goods product and a G6 level from tomorrow; Nh�
 
   // ---- Nhân viên: a contract from lines — G6 (KCT) + 2 × KEP-E2E-01 (10%), −5% ----
   // G6 2.700.000 − 135.000 = 2.565.000 (KCT, VAT 0) · KEP 100.000 − 5.000 = 95.000 → VAT 10% 9.500 · total 2.669.500
-  await nv.getByTestId("sidebar").getByRole("link", { name: "Hợp đồng", exact: true }).click();
-  await nv.getByRole("button", { name: "+ Tạo hợp đồng" }).click();
+  await nv.getByTestId("sidebar").getByRole("link", { name: "Tài liệu", exact: true }).click();
+  await nv.getByRole("button", { name: "+ Tạo", exact: true }).click();
+  await nv.getByRole("menu").getByRole("menuitem", { name: "Hợp đồng", exact: true }).click();
   const create = nv.getByRole("dialog", { name: "Tạo hợp đồng" });
   await create.getByRole("combobox", { name: "Khách hàng" }).click();
   await create.getByRole("combobox", { name: "Khách hàng" }).fill("Seed");

@@ -1,6 +1,7 @@
 import { permissionLabel } from "../roles/permission-labels";
 import { formatIsoDate } from "../../lib/vn-date";
 import { formatPlainMoney, vatLabel } from "../products/product-view";
+import { DOC_TYPES, DOC_TYPE_LABEL, type DocType } from "../contracts/doc-type-labels";
 
 export type AuditTone = "neutral" | "danger" | "accent" | "ok" | "pending";
 
@@ -159,6 +160,33 @@ function productText(action: string, metadata: Record<string, unknown> | null | 
   return `${head} ${formatPlainMoney(ex)} đ ${tax} từ ${formatIsoDate(from)}`;
 }
 
+const docType = (v: unknown): DocType => DOC_TYPES.find((t) => t === v) ?? "contract";
+const noun = (t: DocType): string => DOC_TYPE_LABEL[t].toLocaleLowerCase("vi");
+/** Which type a child of `t` comes from (CHILD_OF inverted). */
+const PARENT_OF: Partial<Record<DocType, DocType>> = { contract: "quote", payment_request: "contract" };
+
+/** contract.* sentences name the document type from `metadata.type` (SPEC-09 FR-10); a child says what it was made from. */
+function contractText(action: string, metadata: Record<string, unknown> | null | undefined, fallback: string): string {
+  const type = docType(metadata?.["type"]);
+  const n = noun(type);
+  const parentNumber = str(metadata?.["parent_number"]);
+  const parentType = PARENT_OF[type];
+  switch (action) {
+    case "contract.created":
+      return parentNumber !== null && parentType !== undefined ? `lập ${n} từ ${noun(parentType)} ${parentNumber}` : `tạo ${n}`;
+    case "contract.updated": return `sửa ${n}`;
+    case "contract.submitted": return `gửi duyệt ${n}`;
+    case "contract.approved": return `duyệt ${n}`;
+    case "contract.rejected": return `từ chối ${n}`;
+    case "contract.withdrawn": return `rút ${n} về nháp`;
+    case "contract.deleted": return `xóa ${n} nháp`;
+    case "contract.issued": return `phát hành ${n}`;
+    case "contract.voided": return `hủy ${n} đã phát hành`;
+    case "contract.pdf_generated": return `tạo PDF cho ${n}`;
+    default: return fallback;
+  }
+}
+
 export function auditSentence(event: AuditEventLike): AuditSentence {
   const action = event.action.trim();
   const entry = AUDIT_ACTIONS[action];
@@ -176,6 +204,7 @@ export function auditSentence(event: AuditEventLike): AuditSentence {
   if (action.startsWith("sod.")) return { ...entry, text: sodText(event.metadata, entry.text) };
   if (action === "jit.granted") return { ...entry, text: jitGrantText(event.metadata, entry.text) };
   if (action.startsWith("review.")) return { ...entry, text: reviewText(action, event.metadata, entry.text) };
+  if (action.startsWith("contract.")) return { ...entry, text: contractText(action, event.metadata, entry.text) };
   if (action.startsWith("role.")) return { ...entry, text: roleText(action, event.metadata, entry.text) };
   return entry;
 }

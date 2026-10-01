@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { lockReason, visibleActions, type LockContext } from "./lock-reasons";
-import { buildValues, buildLines, rowsFromInputs, previewBody, bpsToPercentText, emptyForm, formFromInputs, activeKeys, type FieldSpec } from "./values";
+import { buildValues, buildLines, rowsFromInputs, previewBody, bpsToPercentText, emptyForm, formFromInputs, activeKeys, productsFor, VALUE_LABELS, type FieldSpec } from "./values";
 import { buildFlow } from "./flow";
-import { parseListParams } from "./list-params";
+import { parseListParams, TYPE_TABS, typeEmptyTitle, createLabel, creatableTypes } from "./list-params";
 import { parseSnapshot } from "./snapshot";
 
 const noCan = { edit: false, submit: false, approve: false, reject: false, issue: false, void: false, copy: false, withdraw: false, delete: false, create_child: [] };
@@ -209,5 +209,70 @@ describe("parseSnapshot", () => {
     expect(s.vatGroups).toEqual([{ vatRateBps: null, base: 2565000, vat: 0 }, { vatRateBps: 1000, base: 1000000, vat: 100000 }]);
     expect(s.lines[1]).toMatchObject({ productId: "P2", code: "MIN", name: "Máy in", kind: "goods", unit: "cái", qty: 2, unitPriceExVat: 500000, vatRateBps: 1000, amountExVat: 1000000 });
     expect(s.lines[0]?.vatRateBps).toBeNull();
+  });
+});
+
+describe("type tabs (SPEC-09 §3.5) — `?loai=` in the URL", () => {
+  it("parses a known type; junk is ignored; the status tab and filters still parse", () => {
+    expect(parseListParams(new URLSearchParams("loai=quote")).type).toBe("quote");
+    expect(parseListParams(new URLSearchParams("loai=delivery_note&tab=issued"))).toMatchObject({ type: "delivery_note", tab: "issued" });
+    expect(parseListParams(new URLSearchParams("loai=hack")).type).toBeUndefined();
+    expect(parseListParams(new URLSearchParams("")).type).toBeUndefined();
+  });
+  it("the five tabs, in the order and words of the UI contract", () => {
+    expect(TYPE_TABS.map((t) => [t.value, t.label])).toEqual([
+      ["all", "Tất cả"], ["quote", "Báo giá"], ["contract", "Hợp đồng"], ["payment_request", "Đề nghị TT"], ["delivery_note", "Phiếu xuất kho"],
+    ]);
+  });
+  it("empty tab sentence + create button per type; DNTT has no create button", () => {
+    expect(typeEmptyTitle("quote")).toBe("Chưa có báo giá nào");
+    expect(typeEmptyTitle("payment_request")).toBe("Chưa có đề nghị thanh toán nào");
+    expect(createLabel("quote")).toBe("Tạo báo giá");
+    expect(createLabel("delivery_note")).toBe("Tạo phiếu xuất kho");
+  });
+  it("+ Tạo offers BG · HĐ · PXK by permission, never DNTT", () => {
+    expect(creatableTypes(["quote:write", "contract:write", "delivery_note:write", "payment_request:write"])).toEqual(["quote", "contract", "delivery_note"]);
+    expect(creatableTypes(["contract:write"])).toEqual(["contract"]);
+    expect(creatableTypes(["contract:read"])).toEqual([]);
+  });
+});
+
+describe("form by type (SPEC-09 §3.5)", () => {
+  const fields: FieldSpec[] = [
+    { key: "giam_gia", required: false, source: "manual" },
+    { key: "chuc_vu_nguoi_ky", required: false, source: "manual" },
+    { key: "ly_do_xuat_kho", required: true, source: "manual" },
+    { key: "xuat_tai_kho", required: false, source: "manual" },
+    { key: "dia_diem", required: false, source: "manual" },
+  ];
+  it("PXK: no discount field and no giam_gia in the body; 3 warehouse fields in order", () => {
+    expect(activeKeys(fields, "delivery_note")).toEqual(["chuc_vu_nguoi_ky", "ly_do_xuat_kho", "xuat_tai_kho", "dia_diem"]);
+    const r = buildValues({ ...emptyForm(), giam_gia: "5", ly_do_xuat_kho: " Giao máy in ", xuat_tai_kho: "Kho A" }, fields, "delivery_note");
+    expect(r).toEqual({ ok: true, values: { ly_do_xuat_kho: "Giao máy in", xuat_tai_kho: "Kho A" } });
+    expect(VALUE_LABELS.ly_do_xuat_kho).toBe("Lý do xuất kho");
+    expect(VALUE_LABELS.xuat_tai_kho).toBe("Xuất tại kho");
+    expect(VALUE_LABELS.dia_diem).toBe("Địa điểm");
+  });
+  it("PXK: the required reason is checked", () => {
+    expect(buildValues(emptyForm(), fields, "delivery_note")).toMatchObject({ ok: false, message: "Thiếu: Lý do xuất kho. Điền rồi tạo lại." });
+  });
+  it("BG: no signer position in the field list or the body", () => {
+    expect(activeKeys(fields, "quote")).toEqual(["giam_gia", "ly_do_xuat_kho", "xuat_tai_kho", "dia_diem"]);
+    const r = buildValues({ ...emptyForm(), giam_gia: "5", chuc_vu_nguoi_ky: "GĐ" }, fields.slice(0, 2), "quote");
+    expect(r).toEqual({ ok: true, values: { giam_gia: 500 } });
+  });
+  it("a frozen child (price kept from its parent): no discount in the body either", () => {
+    const r = buildValues({ ...emptyForm(), giam_gia: "5", chuc_vu_nguoi_ky: "GĐ" }, fields.slice(0, 2), "contract", { frozen: true });
+    expect(r).toEqual({ ok: true, values: { chuc_vu_nguoi_ky: "GĐ" } });
+  });
+  it("HĐ keeps today's behaviour (no type = contract)", () => {
+    expect(buildValues({ ...emptyForm(), giam_gia: "5", chuc_vu_nguoi_ky: "GĐ" }, fields.slice(0, 2)))
+      .toEqual({ ok: true, values: { giam_gia: 500, chuc_vu_nguoi_ky: "GĐ" } });
+  });
+  it("the PXK line combobox offers goods only", () => {
+    const items = [{ id: "1", kind: "service" }, { id: "2", kind: "goods" }] as Array<{ id: string; kind: "service" | "goods" }>;
+    expect(productsFor("delivery_note", items).map((p) => p.id)).toEqual(["2"]);
+    expect(productsFor("quote", items).map((p) => p.id)).toEqual(["1", "2"]);
+    expect(productsFor(undefined, items)).toHaveLength(2);
   });
 });

@@ -12,6 +12,10 @@ describe("nav registry", () => {
     ]);
   });
 
+  it("the /hop-dong sidebar entry is called Tài liệu (route unchanged)", () => {
+    expect(navRegistry.find((i) => i.to === "/hop-dong")?.label).toBe("Tài liệu");
+  });
+
   it("shows Sản phẩm & giá to anyone with contract:read, and hides it from admin", () => {
     expect(visibleNavItems(me(["contract:read"])).map((i) => i.to)).toContain("/san-pham");
     expect(visibleNavItems(me(["users:read", "audit:read"])).map((i) => i.to)).not.toContain("/san-pham");

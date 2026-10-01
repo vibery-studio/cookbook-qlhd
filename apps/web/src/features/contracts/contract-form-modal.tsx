@@ -24,7 +24,8 @@ import {
 } from "./api";
 import { CustomerCombobox, type PickedCustomer } from "./customer-combobox";
 import { Dialog, DialogHeader } from "./dialog";
-import { LineItems, type KnownProduct } from "./line-items";
+import { DOC_TYPES, DOC_TYPE_LABEL, type DocType } from "./doc-type-labels";
+import { FrozenLines, LineItems, type KnownProduct } from "./line-items";
 import { parseSnapshot } from "./snapshot";
 import { TotalsBox } from "./totals-box";
 import {
@@ -37,15 +38,17 @@ import {
   isValueKey,
   newRow,
   previewBody,
+  productsFor,
   requiredKeys,
   rowsFromInputs,
   type FormState,
   type LineRow,
+  type LinesResult,
   type ValueKey,
 } from "./values";
 
 export type ContractFormProps =
-  | { mode: "create"; templateId?: string; onClose: () => void; onCreated: (contract: Contract) => void }
+  | { mode: "create"; templateId?: string; docType?: DocType; onClose: () => void; onCreated: (contract: Contract) => void }
   | { mode: "edit"; contract: Contract; onClose: () => void; onSaved: (contract: Contract) => void };
 
 const INPUT_CLASS =
@@ -72,16 +75,24 @@ export function ContractFormModal(props: ContractFormProps) {
   const keeper = useIdempotencyKeeper();
   const editing = props.mode === "edit" ? props.contract : undefined;
 
-  const templates = useTemplates();
+  // create from "+ Tạo": the type is known → only that type's templates; edit / from the templates screen: all, the type comes from the template
+  const templates = useTemplates(props.mode === "create" ? props.docType : undefined);
   const [templateId, setTemplateId] = useState<string>(props.mode === "create" ? (props.templateId ?? "") : (editing?.template_id ?? ""));
+  const pickedType = templates.data?.find((t) => t.id === templateId)?.type;
+  const docType: DocType = editing?.type ?? (props.mode === "create" ? props.docType : undefined) ?? DOC_TYPES.find((t) => t === pickedType) ?? "contract";
+  const noun = DOC_TYPE_LABEL[docType].toLocaleLowerCase("vi");
+  // a child draft keeps its lines + price from the parent (SPEC-09 FR-5): lines read-only, no discount
+  const parent = editing?.parent ?? null;
+  const frozen = parent !== null;
   useEffect(() => {
     // one template only: nothing to choose
     if (props.mode === "create" && templateId === "" && templates.data?.length === 1) setTemplateId(templates.data[0]?.id ?? "");
   }, [props.mode, templateId, templates.data]);
   const template = useTemplate(templateId || undefined);
   const fields: TemplateField[] = useMemo(() => template.data?.version.fields ?? [], [template.data]);
-  const keys = useMemo(() => activeKeys(fields), [fields]);
-  const required = useMemo(() => requiredKeys(fields), [fields]);
+  const keys = useMemo(() => activeKeys(fields, docType, { frozen }), [fields, docType, frozen]);
+  const required = useMemo(() => requiredKeys(fields, docType, { frozen }), [fields, docType, frozen]);
+  const goodsOnly = docType === "delivery_note";
 
   const [customer, setCustomer] = useState<PickedCustomer | null>(editing ? { id: editing.customer_id, name: editing.customer_name } : null);
   const [form, setForm] = useState<FormState>(() => (editing ? formFromInputs(parseSnapshot(editing.snapshot).inputs) : emptyForm()));
@@ -103,9 +114,21 @@ export function ContractFormModal(props: ContractFormProps) {
 
   const products = useProducts();
   const productList = useMemo(
-    () => ({ isPending: products.isPending, isError: products.isError, items: products.data ?? [], refetch: () => void products.refetch() }),
-    [products.isPending, products.isError, products.data, products.refetch],
+    () => ({ isPending: products.isPending, isError: products.isError, items: productsFor(docType, products.data ?? []), refetch: () => void products.refetch() }),
+    [products.isPending, products.isError, products.data, products.refetch, docType],
   );
+  const frozenLines = useMemo(
+    () =>
+      editing && frozen
+        ? parseSnapshot(editing.snapshot).lines.map((l, i) => ({ key: `${l.productId}-${i}`, code: l.code, name: l.name, unit: l.unit, qty: l.qty }))
+        : [],
+    [editing, frozen],
+  );
+  const frozenNote = parent
+    ? parent.type === "quote"
+      ? `Giữ giá báo giá ${parent.number ?? "(nháp)"}`
+      : `Giữ theo ${DOC_TYPE_LABEL[parent.type].toLocaleLowerCase("vi")} ${parent.number ?? "(nháp)"}`
+    : "";
   // old drafts: names for products that are no longer on sale come from the snapshot the contract already holds
   const known = useMemo(() => {
     const m = new Map<string, KnownProduct>();
@@ -114,7 +137,8 @@ export function ContractFormModal(props: ContractFormProps) {
   }, [editing]);
 
   // totals: POST /pricing/preview, debounced ~300 ms; an error shows its sentence and never blocks typing (DEC-13 A)
-  const wanted = useMemo(() => previewBody(rows, form.giam_gia), [rows, form.giam_gia]);
+  const noMoney = goodsOnly || frozen; // PXK carries no money; a child's money is the parent's
+  const wanted = useMemo(() => (noMoney ? null : previewBody(rows, form.giam_gia)), [rows, form.giam_gia, noMoney]);
   const [debounced, setDebounced] = useState(wanted);
   const wantedKey = JSON.stringify(wanted);
   useEffect(() => {
@@ -134,7 +158,7 @@ export function ContractFormModal(props: ContractFormProps) {
   }, []);
 
   function applyServerError(error: unknown) {
-    const info = errorMessage(error);
+    const info = errorMessage(error, docType);
     const next: Partial<Record<ValueKey | "customer" | "template", string>> = {};
     const nextLines: Record<number, string> = {};
     let block: string | undefined;
@@ -157,8 +181,8 @@ export function ContractFormModal(props: ContractFormProps) {
   async function submit() {
     if (pending) return;
     if (!templateId) {
-      setErrors({ template: "Chọn mẫu hợp đồng" });
-      setMessage("Chọn mẫu hợp đồng trước khi tạo.");
+      setErrors({ template: `Chọn mẫu ${noun}` });
+      setMessage(`Chọn mẫu ${noun} trước khi tạo.`);
       return;
     }
     if (!customer) {
@@ -166,8 +190,8 @@ export function ContractFormModal(props: ContractFormProps) {
       setMessage("Thiếu: Khách hàng. Chọn khách rồi tạo lại.");
       return;
     }
-    const built = buildValues(form, fields);
-    const builtLines = buildLines(rows);
+    const built = buildValues(form, fields, docType, { frozen });
+    const builtLines: LinesResult = frozen ? { ok: true, lines: [] } : buildLines(rows);
     if (!builtLines.ok || !built.ok) {
       setErrors(built.ok ? {} : built.errors);
       setLineErrors(builtLines.ok ? {} : builtLines.errors);
@@ -188,8 +212,8 @@ export function ContractFormModal(props: ContractFormProps) {
       } else {
         contract = await updateContract(props.contract.id, {
           expected_version: version,
-          customer_id: customer.id,
-          lines: builtLines.lines,
+          // a child draft: only the hand-typed values go (lines, price and customer stay the parent's)
+          ...(frozen ? {} : { customer_id: customer.id, lines: builtLines.lines }),
           values: built.values,
           ...(useLatest && newerTemplate ? { use_latest_template: true } : {}),
         });
@@ -229,7 +253,7 @@ export function ContractFormModal(props: ContractFormProps) {
   }, [addingCustomer, onClose]);
   const closeCustomer = useCallback(() => setAddingCustomer(null), []);
 
-  const title = props.mode === "create" ? "Tạo hợp đồng" : "Sửa hợp đồng nháp";
+  const title = props.mode === "create" ? `Tạo ${noun}` : `Sửa ${noun} nháp`;
   const auto = fields.filter((f) => f.source !== "manual").map((f) => f.label);
   const loadingTemplate = templateId !== "" && template.isPending;
 
@@ -246,7 +270,7 @@ export function ContractFormModal(props: ContractFormProps) {
           }}
         >
           {props.mode === "create" ? (
-            <Row id="cf-template" label="Mẫu hợp đồng" required error={errors.template}>
+            <Row id="cf-template" label={`Mẫu ${noun}`} required error={errors.template}>
               <select
                 id="cf-template"
                 value={templateId}
@@ -264,28 +288,46 @@ export function ContractFormModal(props: ContractFormProps) {
             </Row>
           ) : null}
 
-          <div className="grid gap-s2">
-            <CustomerCombobox
-              label="Khách hàng"
-              value={customer}
-              invalid={Boolean(errors.customer)}
-              autoFocus
-              onChange={(c) => {
-                setCustomer(c);
-                setErrors((e) => ({ ...e, customer: undefined }));
-                setMessage(null);
-              }}
-              {...(canAddCustomer ? { onAddNew: () => setAddingCustomer(crypto.randomUUID()) } : {})}
-            />
-            {errors.customer ? <p className="text-sm text-danger">{errors.customer}</p> : null}
-          </div>
+          {frozen ? (
+            <div className="grid gap-s1">
+              <span className="text-md font-semibold leading-head text-body">Khách hàng</span>
+              <p className="text-md text-strong">{customer?.name}</p>
+            </div>
+          ) : (
+            <div className="grid gap-s2">
+              <CustomerCombobox
+                label="Khách hàng"
+                value={customer}
+                invalid={Boolean(errors.customer)}
+                autoFocus
+                onChange={(c) => {
+                  setCustomer(c);
+                  setErrors((e) => ({ ...e, customer: undefined }));
+                  setMessage(null);
+                }}
+                {...(canAddCustomer ? { onAddNew: () => setAddingCustomer(crypto.randomUUID()) } : {})}
+              />
+              {errors.customer ? <p className="text-sm text-danger">{errors.customer}</p> : null}
+            </div>
+          )}
 
           {loadingTemplate ? <Skeleton className="h-[calc(var(--row-h)*3)]" /> : null}
           {template.isError ? <p className="text-md text-danger">Không tải được mẫu. Đóng rồi mở lại.</p> : null}
 
-          {!loadingTemplate && templateId ? (
-            <LineItems rows={rows} onChange={setRows} products={productList} known={known} amounts={amounts} rowErrors={lineErrors} blockError={linesError} />
+          {!loadingTemplate && templateId && frozen ? <FrozenLines lines={frozenLines} note={frozenNote} /> : null}
+          {!loadingTemplate && templateId && !frozen ? (
+            <LineItems
+              rows={rows}
+              onChange={setRows}
+              products={productList}
+              known={known}
+              amounts={amounts}
+              rowErrors={lineErrors}
+              blockError={linesError}
+              showPrice={!goodsOnly}
+            />
           ) : null}
+          {!loadingTemplate && templateId && docType === "quote" ? <p className="text-sm text-muted">Hiệu lực 15 ngày kể từ ngày lập.</p> : null}
 
           {keys.map((k) => {
               if (loadingTemplate || !templateId) return null;

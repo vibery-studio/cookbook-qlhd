@@ -1,8 +1,11 @@
 import { parsePercentToBps } from "../../lib/percent-bps";
-import type { ContractValues } from "./api";
+import type { ContractValues, Product } from "./api";
+import type { DocType } from "./doc-type-labels";
 
 /** The only `values` keys SPEC-08 §2b accepts; anything else a template declares is ignored. */
-export const VALUE_KEYS = ["giam_gia", "chuc_vu_nguoi_ky", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia"] as const;
+export const VALUE_KEYS = [
+  "giam_gia", "chuc_vu_nguoi_ky", "ngay_bat_dau", "so_bao_gia", "ngay_bao_gia", "ly_do_xuat_kho", "xuat_tai_kho", "dia_diem",
+] as const;
 export type ValueKey = (typeof VALUE_KEYS)[number];
 
 export const VALUE_LABELS: Record<ValueKey, string> = {
@@ -11,31 +14,54 @@ export const VALUE_LABELS: Record<ValueKey, string> = {
   ngay_bat_dau: "Ngày bắt đầu",
   so_bao_gia: "Số báo giá",
   ngay_bao_gia: "Ngày báo giá",
+  ly_do_xuat_kho: "Lý do xuất kho",
+  xuat_tai_kho: "Xuất tại kho",
+  dia_diem: "Địa điểm",
 };
 
 export type FormState = Record<ValueKey, string>;
 export type FieldSpec = { key: string; required: boolean; source: string };
 
 export function emptyForm(): FormState {
-  return { giam_gia: "", chuc_vu_nguoi_ky: "", ngay_bat_dau: "", so_bao_gia: "", ngay_bao_gia: "" };
+  return { giam_gia: "", chuc_vu_nguoi_ky: "", ngay_bat_dau: "", so_bao_gia: "", ngay_bao_gia: "", ly_do_xuat_kho: "", xuat_tai_kho: "", dia_diem: "" };
 }
 
 export function isValueKey(key: string): key is ValueKey {
   return (VALUE_KEYS as readonly string[]).includes(key);
 }
 
-/** The keys the form shows: manual template fields among the 5 known (products + quantities live in the line block, not in `values`). */
-export function activeKeys(fields: readonly FieldSpec[]): ValueKey[] {
+export type FormOptions = {
+  /** A child whose lines and discount are frozen from its parent (SPEC-09 FR-5): no `giam_gia`. */
+  frozen?: boolean;
+};
+
+/** Keys a type never shows or sends: PXK carries no money (no discount), BG has no signer yet (the contract made from it asks). */
+function hiddenKeys(type: DocType | undefined, opts: FormOptions): ReadonlySet<ValueKey> {
+  const hidden = new Set<ValueKey>();
+  if (type === "delivery_note" || opts.frozen) hidden.add("giam_gia");
+  if (type === "quote") hidden.add("chuc_vu_nguoi_ky");
+  return hidden;
+}
+
+/** The keys the form shows: manual template fields among the known ones, minus what the type hides (products + quantities live in the line block, not in `values`). */
+export function activeKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): ValueKey[] {
   const manual = new Set(fields.filter((f) => f.source === "manual").map((f) => f.key));
-  return VALUE_KEYS.filter((k) => manual.has(k));
+  const hidden = hiddenKeys(type, opts);
+  return VALUE_KEYS.filter((k) => manual.has(k) && !hidden.has(k));
+}
+
+/** PXK = goods only (SPEC-09 FR-12); every other type offers the whole price list. */
+export function productsFor<P extends Pick<Product, "kind">>(type: DocType | undefined, items: readonly P[]): P[] {
+  return type === "delivery_note" ? items.filter((p) => p.kind === "goods") : [...items];
 }
 
 const SERVER_DEFAULTED: ReadonlySet<ValueKey> = new Set<ValueKey>(["ngay_bat_dau", "giam_gia"]);
 
-export function requiredKeys(fields: readonly FieldSpec[]): Set<ValueKey> {
+export function requiredKeys(fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): Set<ValueKey> {
   const req = new Set<ValueKey>();
+  const hidden = hiddenKeys(type, opts);
   // Fields the template gives a default (ngay_bat_dau = Ngày lập, giam_gia = 0): blank is valid, the server fills it.
-  for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key) && !SERVER_DEFAULTED.has(f.key)) req.add(f.key);
+  for (const f of fields) if (f.source === "manual" && f.required && isValueKey(f.key) && !SERVER_DEFAULTED.has(f.key) && !hidden.has(f.key)) req.add(f.key);
   return req;
 }
 
@@ -47,9 +73,9 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PAIR_MESSAGE = "Nhập cả hai hoặc bỏ trống cả hai";
 
 /** Form text -> the request `values`. Blank fields are dropped; the discount goes as integer bps from the string (no floats). */
-export function buildValues(form: FormState, fields: readonly FieldSpec[]): BuildResult {
-  const active = new Set(activeKeys(fields));
-  const required = requiredKeys(fields);
+export function buildValues(form: FormState, fields: readonly FieldSpec[], type?: DocType, opts: FormOptions = {}): BuildResult {
+  const active = new Set(activeKeys(fields, type, opts));
+  const required = requiredKeys(fields, type, opts);
   const errors: Partial<Record<ValueKey, string>> = {};
   const missing: string[] = [];
   const text = (k: ValueKey): string => form[k].trim();

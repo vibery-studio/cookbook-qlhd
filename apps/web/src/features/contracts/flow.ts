@@ -1,4 +1,5 @@
 import type { Contract } from "./api";
+import { DOC_TYPE_LABEL } from "./doc-type-labels";
 
 export type FlowItem = {
   key: string;
@@ -17,10 +18,12 @@ export type FlowItem = {
  * Tạo -> Gửi duyệt -> each step -> Phát hành -> Hủy. Steps carry their own decider (`decided_by_name`), so nothing
  * is guessed by joining `timeline[]` to `steps[]` by time; timeline only supplies created/submitted/issued/voided.
  */
-export function buildFlow(c: Pick<Contract, "status" | "steps" | "timeline" | "void_reason">): FlowItem[] {
+export function buildFlow(c: Pick<Contract, "status" | "steps" | "timeline" | "void_reason"> & Partial<Pick<Contract, "parent">>): FlowItem[] {
   const out: FlowItem[] = [];
   const created = c.timeline.find((t) => t.action === "contract.created");
-  if (created) out.push({ key: "created", kind: "created", label: "Tạo", state: "done", actor: created.actor ?? null, at: created.at, note: null, current: false });
+  // a child draft says where it came from: "Lập từ báo giá BG-2026-001"
+  const from = c.parent ? `Lập từ ${DOC_TYPE_LABEL[c.parent.type].toLowerCase()} ${c.parent.number ?? "(nháp)"}` : null;
+  if (created) out.push({ key: "created", kind: "created", label: "Tạo", state: "done", actor: created.actor ?? null, at: created.at, note: from, current: false });
 
   if (c.status !== "draft") {
     const submits = c.timeline.filter((t) => t.action === "contract.submitted");

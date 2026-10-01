@@ -6,10 +6,18 @@ import { roleLabels } from "../../app/me";
 const ALL_CODES = [
   "audit:read", "contract:approve", "contract:issue", "contract:read", "contract:submit", "contract:write",
   "flags:read", "flags:write", "notes:read", "notes:write", "roles:write", "settings:read", "settings:write",
+  "quote:write", "payment_request:write", "delivery_note:write",
   "template:write", "users:read", "users:write", "jit:grant", "reviews:write", "product:write", "price:write",
 ];
 
 describe("permission labels", () => {
+  it("labels the three per-type write permissions (SPEC-09 DEC-10), in the Hợp đồng group", () => {
+    expect(permissionLabel("quote:write")).toBe("Lập báo giá");
+    expect(permissionLabel("payment_request:write")).toBe("Lập đề nghị thanh toán");
+    expect(permissionLabel("delivery_note:write")).toBe("Lập phiếu xuất kho");
+    for (const c of ["quote:write", "payment_request:write", "delivery_note:write"]) expect(permissionGroup(c)).toBe("Hợp đồng");
+  });
+
   it.each(ALL_CODES)("%s has a Vietnamese label, never the raw code", (code) => {
     const label = permissionLabel(code);
     expect(label).not.toBe(code);

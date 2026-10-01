@@ -2,6 +2,9 @@
 export const PERMISSION_LABELS: Readonly<Record<string, string>> = {
   "contract:read": "Xem hợp đồng",
   "contract:write": "Tạo & sửa nháp",
+  "quote:write": "Lập báo giá",
+  "payment_request:write": "Lập đề nghị thanh toán",
+  "delivery_note:write": "Lập phiếu xuất kho",
   "contract:submit": "Gửi duyệt",
   "contract:approve": "Duyệt / từ chối",
   "contract:issue": "Phát hành & hủy",

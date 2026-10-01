@@ -15,6 +15,7 @@ export type Product = components["schemas"]["Product"];
 export type PricingPreview = components["schemas"]["PricingPreview"];
 export type PricingPreviewBody = components["schemas"]["PricingPreviewBody"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
+export type DocType = components["schemas"]["DocType"];
 
 export const CONTRACTS_KEY = ["contracts"] as const;
 export const contractKey = (id: string) => ["contract", id] as const;
@@ -34,9 +35,9 @@ export async function unwrap<T>(request: Raw<T>): Promise<T> {
 }
 
 /** Vietnamese message for anything thrown by a request (Problem+JSON or a network failure). */
-export function errorMessage(error: unknown): { message: string; status?: number; reload: boolean; fieldErrors: Record<string, string> } {
+export function errorMessage(error: unknown, docType?: DocType): { message: string; status?: number; reload: boolean; fieldErrors: Record<string, string> } {
   if (error instanceof ApiProblemError) {
-    const m = problemMessage(error.problem, {}, { resource: "contract" });
+    const m = problemMessage(error.problem, {}, { resource: "contract", ...(docType ? { docType } : {}) });
     return { message: m.message, status: error.problem.status, reload: m.reload === true, fieldErrors: m.fieldErrors };
   }
   return { message: "Hệ thống đang bận, thử lại sau.", reload: false, fieldErrors: {} };
@@ -44,9 +45,9 @@ export function errorMessage(error: unknown): { message: string; status?: number
 
 export type ContractFilters = { customerId?: string; createdBy?: string; templateId?: string };
 
-export function useContractList(status: ContractStatus | undefined, filters: ContractFilters) {
+export function useContractList(status: ContractStatus | undefined, filters: ContractFilters, type?: DocType) {
   return useInfiniteQuery({
-    queryKey: ["contracts", { status: status ?? null, filters }],
+    queryKey: ["contracts", { status: status ?? null, type: type ?? null, filters }],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       unwrap(
@@ -55,6 +56,7 @@ export function useContractList(status: ContractStatus | undefined, filters: Con
             query: {
               limit: PAGE_SIZE,
               ...(status ? { status } : {}),
+              ...(type ? { type } : {}),
               ...(filters.customerId ? { customer_id: filters.customerId } : {}),
               ...(filters.createdBy ? { created_by: filters.createdBy } : {}),
               ...(filters.templateId ? { template_id: filters.templateId } : {}),
@@ -93,11 +95,16 @@ export function useContractAudit(id: string, enabled: boolean) {
   });
 }
 
-/** Same key + shape as the templates screen (an array of list items): the cache is shared. */
-export function useTemplates() {
+/** Same key + shape as the templates screen when unfiltered (an array of list items): the cache is shared. `type` = the templates of one document type (SPEC-09). */
+export function useTemplates(type?: DocType) {
   return useQuery({
-    queryKey: ["templates"],
-    queryFn: async () => (await unwrap(client.typed.GET("/templates", {}) as Raw<components["schemas"]["TemplateList"]>)).items,
+    queryKey: type ? ["templates", { type }] : ["templates"],
+    queryFn: async () =>
+      (
+        await unwrap(
+          client.typed.GET("/templates", type ? { params: { query: { type } } } : {}) as Raw<components["schemas"]["TemplateList"]>,
+        )
+      ).items,
   });
 }
 

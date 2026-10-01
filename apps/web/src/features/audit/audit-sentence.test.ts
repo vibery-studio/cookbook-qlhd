@@ -112,3 +112,33 @@ describe("auditSentence", () => {
     expect(auditSentence({ action: "price.added" }).text).toBe("đặt giá");
   });
 });
+
+describe("auditSentence by document type (SPEC-09 FR-10)", () => {
+  it("no type = hợp đồng, the old sentences stay", () => {
+    expect(auditSentence({ action: "contract.created", metadata: { to: "draft" } }).text).toBe("tạo hợp đồng");
+    expect(auditSentence({ action: "contract.issued" }).text).toBe("phát hành hợp đồng");
+  });
+  it("names the type in every contract.* sentence", () => {
+    const t = (action: string, type: string) => auditSentence({ action, metadata: { type } }).text;
+    expect(t("contract.created", "quote")).toBe("tạo báo giá");
+    expect(t("contract.updated", "delivery_note")).toBe("sửa phiếu xuất kho");
+    expect(t("contract.submitted", "payment_request")).toBe("gửi duyệt đề nghị thanh toán");
+    expect(t("contract.approved", "quote")).toBe("duyệt báo giá");
+    expect(t("contract.rejected", "quote")).toBe("từ chối báo giá");
+    expect(t("contract.withdrawn", "quote")).toBe("rút báo giá về nháp");
+    expect(t("contract.deleted", "delivery_note")).toBe("xóa phiếu xuất kho nháp");
+    expect(t("contract.issued", "quote")).toBe("phát hành báo giá");
+    expect(t("contract.voided", "payment_request")).toBe("hủy đề nghị thanh toán đã phát hành");
+    expect(t("contract.pdf_generated", "quote")).toBe("tạo PDF cho báo giá");
+  });
+  it("a child made from its parent says so", () => {
+    expect(auditSentence({ action: "contract.created", metadata: { type: "contract", parent_id: "P", parent_number: "BG-2026-001" } }).text)
+      .toBe("lập hợp đồng từ báo giá BG-2026-001");
+    expect(auditSentence({ action: "contract.created", metadata: { type: "payment_request", parent_id: "P", parent_number: "HD-2026-004" } }).text)
+      .toBe("lập đề nghị thanh toán từ hợp đồng HD-2026-004");
+  });
+  it("an unknown type falls back to hợp đồng instead of printing the code", () => {
+    expect(auditSentence({ action: "contract.created", metadata: { type: "zzz" } }).text).toBe("tạo hợp đồng");
+  });
+});
+

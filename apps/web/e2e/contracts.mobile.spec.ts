@@ -20,7 +20,7 @@ test("4b mobile: menu opens, contracts are cards, drawer is full-screen, paper o
   };
 
   await nv.goto("/hop-dong");
-  await expect(nv.getByRole("heading", { level: 1, name: "Hợp đồng" })).toBeVisible();
+  await expect(nv.getByRole("heading", { level: 1, name: "Tài liệu" })).toBeVisible();
   await expect(nv.getByRole("heading", { level: 1 })).toHaveCount(1);
 
   // menu (top bar exists on mobile only)

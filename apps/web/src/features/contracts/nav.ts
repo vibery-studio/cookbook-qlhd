@@ -3,7 +3,7 @@ import type { NavItem } from "../../app/route-types";
 export const contractsNavItems: readonly NavItem[] = [
   {
     id: "contracts",
-    label: "Hợp đồng",
+    label: "Tài liệu",
     to: "/hop-dong",
     icon: "contracts",
     section: "workspace",

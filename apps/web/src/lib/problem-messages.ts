@@ -1,5 +1,6 @@
 import type { Problem } from "@runway/client";
 import { permissionLabel } from "../features/roles/permission-labels";
+import { DOC_TYPE_LABEL, type DocType } from "../features/contracts/doc-type-labels";
 
 export const KNOWN_PROBLEM_SLUGS = [
   "not-implemented",
@@ -44,6 +45,15 @@ export const KNOWN_PROBLEM_SLUGS = [
   "no-price",
   "product-inactive",
   "product-limit",
+  "parent-not-issued",
+  "child-exists",
+  "quote-expired",
+  "child-type",
+  "lines-locked",
+  "has-children",
+  "parent-required",
+  "template-type",
+  "nothing-to-pay",
   "already-decided", // TODO(001): drop this literal once the generated client knows the slug
 ] as const;
 
@@ -64,6 +74,8 @@ export type ProblemWithExtensions = Problem & {
   pairs?: string[][];
   /** sod-conflict on POST /sod-pairs: the roles that already hold both permissions. */
   roles?: Array<{ id: string; name: string; label: string }>;
+  /** has-children: the children still alive (Ref). */
+  children?: Array<{ id: string; type: DocType; number: string | null; status: string; total: number; doc_date: string }>;
 };
 
 export type ProblemOptions = {
@@ -71,6 +83,8 @@ export type ProblemOptions = {
   resource?: "contract" | "role" | "product" | "price";
   /** Product names by line index (the form knows them), for «tên» in line errors. */
   lineNames?: readonly string[];
+  /** The type of the document being made/edited (SPEC-09): names it in `child-exists` and picks the `lines` rule wording. */
+  docType?: DocType;
 };
 
 export type ProblemMessage = {
@@ -119,8 +133,12 @@ function fieldLabel(path: string): string {
 }
 
 /** SPEC-08 §3.5: line errors come as `lines` (rule) or `lines.i.product_id` / `lines.i.qty`; the slug says which. */
-function lineFieldError(path: string, slug: string, lineNames: readonly string[] | undefined): string | undefined {
-  if (path === "lines") return "Hợp đồng cần đúng 1 gói dịch vụ theo tháng";
+function lineFieldError(path: string, slug: string, lineNames: readonly string[] | undefined, docType?: DocType): string | undefined {
+  if (path === "lines") {
+    if (docType === "delivery_note") return "Phiếu xuất kho chỉ nhận hàng hóa";
+    if (docType === "quote") return "Kiểm tra lại các dòng hàng";
+    return "Hợp đồng cần đúng 1 gói dịch vụ theo tháng";
+  }
   const m = /^lines\.(\d+)\.(product_id|qty)$/.exec(path);
   if (!m) return undefined;
   const index = Number(m[1]);
@@ -135,7 +153,7 @@ function fieldErrorsFor(problem: ProblemWithExtensions, labels: Record<string, s
   const fieldErrors = new Map<string, string>();
   const slug = problemSlug(problem.type);
   for (const error of problem.errors ?? []) {
-    const lineError = lineFieldError(error.path, slug, options.lineNames);
+    const lineError = lineFieldError(error.path, slug, options.lineNames, options.docType);
     if (lineError) {
       fieldErrors.set(error.path, lineError);
       continue;
@@ -231,6 +249,14 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
       return typeof problem.holders === "number"
         ? `Còn ${problem.holders} người mang vai trò này — đổi vai trò họ ở màn Người dùng trước.`
         : "Còn người đang mang vai trò này — đổi vai trò họ ở màn Người dùng trước.";
+    case "child-exists":
+      return `Đã có ${options.docType ? DOC_TYPE_LABEL[options.docType].toLocaleLowerCase("vi") : "tài liệu con"} cho tài liệu này`;
+    case "has-children": {
+      const list = (problem.children ?? []).map(
+        (c) => `${DOC_TYPE_LABEL[c.type].toLocaleLowerCase("vi")} ${c.number ?? "nháp"} (${CONTRACT_STATUS_LABELS[c.status] ?? c.status})`,
+      );
+      return list.length > 0 ? `Còn tài liệu con chưa hủy: ${list.join(", ")}.` : "Còn tài liệu con chưa hủy — hủy tài liệu con trước.";
+    }
     case "not-found":
       return options.resource === "contract" ? "Không tìm thấy hợp đồng (có thể đã bị xóa khỏi danh sách của bạn)." : undefined;
     default:
@@ -238,11 +264,13 @@ function contextMessage(slug: string, problem: ProblemWithExtensions, options: P
   }
 }
 
+const SPEC09_422: ReadonlySet<string> = new Set(["child-type", "lines-locked", "template-type", "parent-required", "nothing-to-pay"]);
+
 function baseMessage(slug: string, status: number): string {
   if (status === 401 || slug === "unauthorized") return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   if (status === 403 || slug === "forbidden") return "🔒 Bạn không có quyền thực hiện thao tác này.";
   if (status === 404 || slug === "not-found") return "Không tìm thấy nội dung bạn cần.";
-  const specific422 = slug === "price-backdated" || slug === "no-price" || slug === "product-inactive" || slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role";
+  const specific422 = slug === "price-backdated" || slug === "no-price" || slug === "product-inactive" || slug === "unresolved-placeholder" || slug === "template-check-failed" || slug === "missing-fields" || slug === "unknown-role" || SPEC09_422.has(slug);
   if ((status === 422 && !specific422) || slug === "validation") return "Kiểm tra lại các ô đánh dấu.";
   if (status >= 500) return "Hệ thống đang bận, thử lại sau.";
 
@@ -294,6 +322,24 @@ function baseMessage(slug: string, status: number): string {
       return "Có dòng chưa có giá ngày lập — xem các dòng được đánh dấu.";
     case "product-inactive":
       return "Có dòng đã ngừng bán — xem các dòng được đánh dấu.";
+    case "parent-not-issued":
+      return "Chỉ lập từ tài liệu đã phát hành";
+    case "child-exists":
+      return "Đã có tài liệu con cho tài liệu này";
+    case "quote-expired":
+      return "Báo giá đã hết hạn — hãy sao chép báo giá để lấy giá hôm nay";
+    case "child-type":
+      return "Không lập được loại tài liệu này từ tài liệu đã chọn.";
+    case "lines-locked":
+      return "Dòng hàng và giảm giá giữ theo tài liệu gốc";
+    case "has-children":
+      return "Còn tài liệu con chưa hủy — hủy tài liệu con trước.";
+    case "parent-required":
+      return "Đề nghị thanh toán chỉ lập từ hợp đồng đã phát hành";
+    case "template-type":
+      return "Mẫu này không thuộc loại tài liệu đang lập. Chọn mẫu khác.";
+    case "nothing-to-pay":
+      return "Hợp đồng 0 đồng — không có gì để đề nghị thanh toán";
     case "already-decided":
       return "Đã có người duyệt hoặc từ chối một bước nên không rút về nháp được. Đã tải lại.";
     case "would-block-later-step":

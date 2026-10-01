@@ -23,8 +23,10 @@ function ProductCombobox({
   fallback,
   products,
   invalid,
+  showPrice,
   onPick,
 }: {
+  showPrice: boolean;
   label: string;
   value: string;
   fallback: KnownProduct | undefined;
@@ -105,7 +107,7 @@ function ProductCombobox({
           ) : (
             <div id={listId} role="listbox" aria-label="Sản phẩm" className="shell-scroll grid max-h-[calc(var(--row-h)*5)] overflow-y-auto">
               {options.map((p) => {
-                const locked = p.price === null;
+                const locked = showPrice && p.price === null;
                 const pick = () => {
                   if (locked) return;
                   onPick(p.id);
@@ -133,7 +135,11 @@ function ProductCombobox({
                   >
                     <span className="truncate text-md font-medium text-strong">{p.code} · {p.name}</span>
                     <span className="truncate text-sm text-muted">
-                      {locked ? `🔒 ${LOCKED}` : `${formatVietnameseMoney(p.price?.unit_price_ex_vat ?? 0)} / ${p.unit} · ${vatRateText(p.price?.vat_rate_bps ?? null)}`}
+                      {!showPrice
+                        ? p.unit
+                        : locked
+                          ? `🔒 ${LOCKED}`
+                          : `${formatVietnameseMoney(p.price?.unit_price_ex_vat ?? 0)} / ${p.unit} · ${vatRateText(p.price?.vat_rate_bps ?? null)}`}
                     </span>
                   </div>
                 );
@@ -156,10 +162,32 @@ export type LineItemsProps = {
   amounts: ReadonlyMap<string, number>;
   rowErrors: Record<number, string>;
   blockError: string | undefined;
+  /** false for a phiếu xuất kho (no money): no unit price, no "Thành tiền", no "chưa có giá" lock. Default true. */
+  showPrice?: boolean;
 };
 
+export type FrozenLine = { key: string; code: string; name: string; unit: string; qty: number };
+
+/** A child draft's lines (SPEC-09 FR-5): read-only, kept from the parent document; the note says whose price they keep. */
+export function FrozenLines({ lines, note }: { lines: readonly FrozenLine[]; note: string }) {
+  return (
+    <fieldset data-testid="line-items-locked" className="grid gap-s3 border-0 p-0">
+      <legend className="mb-s2 text-md font-semibold leading-head text-body">Dòng hàng</legend>
+      <p className="text-md text-muted">🔒 {note}</p>
+      <ul className="grid gap-s2">
+        {lines.map((l) => (
+          <li key={l.key} className="flex items-center justify-between gap-s3 rounded-r2 border border-line bg-sunken px-s3 py-s2 text-md text-body">
+            <span className="min-w-0 truncate">{l.code} · {l.name}</span>
+            <span className="font-mono text-strong">{l.qty} {l.unit}</span>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
+
 /** The "Dòng hàng" block: one product + quantity per row, price read-only and always the server's (DEC-13 A). */
-export function LineItems({ rows, onChange, products, known, amounts, rowErrors, blockError }: LineItemsProps) {
+export function LineItems({ rows, onChange, products, known, amounts, rowErrors, blockError, showPrice = true }: LineItemsProps) {
   const update = (key: string, patch: Partial<LineRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   return (
     <fieldset data-testid="line-items" className="grid gap-s3 border-0 p-0">
@@ -178,6 +206,7 @@ export function LineItems({ rows, onChange, products, known, amounts, rowErrors,
                 fallback={known.get(row.productId)}
                 products={products}
                 invalid={Boolean(error)}
+                showPrice={showPrice}
                 onPick={(id) => update(row.key, { productId: id })}
               />
               <Button type="button" variant="ghost" aria-label={`Xóa dòng ${n}`} onClick={() => onChange(rows.filter((r) => r.key !== row.key))}>
@@ -199,10 +228,12 @@ export function LineItems({ rows, onChange, products, known, amounts, rowErrors,
                 )}
               />
               <p className="text-sm text-muted">
-                {product?.price
-                  ? `${formatVietnameseMoney(product.price.unit_price_ex_vat)} / ${product.unit} · chưa VAT · ${vatRateText(product.price.vat_rate_bps)}`
-                  : "Giá do máy chủ tính"}
-                {amount !== undefined ? <span className="ml-s2 font-mono text-strong">= {formatVietnameseMoney(amount)}</span> : null}
+                {!showPrice
+                  ? (product?.unit ?? "")
+                  : product?.price
+                    ? `${formatVietnameseMoney(product.price.unit_price_ex_vat)} / ${product.unit} · chưa VAT · ${vatRateText(product.price.vat_rate_bps)}`
+                    : "Giá do máy chủ tính"}
+                {showPrice && amount !== undefined ? <span className="ml-s2 font-mono text-strong">= {formatVietnameseMoney(amount)}</span> : null}
               </p>
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}

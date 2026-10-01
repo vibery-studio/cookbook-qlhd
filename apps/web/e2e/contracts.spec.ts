@@ -4,10 +4,10 @@
  * cards 002-006 must honour (labels Vietnamese + exact; testids below). Needs C-04b-007's global-setup seed (`seedContracts()`).
  *
  * UI contract:
- *   sidebar `data-testid="sidebar"` links "Hợp đồng" · "Mẫu hợp đồng" · "Chờ tôi duyệt" · "Khách hàng" (hidden without permission);
+ *   sidebar `data-testid="sidebar"` links "Tài liệu" (was "Hợp đồng", SPEC-09) · "Mẫu hợp đồng" · "Chờ tôi duyệt" · "Khách hàng" (hidden without permission);
  *   nav pill `data-testid="nav-badge-approvals"` (text = count, absent at 0);
  *   h1 = screen name; "/mau-hop-dong" cards `data-testid="template-card"`, "Tạo hợp đồng từ mẫu này →" in the template drawer;
- *   button "+ Tạo hợp đồng" → dialog "Tạo hợp đồng": fields "Khách hàng" (combobox, search + "+ Thêm khách mới"), block `data-testid="line-items"` (C-08-008: replaces
+ *   button "+ Tạo" → menuitem "Hợp đồng" → dialog "Tạo hợp đồng": fields "Khách hàng" (combobox, search + "+ Thêm khách mới"), block `data-testid="line-items"` (C-08-008: replaces
  *     "Gói dịch vụ" + "Số cửa hàng"; combobox "Sản phẩm dòng N", input "Số lượng dòng N", "+ Thêm dòng", "Xóa dòng N"; box `data-testid="totals"`),
  *     "Giảm giá (%)", "Chức vụ người ký", button "Tạo & xem văn bản"; error `role=alert` (missing fields → names the label);
  *   drawer role=dialog name "Chi tiết hợp đồng" (header shows number or "Nháp · chưa có số", status pill text) with action buttons
@@ -46,10 +46,10 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
     if (new URL(r.url()).pathname === "/approvals/mine") approvalCalls.push(r.url());
   });
   await nv.goto("/hop-dong");
-  await expect(nv.getByRole("heading", { level: 1, name: "Hợp đồng" })).toBeVisible();
+  await expect(nv.getByRole("heading", { level: 1, name: "Tài liệu" })).toBeVisible();
   await expect(nv.getByRole("heading", { level: 1 })).toHaveCount(1); // one title per screen (FR-13)
   const sidebar = nv.getByTestId("sidebar");
-  for (const l of ["Hợp đồng", "Mẫu hợp đồng", "Khách hàng"]) await expect(sidebar.getByRole("link", { name: l, exact: true })).toBeVisible();
+  for (const l of ["Tài liệu", "Mẫu hợp đồng", "Khách hàng"]) await expect(sidebar.getByRole("link", { name: l, exact: true })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: "Chờ tôi duyệt", exact: true })).toHaveCount(0);
   if (SHOTS) await nv.screenshot({ path: "e2e/shots/hop-dong.png" });
 
@@ -125,7 +125,8 @@ test("4b lifecycle: logged out → /login; Nhân viên creates (missing field, t
   await expect(drawer).toBeHidden();
 
   // a second draft, deleted (confirm) — the list goes back to /hop-dong
-  await nv.getByRole("button", { name: "+ Tạo hợp đồng" }).click();
+  await nv.getByRole("button", { name: "+ Tạo", exact: true }).click();
+  await nv.getByRole("menu").getByRole("menuitem", { name: "Hợp đồng", exact: true }).click();
   const create2 = nv.getByRole("dialog", { name: "Tạo hợp đồng" });
   await create2.getByRole("combobox", { name: "Khách hàng" }).click();
   await create2.getByRole("combobox", { name: "Khách hàng" }).fill("Cô Ba");

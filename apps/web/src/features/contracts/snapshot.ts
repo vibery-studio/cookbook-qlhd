@@ -33,6 +33,13 @@ export type SnapshotView = {
   end: string | null;
   inputs: Record<string, string | number>;
   inputLines: InputLine[];
+  /** SPEC-09 P-8: the document this one was made from (child snapshots only). */
+  parent: { id: string; type: string; number: string | null; docDate: string | null; total: number } | null;
+  /** BG: last day the quote can still become a contract ("YYYY-MM-DD"). */
+  validUntil: string | null;
+  /** DNTT: amount requested (= parent total) and the payment due date. */
+  amountRequested: number | null;
+  paymentDue: string | null;
 };
 
 function rec(v: unknown): Record<string, unknown> {
@@ -51,7 +58,15 @@ export function parseSnapshot(raw: unknown): SnapshotView {
   const rawInputs = rec(s["inputs"]);
   const inputs: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(rawInputs)) if (typeof v === "string" || typeof v === "number") inputs[k] = v;
+  const parent = rec(s["parent"]);
+  const parentId = str(parent["id"]);
   return {
+    parent: parentId
+      ? { id: parentId, type: str(parent["type"]) ?? "", number: str(parent["number"]), docDate: str(parent["doc_date"]), total: int(parent["total"]) }
+      : null,
+    validUntil: str(dates["valid_until"]),
+    amountRequested: typeof s["amount_requested"] === "number" ? s["amount_requested"] : null,
+    paymentDue: str(dates["payment_due"]),
     templateVersionId: str(template["version_id"]),
     templateVersionNo: typeof template["version_no"] === "number" ? template["version_no"] : null,
     lines: list(s["lines"]).map((l) => {

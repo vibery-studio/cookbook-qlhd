@@ -1,4 +1,7 @@
+import { formatIsoDate } from "../../lib/vn-date";
 import type { Contract } from "./api";
+import { DOC_TYPE_LABEL, type DocType } from "./doc-type-labels";
+import { statusLabel } from "./status";
 
 export type ActionKey = "edit" | "submit" | "approve" | "reject" | "issue" | "void" | "copy" | "withdraw" | "delete";
 
@@ -78,4 +81,44 @@ export function lockReason(action: ActionKey, ctx: LockContext): string | null {
       if (c.status === "voided" && c.replaced_by_id) return "Đã có bản thay thế";
       return NO_PERMISSION;
   }
+}
+
+export type CreateChildEntry = Contract["can"]["create_child"][number];
+
+/** "Lập hợp đồng" · "Lập đề nghị thanh toán". */
+export function createChildLabel(type: DocType): string {
+  return `Lập ${DOC_TYPE_LABEL[type].toLowerCase()}`;
+}
+
+/**
+ * SPEC-09 3.5: the one sentence under a locked "create child" button (the API decides; this only words it).
+ * null when the server allows it.
+ */
+export function childLockReason(
+  entry: CreateChildEntry,
+  parent: Pick<Contract, "valid_until" | "children">,
+): string | null {
+  if (entry.allowed) return null;
+  const label = DOC_TYPE_LABEL[entry.type].toLowerCase();
+  switch (entry.reason_code) {
+    case "quote-expired":
+      return `Báo giá đã hết hạn ngày ${formatIsoDate(parent.valid_until)}`;
+    case "child-exists": {
+      const live = parent.children.filter((ch) => ch !== null && ch.type === entry.type && ch.status !== "voided" && ch.status !== "rejected");
+      const ch = live[live.length - 1];
+      return ch ? `Đã có ${label} ${ch.number ?? "nháp"} (${statusLabel(ch.status)})` : `Đã có ${label}`;
+    }
+    case "parent-not-issued":
+      return "Chỉ lập từ tài liệu đã phát hành";
+    case "forbidden":
+      return `Bạn không có quyền lập ${label}`;
+    case null:
+      return `Chưa lập được ${label}`;
+  }
+}
+
+/** The copy in this app says "hợp đồng"; for another document type say its own name instead (BG, DNTT, PXK drawers). */
+export function retype(text: string, type: DocType): string {
+  if (type === "contract") return text;
+  return text.replaceAll("Hợp đồng", DOC_TYPE_LABEL[type]).replaceAll("hợp đồng", DOC_TYPE_LABEL[type].toLowerCase());
 }
