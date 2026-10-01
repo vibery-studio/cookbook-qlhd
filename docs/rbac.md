@@ -79,13 +79,24 @@ harmlessly. Only `can()`'s `admin` bypass depends on a specific name.
   renamed; `admin` fully immutable through the API (its grants change by migration only). Custom roles: `name =
   "r_" + lowercase ULID`, server-made (nobody can create a role named `admin`); ≤ 50; deletable only with 0 holders.
 - `version` = CAS for every edit (`expected_version` → 409 `stale`).
+- Guards (`services/role-admin-service.ts`, order): `admin_role` → `system_role` (DELETE) → `own_role` → `grant_not_held`
+  (added codes ⊆ caller's, read from D1; repeated in the batch SQL). Each → 403 `forbidden` + `rule` + one `permission.denied`
+  (`{rule, permission:"roles:write"}`). Dropping a code you don't hold is allowed.
+- `GET /roles` `can`/`locked_reason` per caller: `admin` > `own_role` > `system` > null; no `roles:write` → every `can` false.
+- Audit (same batch): `role.created` · `role.updated {changed}` · `role.permissions_changed {added, removed}` ·
+  `role.deleted {name, label}`; target `role:<id>`.
+
+### Cache purge by role (FR-7, DEC-4)
+After a role's permission set commits, the service purges `session:<id>` for every holder
+(`SELECT user_id FROM user_roles WHERE role_id = ?` → `Promise.all(invalidatePrincipalCache)`); cache TTL is 60s.
+R-1: one invocation may do ≤ 1,000 KV operations — above ~900 holders, split the purge via `waitUntil` batches (not built; small team).
 
 ## Cache invalidation contract
 
 When a role assignment changes on a user, the OWNING SERVICE (admin-
 service) MUST call `invalidatePrincipalCache(kv, userId)` before
 returning. The next authenticated request re-loads permissions from D1
-via the join. Skipping the invalidation means up to 300s of stale
+via the join. Skipping the invalidation means up to 60s (cache TTL) of stale
 authorization on the affected user's session cookie — acceptable for
 "grant more" (delayed uplift), NOT acceptable for "revoke" or
 "demote" (lingering privilege).

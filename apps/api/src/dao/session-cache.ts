@@ -4,8 +4,10 @@
  * `dao/*.ts` modules because it's the same "typed storage access, return a
  * DTO" discipline applied to KV instead of D1.
  *
- * Key: `session:<userId>`. Value: JSON `CachedPrincipal`. Default TTL 300s
- * (5min). Invalidated on role change, disable, and delete — see
+ * Key: `session:<userId>`. Value: JSON `CachedPrincipal`. Default TTL 60s
+ * (SPEC-06 DEC-4: bounds the purge race — a miss that read D1 before a role
+ * change can re-cache the old principal for at most this long). Invalidated on
+ * role change, role-permission change (every holder), disable, and delete — see
  * `docs/auth.md` for the max-time-to-revoke accounting that depends on this
  * TTL plus KV's eventual-consistency lag.
  */
@@ -31,7 +33,7 @@ export async function getCachedPrincipal(
 export async function setCachedPrincipal(
   kv: KVNamespace,
   principal: CachedPrincipal,
-  ttlSeconds = 300,
+  ttlSeconds = 60,
 ): Promise<void> {
   await kv.put(cacheKey(principal.id), JSON.stringify(principal), {
     expirationTtl: ttlSeconds,

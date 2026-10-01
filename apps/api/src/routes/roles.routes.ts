@@ -1,13 +1,22 @@
 import { createRoute } from "@hono/zod-openapi";
-import type { OpenAPIHono, z } from "@hono/zod-openapi";
+import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { notImplementedProblem, problemResponse } from "../dto/error";
+import { problem, problemResponse, ProblemType } from "../dto/error";
 import { CreateRoleBody, DeleteRoleQuery, PatchRoleBody, RoleIdParam, RoleSchema, RolesResponse } from "../dto/roles";
 import { IdempotencyKeyHeader } from "../dto/users";
 import type { Bindings } from "../env";
 import type { Variables } from "../openapi";
 import { getDb } from "../db/client";
-import { listRolesWithPermissions } from "../dao/role-dao";
+import {
+  createRole,
+  CUSTOM_ROLE_LIMIT,
+  deleteRole,
+  listRolesFor,
+  patchRole,
+  type Forbidden,
+  type RoleAdminDeps,
+  type RoleGuardRule,
+} from "../services/role-admin-service";
 import { requireAuth } from "../middleware/auth";
 import { withIdempotency } from "../middleware/idempotency";
 import { requirePerm } from "../middleware/require-permission";
@@ -95,10 +104,54 @@ const deleteRoleRoute = createRoute({
   },
 });
 
-/** C-06-002 contract stub; handlers land in C-06-003. */
-function notImplemented(c: Context<Env>) {
-  return c.json(notImplementedProblem(c.req.path, c.get("requestId")), 501, PROBLEM_HEADERS);
+const PROBLEM = (c: Context<Env>) => ({ instance: c.req.path, request_id: c.get("requestId") });
+
+function forbidden(c: Context<Env>, res: Forbidden) {
+  const detail: Record<RoleGuardRule, string> = {
+    admin_role: "The admin role is immutable through the API.",
+    system_role: "System roles cannot be deleted.",
+    own_role: "You cannot edit or delete a role you carry.",
+    grant_not_held: "You cannot grant permissions you do not hold.",
+  };
+  return c.json(
+    problem(403, "Forbidden", ProblemType.Forbidden, {
+      ...PROBLEM(c),
+      detail: detail[res.rule],
+      rule: res.rule,
+      ...(res.permissions !== undefined && { permissions: res.permissions }),
+    }),
+    403,
+    PROBLEM_HEADERS,
+  );
 }
+
+const notFound = (c: Context<Env>) =>
+  c.json(problem(404, "Role not found", ProblemType.NotFound, PROBLEM(c)), 404, PROBLEM_HEADERS);
+const stale = (c: Context<Env>) =>
+  c.json(
+    problem(409, "Role was changed by someone else", ProblemType.Stale, {
+      ...PROBLEM(c),
+      detail: "expected_version is out of date; reload the role and retry.",
+    }),
+    409,
+    PROBLEM_HEADERS,
+  );
+const duplicate = (c: Context<Env>) =>
+  c.json(
+    problem(409, "Role label already exists", ProblemType.Duplicate, {
+      ...PROBLEM(c),
+      detail: "Another role already has this display name (case and spacing ignored).",
+    }),
+    409,
+    PROBLEM_HEADERS,
+  );
+
+const deps = (c: Context<Env>): RoleAdminDeps => ({
+  db: getDb(c.env),
+  kv: c.env.SESSIONS,
+  now: () => Math.floor(Date.now() / 1000),
+});
+const ipOf = (c: Context<Env>) => c.req.header("cf-connecting-ip") ?? null;
 
 export function rolesRoutes(app: OpenAPIHono<Env>): void {
   app.on("get", "/roles", requireAuth());
@@ -106,11 +159,92 @@ export function rolesRoutes(app: OpenAPIHono<Env>): void {
   app.on(["patch", "delete"], "/roles/:id", requireAuth(), requirePerm("roles:write"));
 
   app.openapi(listRolesRoute, async (c) => {
-    // TODO(C-06-003): label/is_system/version/holders/can/locked_reason + catalog. Old shape until then.
-    const items = await listRolesWithPermissions(getDb(c.env));
-    return c.json({ items } as unknown as z.infer<typeof RolesResponse>, 200);
+    const principal = c.get("principal")!;
+    return c.json(await listRolesFor(getDb(c.env), principal.id), 200);
   });
-  app.openapi(createRoleRoute, notImplemented);
-  app.openapi(patchRoleRoute, notImplemented);
-  app.openapi(deleteRoleRoute, notImplemented);
+
+  app.openapi(createRoleRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const body = c.req.valid("json");
+    const res = await createRole(deps(c), {
+      actorId: principal.id,
+      label: body.label,
+      description: body.description,
+      permissions: body.permissions,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.role, 201);
+      case "duplicate":
+        return duplicate(c);
+      case "role-limit":
+        return c.json(
+          problem(409, "Too many custom roles", ProblemType.RoleLimit, {
+            ...PROBLEM(c),
+            detail: `At most ${CUSTOM_ROLE_LIMIT} custom roles; delete one first.`,
+          }),
+          409,
+          PROBLEM_HEADERS,
+        );
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
+
+  app.openapi(patchRoleRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const body = c.req.valid("json");
+    const res = await patchRole(deps(c), {
+      actorId: principal.id,
+      roleId: c.req.valid("param").id,
+      expectedVersion: body.expected_version,
+      label: body.label,
+      description: body.description,
+      permissions: body.permissions,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.json(res.role, 200);
+      case "not-found":
+        return notFound(c);
+      case "stale":
+        return stale(c);
+      case "duplicate":
+        return duplicate(c);
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
+
+  app.openapi(deleteRoleRoute, async (c) => {
+    const principal = c.get("principal")!;
+    const res = await deleteRole(deps(c), {
+      actorId: principal.id,
+      roleId: c.req.valid("param").id,
+      expectedVersion: c.req.valid("query").expected_version,
+      ip: ipOf(c),
+    });
+    switch (res.kind) {
+      case "ok":
+        return c.body(null, 204);
+      case "not-found":
+        return notFound(c);
+      case "stale":
+        return stale(c);
+      case "role-in-use":
+        return c.json(
+          problem(409, "Role is in use", ProblemType.RoleInUse, {
+            ...PROBLEM(c),
+            detail: `${res.holders} user(s) carry this role; move them to another role first.`,
+            holders: res.holders,
+          }),
+          409,
+          PROBLEM_HEADERS,
+        );
+      case "forbidden":
+        return forbidden(c, res);
+    }
+  });
 }

@@ -43,11 +43,14 @@ The `jti` revocation list (`jwt_revocations` D1 table) is checked on every
 auth-middleware pass, independent of the KV session cache — this is the hard
 guarantee. Logout inserts the `jti` synchronously before the response returns,
 so a revoked access token is rejected on its very next use regardless of KV
-state. The KV session-cache TTL (5min) only affects how fast role/permission
-*changes* propagate, not access-token revocation; that path is bounded by
-`access_ttl + KV lag` because a stale cached principal could still be read
-for up to that window after a role change invalidates the KV key too late to
-matter for the still-valid JWT.
+state. The KV session-cache TTL (60s, SPEC-06 DEC-4; was 5min) only affects how
+fast role/permission *changes* propagate, not access-token revocation.
+
+Role/permission change → every affected user's `session:<id>` key is deleted after
+commit (user role change: that user; role permission change: every holder). Worst
+case for the change to bite = `max(KV lag ≤ 60s, cache TTL 60s)` — the TTL covers a request
+that missed the cache, read D1 just before the commit and re-cached the old principal
+just after the purge → **~60s**, not 300s. Same KV location (tests, one colo): next request.
 
 Middleware layers a per-isolate in-memory LRU (TTL 60s, key=`jti`) in front of
 the D1 `jwt_revocations` lookup so repeat requests on the same JWT don't hit

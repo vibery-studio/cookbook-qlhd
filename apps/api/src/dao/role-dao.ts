@@ -6,7 +6,7 @@
  * `INSERT OR IGNORE` on `user_roles` makes assignRole idempotent: repeat
  * calls with the same (userId, roleId) do not error, just no-op.
  */
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { permissions, rolePermissions, roles, userRoles } from "../db/schema";
 
@@ -71,30 +71,88 @@ export async function findRolesByNames(db: Db, names: readonly string[]): Promis
   return rows.map((r) => ({ id: r.id, name: r.name, description: r.description }));
 }
 
-export interface RoleWithPermissionsDto {
+/** SPEC-06 §3.2 role row (caller-independent part; `can`/`locked_reason` are computed by the service). */
+export interface RoleDetailDto {
+  id: string;
   name: string;
+  label: string;
   description: string | null;
+  isSystem: boolean;
+  version: number;
+  holders: number;
   permissions: string[];
 }
 
-/** Every role with its permission keys — one join query; roles and keys sorted by name. */
-export async function listRolesWithPermissions(db: Db): Promise<RoleWithPermissionsDto[]> {
-  const rows = await db
-    .select({ name: roles.name, description: roles.description, key: permissions.key })
-    .from(roles)
-    .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
-    .leftJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
-    .orderBy(asc(roles.name), asc(permissions.key));
-  const out = new Map<string, RoleWithPermissionsDto>();
+/**
+ * Roles with their permission keys and holder counts — one join query + one grouped count (no N+1).
+ * `roleId` narrows to one role. Order: system roles first, then by name; keys sorted.
+ */
+export async function listRoleDetails(db: Db, roleId?: string): Promise<RoleDetailDto[]> {
+  const where = roleId === undefined ? undefined : eq(roles.id, roleId);
+  const [rows, counts] = await Promise.all([
+    db
+      .select({
+        id: roles.id,
+        name: roles.name,
+        label: roles.label,
+        description: roles.description,
+        isSystem: roles.isSystem,
+        version: roles.version,
+        key: permissions.key,
+      })
+      .from(roles)
+      .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+      .leftJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(where)
+      .orderBy(desc(roles.isSystem), asc(roles.name), asc(permissions.key)),
+    db
+      .select({ roleId: userRoles.roleId, n: count() })
+      .from(userRoles)
+      .where(roleId === undefined ? undefined : eq(userRoles.roleId, roleId))
+      .groupBy(userRoles.roleId),
+  ]);
+  const holders = new Map(counts.map((r) => [r.roleId, r.n]));
+  const out = new Map<string, RoleDetailDto>();
   for (const r of rows) {
-    let item = out.get(r.name);
+    let item = out.get(r.id);
     if (!item) {
-      item = { name: r.name, description: r.description, permissions: [] };
-      out.set(r.name, item);
+      item = {
+        id: r.id,
+        name: r.name,
+        label: r.label ?? r.name,
+        description: r.description,
+        isSystem: r.isSystem === 1,
+        version: r.version,
+        holders: holders.get(r.id) ?? 0,
+        permissions: [],
+      };
+      out.set(r.id, item);
     }
     if (r.key !== null) item.permissions.push(r.key);
   }
   return [...out.values()];
+}
+
+export async function findRoleDetail(db: Db, roleId: string): Promise<RoleDetailDto | null> {
+  return (await listRoleDetails(db, roleId))[0] ?? null;
+}
+
+/** Ids of the roles the user carries — read from D1 (SPEC-06 §3.2: never from the principal cache). */
+export async function listRoleIdsForUser(db: Db, userId: string): Promise<string[]> {
+  const rows = await db.select({ roleId: userRoles.roleId }).from(userRoles).where(eq(userRoles.userId, userId));
+  return rows.map((r) => r.roleId);
+}
+
+/** Number of custom (`is_system = 0`) roles — the ≤ 50 limit (SPEC-06 §3.1). */
+export async function countCustomRoles(db: Db): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(roles).where(eq(roles.isSystem, 0));
+  return row?.n ?? 0;
+}
+
+/** Users carrying the role (cache purge after a permission change, FR-7). */
+export async function listUserIdsOfRole(db: Db, roleId: string): Promise<string[]> {
+  const rows = await db.select({ userId: userRoles.userId }).from(userRoles).where(eq(userRoles.roleId, roleId));
+  return rows.map((r) => r.userId);
 }
 
 // ---------------------------------------------------------------------------
