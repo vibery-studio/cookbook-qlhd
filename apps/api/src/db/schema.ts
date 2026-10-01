@@ -404,11 +404,13 @@ export const contracts = sqliteTable(
   "contracts",
   {
     id: text("id").primaryKey(),
-    type: text("type").notNull(), // contract (number prefix HD)
+    type: text("type").notNull(), // contract HD | quote BG | payment_request DNTT | delivery_note PXK (SPEC-09 §3.1)
     templateId: text("template_id").notNull(),
     templateVersionId: text("template_version_id").notNull(),
     customerId: text("customer_id").notNull(),
-    sourceContractId: text("source_contract_id"),
+    sourceContractId: text("source_contract_id"), // copy source ("sao chép") — not the business chain
+    // SPEC-09 DEC-3: parent in the business chain (BG → HĐ → DNTT/PXK); distinct from source_contract_id.
+    parentId: text("parent_id"),
     status: text("status").notNull(), // draft | pending | approved | rejected | issued | voided
     createdBy: text("created_by").notNull(),
     docDate: text("doc_date").notNull(), // YYYY-MM-DD (business zone)
@@ -436,11 +438,18 @@ export const contracts = sqliteTable(
     pdfHash: text("pdf_hash"),
     pdfSize: integer("pdf_size"),
     pdfAt: integer("pdf_at"),
+    // SPEC-09 §3.1: quote only, YYYY-MM-DD, copied from the snapshot so CAS can read it directly.
+    validUntil: text("valid_until"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    check("ck_contracts_type", sql`${table.type} = 'contract'`),
+    check(
+      "ck_contracts_type",
+      sql`${table.type} IN ('contract','quote','payment_request','delivery_note')`,
+    ),
+    check("ck_contracts_parent_not_self", sql`${table.parentId} IS NULL OR ${table.parentId} <> ${table.id}`),
+    check("ck_contracts_valid_until", sql`${table.type} = 'quote' OR ${table.validUntil} IS NULL`),
     check(
       "ck_contracts_status",
       sql`${table.status} IN ('draft','pending','approved','rejected','issued','voided')`,
@@ -454,6 +463,11 @@ export const contracts = sqliteTable(
     index("idx_contracts_type_status_updated").on(table.type, table.status, table.updatedAt),
     index("idx_contracts_customer").on(table.customerId),
     index("idx_contracts_created_by").on(table.createdBy),
+    // SPEC-09 FR-8: one live child per (parent, type) — race-proof, no check-then-write.
+    uniqueIndex("uq_contracts_parent_child_live")
+      .on(table.parentId, table.type)
+      .where(sql`parent_id IS NOT NULL AND status IN ('draft','pending','approved','issued')`),
+    index("idx_contracts_parent").on(table.parentId),
   ],
 );
 
