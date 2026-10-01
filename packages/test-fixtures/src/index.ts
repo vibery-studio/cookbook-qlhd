@@ -47,3 +47,4 @@ export {
   type CapturedEmail,
 } from "./email";
 export { truncateTables, type DrizzleDb } from "./db";
+export { clearAuditEvents, type D1Like, type D1StatementLike } from "./audit";

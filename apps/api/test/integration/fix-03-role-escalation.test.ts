@@ -7,6 +7,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -31,7 +32,7 @@ interface Staff {
 }
 
 async function resetDb(): Promise<void> {
-  await env.DB.prepare("DELETE FROM audit_events").run();
+  await clearAuditEvents(env.DB);
   await truncateTables(getDb(env), [verificationTokens, refreshTokens, jwtRevocations, userRoles, users]);
 }
 

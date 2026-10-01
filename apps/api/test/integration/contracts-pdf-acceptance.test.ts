@@ -7,6 +7,7 @@
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -59,7 +60,8 @@ interface PdfRenderer {
 // ---------------------------------------------------------------- clock + db
 
 async function resetDb(): Promise<void> {
-  for (const table of ["approval_steps", "contracts", "audit_events", "customers", "idempotency_keys"]) {
+  await clearAuditEvents(env.DB);
+  for (const table of ["approval_steps", "contracts", "customers", "idempotency_keys"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
   await truncateTables(getDb(env), [verificationTokens, refreshTokens, jwtRevocations, userRoles, users]);

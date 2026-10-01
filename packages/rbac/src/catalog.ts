@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   "flags:write",
   "notes:read",
   "notes:write",
+  "roles:write",
   "settings:read",
   "settings:write",
   "template:write",

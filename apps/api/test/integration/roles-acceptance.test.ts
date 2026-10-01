@@ -7,14 +7,14 @@
  * (`fix-03-role-escalation.test.ts`), not here.
  * Not-yet-existing columns are only touched through raw SQL inside try/catch (reset) or in the one test that needs them
  * (role-limit), so this file compiles today and each test reports its own failure.
- * FR-13: audit_events becomes append-only (D1 trigger) → cleanup goes through `clearAuditEvents()`, which drops whatever
- * triggers sit on the table, deletes, and recreates them from sqlite_master. C-06-001 moves this helper to
- * `@runway/test-fixtures` and swaps the local copy for the import.
+ * FR-13: audit_events is append-only (D1 trigger) → cleanup goes through `clearAuditEvents()` from `@runway/test-fixtures`,
+ * which drops whatever triggers sit on the table, deletes, and recreates them from sqlite_master.
  * The tests mutate seeded system roles (quan_ly, giam_doc); `restoreSeedRoles()` puts them back before AND after each test.
  */
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -132,25 +132,12 @@ async function restoreSeedRoles(): Promise<void> {
   }
 }
 
-/** Test-only: lift the append-only triggers on audit_events, empty it, put the SAME triggers back (SQL from sqlite_master). */
-async function clearAuditEvents(): Promise<void> {
-  const triggers = await env.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'audit_events'").all<{
-    name: string;
-    sql: string;
-  }>();
-  await env.DB.batch([
-    ...triggers.results.map((t) => env.DB.prepare(`DROP TRIGGER IF EXISTS "${t.name}"`)),
-    env.DB.prepare("DELETE FROM audit_events"),
-    ...triggers.results.map((t) => env.DB.prepare(t.sql)),
-  ]);
-}
-
 async function auditCount(): Promise<number> {
   return (await sqlFirst<{ n: number }>("SELECT COUNT(*) AS n FROM audit_events"))?.n ?? -1;
 }
 
 async function resetDb(): Promise<void> {
-  await clearAuditEvents();
+  await clearAuditEvents(env.DB);
   try {
     await env.DB.prepare("DELETE FROM idempotency_keys").run();
   } catch {
@@ -658,7 +645,7 @@ describe("SPEC-06 roles API (acceptance)", () => {
     expect(await auditCount()).toBe(before);
     expect(await sqlFirst("SELECT 1 AS x FROM audit_events WHERE action = 'tampered'")).toBeNull();
     // the test-only helper still empties it (and leaves the triggers in place)
-    await clearAuditEvents();
+    await clearAuditEvents(env.DB);
     expect(await auditCount()).toBe(0);
     expect(
       (await sqlFirst<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'audit_events'"))?.n,

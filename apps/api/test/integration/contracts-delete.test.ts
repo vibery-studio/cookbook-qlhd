@@ -2,6 +2,7 @@
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -91,7 +92,8 @@ function pin(iso: string): void {
 }
 
 async function resetDb(): Promise<void> {
-  for (const table of ["approval_steps", "contracts", "audit_events", "customers", "idempotency_keys"]) {
+  await clearAuditEvents(env.DB);
+  for (const table of ["approval_steps", "contracts", "customers", "idempotency_keys"]) {
     try {
       await env.DB.prepare(`DELETE FROM ${table}`).run();
     } catch {

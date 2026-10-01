@@ -7,6 +7,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -120,12 +121,8 @@ async function resetTemplates(): Promise<void> {
 
 async function resetDb(): Promise<void> {
   await resetTemplates();
-  try {
-    // keep the seed's own `template.created` row (actor NULL); drop everything else
-    await env.DB.prepare("DELETE FROM audit_events WHERE NOT (action = 'template.created' AND actor IS NULL)").run();
-  } catch {
-    // table missing (red run)
-  }
+  // keep the seed's own `template.created` row (actor NULL); drop everything else
+  await clearAuditEvents(env.DB, "NOT (action = 'template.created' AND actor IS NULL)");
   await truncateTables(getDb(env), [verificationTokens, refreshTokens, jwtRevocations, userRoles, users]);
 }
 

@@ -94,11 +94,21 @@ export const userExports = sqliteTable(
 
 /**
  * RBAC roles catalog (e.g. 'admin', 'member'). No `scope` column in v1.
+ * SPEC-06 §3.1: `name` is the immutable identity (approval steps + `can()` match by name); custom roles get a
+ * server-made `r_<ulid>`. `label` = Vietnamese display name; `label_key` = normalized label (NFC, trim, collapsed
+ * spaces, `toLocaleLowerCase('vi')`, computed in the app) for duplicate checks. `is_system` = seed role (never
+ * deleted/renamed). `version` = CAS for edits. Added by an expand-only ALTER (0016) — never a table rebuild.
  */
 export const roles = sqliteTable("roles", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description"),
+  label: text("label"),
+  labelKey: text("label_key").unique(),
+  isSystem: integer("is_system").notNull().default(0),
+  version: integer("version").notNull().default(1),
+  createdAt: integer("created_at").notNull().default(0),
+  updatedAt: integer("updated_at").notNull().default(0),
 });
 
 /**

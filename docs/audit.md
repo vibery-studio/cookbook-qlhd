@@ -30,6 +30,13 @@ denylist: `password`, `token`, `authorization`, `cookie`, `secret`,
 values are replaced with `[REDACTED]`; the caller doesn't need to
 remember the denylist.
 
+## `audit_events` is append-only (SPEC-06 FR-13)
+
+The in-app `audit_events` D1 table (SPEC-01 FR-4) refuses `UPDATE`/`DELETE`: triggers `trg_audit_events_no_update` /
+`trg_audit_events_no_delete` (migration `0018_audit_events_append_only.sql`) `RAISE(ABORT)`. Product code only inserts.
+Tests empty it only via `clearAuditEvents(env.DB, where?)` from `@runway/test-fixtures` (drop triggers → delete →
+recreate from `sqlite_master`, one batch). Never add another cleanup path.
+
 ## Sync vs async
 
 **Sync** (`sync: true`) — `console.log` fires synchronously; the

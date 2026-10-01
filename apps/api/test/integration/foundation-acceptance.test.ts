@@ -6,6 +6,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearAuditEvents,
   CSRF_HEADERS,
   createAdmin,
   createSession,
@@ -38,7 +39,8 @@ interface Staff {
 }
 
 async function resetDb(): Promise<void> {
-  for (const table of ["audit_events", "customers"]) {
+  await clearAuditEvents(env.DB);
+  for (const table of ["customers"]) {
     try {
       await env.DB.prepare(`DELETE FROM ${table}`).run();
     } catch {
@@ -116,7 +118,8 @@ describe("SPEC-01 foundation (acceptance)", () => {
     const gdMe = await me(gd.session);
     expect(gdMe.roles).toEqual(["giam_doc"]);
     expect([...gdMe.permissions].sort()).toEqual(
-      [...APPROVER_PERMS, "template:write", "users:read", "users:write"].sort(),
+      // SPEC-06 FR-1: giam_doc also carries `roles:write` (migration 0017)
+      [...APPROVER_PERMS, "roles:write", "template:write", "users:read", "users:write"].sort(),
     );
     const qlMe = await me(ql.session);
     expect(qlMe.roles).toEqual(["quan_ly"]);

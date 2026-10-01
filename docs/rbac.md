@@ -69,6 +69,17 @@ No middleware or auth-loader changes needed — `Principal.roles` is
 `readonly string[]`, so unknown-at-compile-time role names flow through
 harmlessly. Only `can()`'s `admin` bypass depends on a specific name.
 
+## Role admin (SPEC-06)
+
+- `roles:write` (migration `0017_seed_roles_write.sql`, id `01PERM0000000ROLESWRITE00`) → `admin`, `giam_doc`. Gates
+  `POST /roles`, `PATCH /roles/{id}`, `DELETE /roles/{id}`; `GET /roles` stays login-only.
+- `roles.name` is the immutable identity — approval steps and `can()`'s `admin` bypass match by name. Never renamed.
+  Display name = `label`; duplicates checked on `label_key` (NFC, trim, collapsed spaces, `toLocaleLowerCase('vi')`).
+- System roles (`is_system=1`): the 5 seeds `admin`, `member`, `giam_doc`, `quan_ly`, `nhan_vien` — never deleted or
+  renamed; `admin` fully immutable through the API (its grants change by migration only). Custom roles: `name =
+  "r_" + lowercase ULID`, server-made (nobody can create a role named `admin`); ≤ 50; deletable only with 0 holders.
+- `version` = CAS for every edit (`expected_version` → 409 `stale`).
+
 ## Cache invalidation contract
 
 When a role assignment changes on a user, the OWNING SERVICE (admin-
