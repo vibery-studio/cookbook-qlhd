@@ -14,7 +14,7 @@ import type { AssignableRole } from "./role-locks";
 
 /** FIX-06: the API decides every lock; these only check that each API reason code gets its sentence. */
 const can = { change_role: true, set_status: true, reinvite: false, grant_jit: false, revoke_jit: false };
-const none = { change_role: null, set_status: null, grant_jit: null };
+const none = { change_role: null, set_status: null, reinvite: null, grant_jit: null };
 
 describe("rowLockNotes (API reasons → 🔒 lines)", () => {
   it("own row: both locks, each sentence once", () => {

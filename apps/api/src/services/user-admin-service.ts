@@ -64,6 +64,7 @@ import {
 } from "../dao/role-dao";
 import {
   assignRefusal,
+  reinviteRefusal,
   changeRoleLock,
   editRefusal,
   jitGrantRefusal,
@@ -73,6 +74,7 @@ import {
   type AssignContext,
   type AssignRefusal,
   type ChangeRoleLock,
+  type ReinviteLock,
   type EscalationRule,
   type JitGrantRefusal,
   type RoleOption,
@@ -123,7 +125,7 @@ export function activationUrl(env: Bindings, rawToken: string): string {
 
 export interface AdminUserRow extends AdminUserView {
   can: { change_role: boolean; set_status: boolean; reinvite: boolean; grant_jit: boolean; revoke_jit: boolean };
-  locked_reason: { change_role: ChangeRoleLock | null; set_status: StatusLock | null; grant_jit: JitGrantRefusal | null };
+  locked_reason: { change_role: ChangeRoleLock | null; set_status: StatusLock | null; reinvite: ReinviteLock | null; grant_jit: JitGrantRefusal | null };
   role_options: Array<RoleOption & { label: string }>;
   jit_grant: { id: string; expires_at: number } | null;
 }
@@ -156,6 +158,7 @@ export async function listUsersFor(
       const options = writer ? roleOptions(ctx, target) : [];
       const changeLock = writer ? changeRoleLock(ctx, target, options) : null;
       const statusLocked = writer ? statusLock(ctx, target) : null;
+      const reinviteLock = writer && u.status === "pending" ? reinviteRefusal(ctx, target) : null;
       const grant = activeJit.get(u.id);
       const jitLock = granter
         ? jitGrantRefusal({ actorId: input.actorId, actorJitActive: activeJit.has(input.actorId), target, targetJitActive: grant !== undefined })
@@ -169,11 +172,11 @@ export async function listUsersFor(
         can: {
           change_role: writer && changeLock === null,
           set_status: writer && statusLocked === null,
-          reinvite: writer && u.status === "pending",
+          reinvite: writer && u.status === "pending" && reinviteLock === null,
           grant_jit: granter && jitLock === null,
           revoke_jit: grant !== undefined && mayRevokeJit({ actorId: input.actorId, actorPermissions: ctx.actorPermissions, recipientId: u.id }),
         },
-        locked_reason: { change_role: changeLock, set_status: statusLocked, grant_jit: jitLock },
+        locked_reason: { change_role: changeLock, set_status: statusLocked, reinvite: reinviteLock, grant_jit: jitLock },
         role_options: labelled(options),
         jit_grant: grant === undefined ? null : { id: grant.id, expires_at: grant.expires_at },
       };
@@ -298,16 +301,30 @@ export async function inviteUser(
 
 export type ReinviteResult =
   | { kind: "ok"; rawToken: string; expiresAt: number }
+  | { kind: "forbidden"; rule: EscalationRule }
   | { kind: "not-found" }
   | { kind: "already-active" };
 
 export async function reinviteUser(
   deps: UserAdminDeps,
-  input: { actorId: string; userId: string },
+  input: { actorId: string; userId: string; ip?: string | null },
 ): Promise<ReinviteResult> {
   const user = await findUserById(deps.db, input.userId);
   if (user === null) return { kind: "not-found" };
   if (user.status !== "pending") return { kind: "already-active" };
+
+  // FIX-07: same guards as assigning the roles the pending account already holds.
+  const targetRoles = await listRoleNamesForUser(deps.db, input.userId);
+  const rule = reinviteRefusal(await loadAssignContext(deps.db, input.actorId), { id: input.userId, roles: targetRoles });
+  if (rule !== null) {
+    const denied = await refuse(deps.db, { kind: "forbidden", rule }, {
+      actorId: input.actorId,
+      target: `user:${input.userId}`,
+      role: targetRoles[0] ?? "",
+      ip: input.ip,
+    });
+    return denied as { kind: "forbidden"; rule: EscalationRule };
+  }
 
   const now = deps.now();
   const token = newInviteToken(deps.env);
@@ -322,6 +339,7 @@ export async function reinviteUser(
       userId: input.userId,
       expiresAt,
       createdAt: now,
+      when: ownerMayReassignSql(input.actorId, input.userId),
     }),
     invalidateOtherInviteTokensStmt(deps.db, { userId: input.userId, exceptHash: token.hash, now }),
     auditInsertWhen(deps.db, {
@@ -334,7 +352,14 @@ export async function reinviteUser(
     }),
   ]);
   const inserted = results[0];
-  if (Array.isArray(inserted) && inserted.length === 0) return { kind: "already-active" };
+  if (Array.isArray(inserted) && inserted.length === 0) {
+    // Refused inside the batch: no longer pending, or the owner rule changed meanwhile — classify against D1 now.
+    const late = reinviteRefusal(await loadAssignContext(deps.db, input.actorId), { id: input.userId, roles: await listRoleNamesForUser(deps.db, input.userId) });
+    if (late === "owner_only") {
+      return (await refuse(deps.db, { kind: "forbidden", rule: late }, { actorId: input.actorId, target: `user:${input.userId}`, role: "", ip: input.ip })) as { kind: "forbidden"; rule: EscalationRule };
+    }
+    return { kind: "already-active" };
+  }
   return { kind: "ok", rawToken: token.raw, expiresAt };
 }
 

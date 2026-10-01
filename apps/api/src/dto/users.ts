@@ -92,6 +92,7 @@ export const AdminUserItemSchema = z
     locked_reason: z.object({
       change_role: z.enum(["self_role", "admin_only", "owner_only", "root_role", "grant_not_held", "no_role_option"]).nullable(),
       set_status: z.enum(["admin_only", "self_disable", "pending"]).nullable(),
+      reinvite: z.enum(["admin_only", "root_role", "owner_only"]).nullable(),
       grant_jit: z.enum(["self_grant", "jit_actor", "not_active", "already_admin", "jit_active"]).nullable(),
     }),
     /** Options of "Đổi vai trò" for this user (never `member` / `root`). Empty without users:write. */

@@ -266,7 +266,7 @@ describe("FIX-06 — locks come from the API, from the guards' own rules", () =>
 
     const self = row(page, admin.userId);
     expect(self.can).toMatchObject({ change_role: false, set_status: false, grant_jit: false });
-    expect(self.locked_reason).toEqual({ change_role: "self_role", set_status: "self_disable", grant_jit: null });
+    expect(self.locked_reason).toEqual({ change_role: "self_role", set_status: "self_disable", reinvite: null, grant_jit: null });
     const selfPatch = await patchUser(admin, admin.userId, { role: "quan_ly" });
     expect(await ruleOf(selfPatch)).toBe("self_role");
     const selfOff = await patchUser(admin, admin.userId, { status: "disabled" });

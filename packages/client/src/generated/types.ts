@@ -819,7 +819,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Missing users:write permission */
+                /** @description Missing users:write permission, or (FIX-07) the pending account holds admin (admin_only), a Giám đốc / roles:write role (owner_only) or root (root_role) and the caller is not allowed to assign it */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5801,6 +5801,8 @@ export interface components {
                 change_role: "self_role" | "admin_only" | "owner_only" | "root_role" | "grant_not_held" | "no_role_option" | null;
                 /** @enum {string|null} */
                 set_status: "admin_only" | "self_disable" | "pending" | null;
+                /** @enum {string|null} */
+                reinvite: "admin_only" | "root_role" | "owner_only" | null;
                 /** @enum {string|null} */
                 grant_jit: "self_grant" | "jit_actor" | "not_active" | "already_admin" | "jit_active" | null;
             };

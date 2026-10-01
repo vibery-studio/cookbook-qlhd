@@ -10,7 +10,7 @@
  * leaking which case occurred hands an attacker probing token space free
  * oracle information.
  */
-import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { verificationTokens } from "../db/schema";
 
@@ -126,12 +126,12 @@ export function insertInviteTokenStmt(db: Db, input: Omit<CreateVerificationToke
 /** Re-invite: the token row exists only if the user is still `pending` (CAS). */
 export function insertInviteTokenIfPendingStmt(
   db: Db,
-  input: Omit<CreateVerificationTokenInput, "purpose">,
+  input: Omit<CreateVerificationTokenInput, "purpose"> & { when?: SQL },
 ) {
   return db
     .insert(verificationTokens)
     .select(
-      sql`SELECT ${input.tokenHash}, u.id, 'invite', ${input.expiresAt}, NULL, ${input.createdAt} FROM users u WHERE u.id = ${input.userId} AND u.status = 'pending'`,
+      sql`SELECT ${input.tokenHash}, u.id, 'invite', ${input.expiresAt}, NULL, ${input.createdAt} FROM users u WHERE u.id = ${input.userId} AND u.status = 'pending' AND ${input.when ?? sql`1 = 1`}`,
     )
     .returning({ tokenHash: verificationTokens.tokenHash });
 }

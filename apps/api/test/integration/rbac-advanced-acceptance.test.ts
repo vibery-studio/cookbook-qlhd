@@ -899,11 +899,10 @@ describe("SPEC-07 advanced RBAC (acceptance)", () => {
     await problemOf(await grantJitRaw(nv, { user_id: ql.userId, reason: "Cấp tiếp cho người khác", minutes: 30 }), 403, "forbidden");
     expect(await deniedCount(nv.userId)).toBe(3);
 
-    // the only PERMANENT admin cannot be disabled, JIT holder or not
-    await problemOf(
+    // the only PERMANENT admin cannot be disabled, JIT holder or not (FIX-06: self-disable is refused before last-admin)
+    await expectRule(
       await admin.session.fetch(`/admin/users/${admin.userId}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) }),
-      409,
-      "last-admin",
+      "self_disable",
     );
   }, 60_000);
 

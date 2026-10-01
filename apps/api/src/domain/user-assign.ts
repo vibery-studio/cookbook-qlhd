@@ -87,6 +87,20 @@ export function assignRefusal(ctx: AssignContext, input: { target: AssignTarget 
   return missing.length > 0 ? { kind: "grant-not-held", missing } : null;
 }
 
+/**
+ * FIX-07: re-inviting a pending user mints an activation link for the roles it already carries — the same escalation as
+ * assigning them. Order: admin_only (caller neither admin nor owner) → root_role → owner_only (a `giam_doc` holder, or any held role that carries
+ * `roles:write`, needs an owner caller). Null = allowed. Race side: `ownerMayReassignSql` in the batch.
+ */
+export type ReinviteLock = "admin_only" | "root_role" | "owner_only";
+export function reinviteRefusal(ctx: AssignContext, target: AssignTarget): ReinviteLock | null {
+  // The owner re-sends the link of a pending admin too (else nobody could: admins are `owner_only` here).
+  if (editRefusal(ctx, target) !== null && !isOwner(ctx)) return "admin_only";
+  if (target.roles.includes(ROOT_ROLE)) return "root_role";
+  if (needsOwnerToReassign(ctx, target) || target.roles.some((r) => carriesRolesWrite(ctx, r) && !isOwner(ctx))) return "owner_only";
+  return null;
+}
+
 // ------------------------------------------------------------------ the list view (GET /admin/users)
 
 /** Why an option of the role select is locked — the rule the API would answer with. */

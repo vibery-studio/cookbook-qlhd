@@ -135,7 +135,7 @@ const reinviteRoute = createRoute({
       content: { "application/json": { schema: ReinviteResponse } },
     },
     401: problemResponse("Not authenticated"),
-    403: problemResponse("Missing users:write permission"),
+    403: problemResponse("Missing users:write permission, or (FIX-07) the pending account holds admin (admin_only), a Giám đốc / roles:write role (owner_only) or root (root_role) and the caller is not allowed to assign it"),
     404: problemResponse("User not found"),
     409: problemResponse("already_active: user has already activated"),
   },
@@ -241,12 +241,13 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
   app.openapi(reinviteRoute, async (c) => {
     const { id } = c.req.valid("param");
     const actor = c.get("principal")!;
-    const res = await reinviteUser(deps(c.env), { actorId: actor.id, userId: id });
+    const res = await reinviteUser(deps(c.env), { actorId: actor.id, userId: id, ip: c.req.header("cf-connecting-ip") ?? null });
     const opts = { instance: c.req.path, request_id: c.get("requestId") };
     const hdr = { "content-type": "application/problem+json" };
     if (res.kind === "not-found") {
       return c.json(problem(404, "User not found", ProblemType.NotFound, opts), 404, hdr);
     }
+    if (res.kind === "forbidden") return c.json(escalationProblem(res.rule, c.req.path, c.get("requestId")), 403, hdr);
     if (res.kind === "already-active") {
       return c.json(problem(409, "User has already activated", ProblemType.AlreadyActive, opts), 409, hdr);
     }
