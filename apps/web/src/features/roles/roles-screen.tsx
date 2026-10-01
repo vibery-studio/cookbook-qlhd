@@ -26,7 +26,8 @@ export function RolesScreen() {
   // C-11-001: only an explicit `false` means off (older payloads / fixtures without the field = on).
   const twoLayerOff = query.data?.two_layer === false;
   // Hint only (the API checks again): the admin role is exempt from "only grant what you hold".
-  const holds = (code: string) => me.roles.includes("admin") || me.permissions.includes(code);
+  // the server checks added codes ⊆ the caller's permissions for everyone (admin included) — mirror it exactly
+  const holds = (code: string) => me.permissions.includes(code);
 
   const roles = sortRoles(query.data?.items ?? []);
   const catalog = query.data?.catalog ?? [...new Set(roles.flatMap((r) => r.permissions))];

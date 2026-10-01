@@ -118,6 +118,17 @@ describe("RolesScreen (SPEC-06 AC-8)", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
+  it("admin is not a wildcard: a permission the admin lacks is greyed (disabled + tooltip), one note on top, no per-row 🔒", async () => {
+    const admin: Me = { id: "a", email: "a@x.y", display_name: "QT", roles: ["admin"], permissions: ["audit:read", "roles:write", "users:read"] };
+    renderScreen(admin);
+    await userEvent.click((await screen.findAllByTestId("role-col")).find((b) => b.textContent?.startsWith("Quản lý")) as HTMLElement);
+    const drawer = await screen.findByRole("dialog", { name: "Vai trò · Quản lý" });
+    expect(within(drawer).getByRole("checkbox", { name: /Duyệt/ })).toHaveProperty("disabled", true); // contract:approve — admin lacks it
+    expect(within(drawer).getByRole("checkbox", { name: /Xem nhật ký/ })).toHaveProperty("disabled", false); // held → still removable/addable
+    expect(drawer.textContent).toContain("Quyền mờ: bạn không có nên không cấp được.");
+    expect(drawer.textContent).not.toContain("🔒 Bạn không có quyền này");
+  });
+
   it("label/description edits still go through \"Lưu\" with PATCH (no permissions)", async () => {
     patch.mockImplementation(() => ok({ ...roles.items[1], version: 2, description: "Mới" }));
     renderScreen(director);
