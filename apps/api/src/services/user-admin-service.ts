@@ -25,7 +25,7 @@ import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { Bindings } from "../env";
-import { auditInsert, writeAuditEvent } from "../dao/audit-dao";
+import { writeAuditEvent } from "../dao/audit-dao";
 import { invalidatePrincipalCache } from "../dao/session-cache";
 import {
   activateUserStmt,
@@ -43,10 +43,10 @@ import {
   consumeInviteTokenStmt,
   findVerificationTokenByHash,
   insertInviteTokenIfPendingStmt,
-  insertInviteTokenStmt,
   inviteConsumedAt,
   invalidateOtherInviteTokensStmt,
 } from "../dao/verification-token-dao";
+import { listPermissionKeysForRoleNames, listPermissionKeysForUser, roleNameExists } from "../dao/permission-dao";
 import { dropOtherRolesStmt, grantRoleByNameStmt, listRoleNamesForUser, userHasRole } from "../dao/role-dao";
 import { generateUlid } from "../utils/id";
 
@@ -94,7 +94,43 @@ export type EscalationRule = "self_role" | "admin_only";
 export type InviteResult =
   | { kind: "ok"; user: AdminUserView; rawToken: string; expiresAt: number }
   | { kind: "duplicate-email" }
-  | { kind: "forbidden"; rule: EscalationRule };
+  | { kind: "forbidden"; rule: EscalationRule }
+  | { kind: "unknown-role" }
+  | { kind: "grant-not-held"; missing: string[] };
+
+/** `member` is the RUNWAY base role nobody carries (SPEC-06 DEC-7): never assignable, same answer as a missing name. */
+const UNASSIGNABLE_ROLES = new Set(["member"]);
+
+async function roleAssignable(db: Db, name: string): Promise<boolean> {
+  return !UNASSIGNABLE_ROLES.has(name) && (await roleNameExists(db, name));
+}
+
+/**
+ * FR-12 (SPEC-06): a non-admin actor may only grant or take away roles whose permissions their own cover.
+ * missing = (perms(new role) ∪ perms(old roles)) − perms(actor), read from D1 now (no principal cache). Admin exempt.
+ * Writes one `permission.denied` row when non-empty. Read-then-write like FIX-03 (accepted there).
+ */
+async function checkGrantHeld(
+  db: Db,
+  input: { actorId: string; target: string; newRole: string; oldRoles: string[]; ip?: string | null },
+): Promise<{ kind: "grant-not-held"; missing: string[] } | null> {
+  if (await actorIsAdmin(db, input.actorId)) return null;
+  const [needed, held] = await Promise.all([
+    listPermissionKeysForRoleNames(db, [input.newRole, ...input.oldRoles]),
+    listPermissionKeysForUser(db, input.actorId),
+  ]);
+  const heldSet = new Set(held);
+  const missing = needed.filter((k) => !heldSet.has(k)).sort();
+  if (missing.length === 0) return null;
+  await writeAuditEvent(db, {
+    actor: input.actorId,
+    action: "permission.denied",
+    target: input.target,
+    metadata: { rule: "grant_not_held", permission: "users:write", role: input.newRole },
+    ip: input.ip ?? null,
+  });
+  return { kind: "grant-not-held", missing };
+}
 
 /** Writes the `permission.denied` row for an escalation refusal and returns the typed outcome. */
 async function denyEscalation(
@@ -127,6 +163,15 @@ export async function inviteUser(
   if (input.role === "admin" && !(await actorIsAdmin(deps.db, input.actorId))) {
     return denyEscalation(deps.db, { actorId: input.actorId, target: "user:new", rule: "admin_only", role: input.role, ip: input.ip });
   }
+  if (!(await roleAssignable(deps.db, input.role))) return { kind: "unknown-role" };
+  const notHeld = await checkGrantHeld(deps.db, {
+    actorId: input.actorId,
+    target: "user:new",
+    newRole: input.role,
+    oldRoles: [],
+    ip: input.ip,
+  });
+  if (notHeld !== null) return notHeld;
   if ((await findUserByEmail(deps.db, email)) !== null) return { kind: "duplicate-email" };
 
   const now = deps.now();
@@ -136,24 +181,38 @@ export async function inviteUser(
   // Unusable password: a valid-format hash of a random secret nobody ever sees.
   const passwordHash = await hashPassword(generateOpaqueToken(32));
 
+  // The role may be deleted between the check above and this batch: the user row, the grant, the token and the audit
+  // row all depend on the role existing INSIDE the batch (one transaction), so a vanished role creates nobody.
+  const roleExists = sql`EXISTS (SELECT 1 FROM roles WHERE name = ${input.role})`;
+  let granted: unknown;
   try {
-    await deps.db.batch([
-      insertInvitedUserStmt(deps.db, { id: userId, email, displayName: input.displayName, passwordHash, now }),
+    const results = await deps.db.batch([
+      insertInvitedUserStmt(deps.db, {
+        id: userId,
+        email,
+        displayName: input.displayName,
+        passwordHash,
+        now,
+        when: roleExists,
+      }),
       grantRoleByNameStmt(deps.db, { userId, roleName: input.role }),
-      insertInviteTokenStmt(deps.db, { tokenHash: token.hash, userId, expiresAt, createdAt: now }),
-      auditInsert(deps.db, {
+      insertInviteTokenIfPendingStmt(deps.db, { tokenHash: token.hash, userId, expiresAt, createdAt: now }),
+      auditInsertWhen(deps.db, {
         actor: input.actorId,
         action: "user.invited",
         target: `user:${userId}`,
         metadata: { role: input.role },
         ts: now,
+        when: userHasRole(userId, input.role),
       }),
     ]);
+    granted = results[1];
   } catch (err) {
     // Lost a race on the UNIQUE(email) index: the whole batch rolled back.
     if ((await findUserByEmail(deps.db, email)) !== null) return { kind: "duplicate-email" };
     throw err;
   }
+  if (Array.isArray(granted) && granted.length === 0) return { kind: "unknown-role" };
 
   const user = await findUserById(deps.db, userId);
   if (user === null) throw new Error("inviteUser: user missing after batch");
@@ -249,7 +308,9 @@ export type UpdateUserResult =
   | { kind: "not-found" }
   | { kind: "last-admin" }
   | { kind: "pending" }
-  | { kind: "forbidden"; rule: EscalationRule };
+  | { kind: "forbidden"; rule: EscalationRule }
+  | { kind: "unknown-role" }
+  | { kind: "grant-not-held"; missing: string[] };
 
 const and = (...parts: Array<SQL | undefined>): SQL => {
   const list = parts.filter((p): p is SQL => p !== undefined);
@@ -285,6 +346,15 @@ export async function updateUser(
     if (input.role === "admin" && !(await actorIsAdmin(db, input.actorId))) {
       return denyEscalation(db, { ...deny, rule: "admin_only" });
     }
+    if (!(await roleAssignable(db, input.role))) return { kind: "unknown-role" };
+    const notHeld = await checkGrantHeld(db, {
+      actorId: input.actorId,
+      target: `user:${id}`,
+      newRole: input.role,
+      oldRoles: currentRoles,
+      ip: input.ip,
+    });
+    if (notHeld !== null) return notHeld;
   }
 
   if (input.status !== undefined && user.status === "pending") return { kind: "pending" };
@@ -350,16 +420,15 @@ export async function updateUser(
 
   const results = await db.batch(stmts as unknown as Parameters<Db["batch"]>[0]);
 
-  if (removesAdmin) {
-    const first: unknown = results[0];
-    const firstRows = Array.isArray(first) ? first.length : 0;
-    // Role path: 0 rows and the user still lacks the role = the guard refused.
-    // Status path: 0 rows from the guarded UPDATE = refused (the user row exists, we read it above).
-    const refused = roleChange
-      ? firstRows === 0 && !(newRole !== undefined && currentRoles.includes(newRole))
-      : firstRows === 0;
-    if (refused) return { kind: "last-admin" };
+  const first: unknown = results[0];
+  const firstRows = Array.isArray(first) ? first.length : 0;
+  // Role path: 0 rows from the grant and the user still lacks the role = refused: either the role vanished since
+  // the check above (→ unknown-role) or the last-admin guard said no. Nothing else in the batch took effect.
+  if (roleChange && newRole !== undefined && firstRows === 0 && !currentRoles.includes(newRole)) {
+    return (await roleNameExists(db, newRole)) ? { kind: "last-admin" } : { kind: "unknown-role" };
   }
+  // Status path: 0 rows from the guarded UPDATE = refused (the user row exists, we read it above).
+  if (removesAdmin && !roleChange && firstRows === 0) return { kind: "last-admin" };
 
   // Role/status changed → next request must re-load the principal.
   await invalidatePrincipalCache(deps.kv, id);

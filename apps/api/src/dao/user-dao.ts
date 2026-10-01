@@ -294,17 +294,26 @@ export interface InvitedUserInput {
   now: number;
 }
 
-/** Pending user with an unusable (random-secret) password hash. */
-export function insertInvitedUserStmt(db: Db, input: InvitedUserInput) {
-  return db.insert(users).values({
-    id: input.id,
-    email: input.email,
-    displayName: input.displayName,
-    passwordHash: input.passwordHash,
-    status: "pending",
-    createdAt: input.now,
-    updatedAt: input.now,
-  });
+/**
+ * Pending user with an unusable (random-secret) password hash. With `when`, the row is inserted only while the
+ * predicate holds (INSERT…SELECT) — C-06-004 uses it so an invite into a just-deleted role creates nobody.
+ * Column list = schema order (drizzle's insert-select names every column).
+ */
+export function insertInvitedUserStmt(db: Db, input: InvitedUserInput & { when?: SQL }) {
+  if (input.when === undefined) {
+    return db.insert(users).values({
+      id: input.id,
+      email: input.email,
+      displayName: input.displayName,
+      passwordHash: input.passwordHash,
+      status: "pending",
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+  }
+  return db.insert(users).select(
+    sql`SELECT ${input.id}, ${input.email}, ${input.passwordHash}, 'pending', NULL, ${input.now}, ${input.now}, 0, NULL, NULL, NULL, ${input.displayName} WHERE ${input.when}`,
+  );
 }
 
 /** pending → active with a real password; CAS on `status = 'pending'`. */

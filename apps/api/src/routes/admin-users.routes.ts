@@ -43,11 +43,15 @@ function escalationProblem(rule: EscalationRule, instance: string, requestId: st
   });
 }
 
-/**
- * TEMPORARY (C-06-002 → removed in C-06-004): `role` is now a string in the contract, but the service still only
- * knows the seed roles. Anything else → 422 `unknown-role` here, so no user can end up with a role that may vanish.
- */
-const ASSIGNABLE_ROLES_UNTIL_C06004 = new Set(["giam_doc", "quan_ly", "nhan_vien", "admin"]);
+function grantNotHeldProblem(missing: string[], instance: string, requestId: string | undefined) {
+  return problem(403, "Forbidden", ProblemType.Forbidden, {
+    detail: "Bạn không thể gán hoặc thu hồi vai trò có quyền mà chính bạn không có.",
+    rule: "grant_not_held",
+    permissions: missing,
+    instance,
+    request_id: requestId,
+  });
+}
 
 function unknownRoleProblem(instance: string, requestId: string | undefined) {
   return problem(422, "Unknown role", ProblemType.UnknownRole, {
@@ -148,9 +152,6 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
   app.openapi(createUserRoute, async (c) => {
     const body = c.req.valid("json");
     const actor = c.get("principal")!;
-    if (!ASSIGNABLE_ROLES_UNTIL_C06004.has(body.role)) {
-      return c.json(unknownRoleProblem(c.req.path, c.get("requestId")), 422, { "content-type": "application/problem+json" });
-    }
     const res = await inviteUser(deps(c.env), {
       actorId: actor.id,
       email: body.email,
@@ -160,6 +161,14 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
     });
     if (res.kind === "forbidden") {
       return c.json(escalationProblem(res.rule, c.req.path, c.get("requestId")), 403, {
+        "content-type": "application/problem+json",
+      });
+    }
+    if (res.kind === "unknown-role") {
+      return c.json(unknownRoleProblem(c.req.path, c.get("requestId")), 422, { "content-type": "application/problem+json" });
+    }
+    if (res.kind === "grant-not-held") {
+      return c.json(grantNotHeldProblem(res.missing, c.req.path, c.get("requestId")), 403, {
         "content-type": "application/problem+json",
       });
     }
@@ -187,9 +196,6 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
     const actor = c.get("principal")!;
-    if (body.role !== undefined && !ASSIGNABLE_ROLES_UNTIL_C06004.has(body.role)) {
-      return c.json(unknownRoleProblem(c.req.path, c.get("requestId")), 422, { "content-type": "application/problem+json" });
-    }
     const res = await updateUser(deps(c.env), {
       actorId: actor.id,
       userId: id,
@@ -205,6 +211,12 @@ export function adminUsersRoutes(app: OpenAPIHono<Env>): void {
     }
     if (res.kind === "forbidden") {
       return c.json(escalationProblem(res.rule, c.req.path, c.get("requestId")), 403, hdr);
+    }
+    if (res.kind === "unknown-role") {
+      return c.json(unknownRoleProblem(c.req.path, c.get("requestId")), 422, hdr);
+    }
+    if (res.kind === "grant-not-held") {
+      return c.json(grantNotHeldProblem(res.missing, c.req.path, c.get("requestId")), 403, hdr);
     }
     if (res.kind === "last-admin") {
       return c.json(

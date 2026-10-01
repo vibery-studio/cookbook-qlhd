@@ -11,7 +11,7 @@
  */
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { permissions, rolePermissions, userRoles } from "../db/schema";
+import { permissions, rolePermissions, roles, userRoles } from "../db/schema";
 
 export interface PermissionDto {
   id: string;
@@ -51,4 +51,22 @@ export async function listPermissionKeysForUser(db: Db, userId: string): Promise
     .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
     .where(eq(userRoles.userId, userId));
   return rows.map((r) => r.key);
+}
+
+/** Permission keys held by the named roles (union, deduped). Unknown names contribute nothing. */
+export async function listPermissionKeysForRoleNames(db: Db, names: readonly string[]): Promise<string[]> {
+  if (names.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ key: permissions.key })
+    .from(roles)
+    .innerJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+    .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+    .where(inArray(roles.name, names));
+  return rows.map((r) => r.key);
+}
+
+/** Does a role with this name exist right now? */
+export async function roleNameExists(db: Db, name: string): Promise<boolean> {
+  const row = await db.select({ id: roles.id }).from(roles).where(eq(roles.name, name)).limit(1);
+  return row.length > 0;
 }
