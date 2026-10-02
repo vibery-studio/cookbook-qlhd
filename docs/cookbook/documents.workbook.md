@@ -1,6 +1,6 @@
 ---
 workbook: documents
-version: "1.1"
+version: "1.2"
 kind: feature
 risk: high
 requires: []
@@ -16,7 +16,7 @@ provides:
   - "events: document.approved, document.rejected"
   - "events: document.issued, document.voided"
 status: proven
-proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-claude projects/tw-baogia-workshop/rehearsal): 196 API tests, all 8 §7 probes with real output · v1.1 adds the no-eligible-approver rule (I9) — not yet rehearsed"
+proven: "2026-09-28 — built unchanged on a RUNWAY snapshot copy (ship-with-claude projects/tw-baogia-workshop/rehearsal): 196 API tests, all 8 §7 probes with real output · v1.1 adds the no-eligible-approver rule (I9) · v1.2 (2026-10-02) = §10 extensions built and proven AFTER the live on tw-hopdong-live (api 446 / web 365 / e2e 8 tests green, 86 commits), demo https://runway-api-prod.bnqtoan.workers.dev"
 ---
 
 <!-- This is a WORKBOOK — one recipe of the AI App Cookbook, in the Workbook System format (see FRAMEWORK.md). The human attaches this file to Claude Code and says "build this workbook." Everything below §1 is Claude's contract, not learner reading. -->
@@ -302,6 +302,46 @@ Claude states each of these at the §3 gate with its default and asks the human 
 - **Idempotency key in the body:** the middleware can't see it before the handler runs. Header only. *(RUNWAY docs/idempotency.md "Anti-patterns")*
 - **Hard-deleting a rejected or voided document:** destroys the history and, for voided ones, leaves a hole in the series. Soft only; only never-numbered drafts may be deleted, and softly.
 
-## DONE (Claude fills)
+## §10 AFTER THE LIVE — what the real build changed (v1.2, proven 2026-10-01/02 on tw-hopdong-live)
 
-{3–5 lines: what was actually built, the build mode + rung used, the numbering-race tally and the self-approval probe output, any guard overrides the human accepted, anything the next workbook should know.}
+The base recipe (§1–§9) was built live and held. These are the decisions the real build REVERSED or EXTENDED, with the source doc per item (`docs/intent|spec|plan|fix/` in the app repo). Where this section and §2b disagree, this section wins.
+
+| Topic | §2b/§2 said | Real build did | Source |
+|---|---|---|---|
+| PDF | printable HTML + browser print | `GET /contracts/{id}/pdf` renders ONLY on click (Cloudflare Browser Rendering → R2 → CAS + audit) from the frozen print HTML; `PdfRenderer` = browser/fake/off; 503 when unavailable, document stays issued; a voided doc still serves its original file. Budget rule: if the renderer is not working after one more round, fall back to the print dialog — a small item must not block the others | INTENT/SPEC/PLAN-05 |
+| Document types | one type, `contract` | 4 types: HD · BG (valid_until = doc_date +15) · DNTT · PXK (warehouse note, form 02-VT, DEMO). One `contracts` table with `type`; own prefix + own gap-free series each (`UNIQUE(type, series_year, seq)`); per-type create permission (`quote:write`, `payment_request:write`, `delivery_note:write`) | SPEC-09 |
+| Parent → child | n/a | BG → HD → DNTT: child copies the parent's FROZEN lines and prices (no re-price); parent must be `issued` (and BG unexpired); one live child per parent (UNIQUE); voiding a parent with live children is refused (`has-children`); issue re-checks the parent in the same CAS batch | SPEC-09 |
+| Templates | owner's .docx converted once by hand into a template version | Giám đốc uploads `.docx` → pure reader (fflate + fast-xml-parser; zip-bomb, macro, DOCTYPE limits; 415/422 `docx-invalid`) → preview (no state) → per-field label/type/required → saved through the existing `/templates` path (new template or new version) | SPEC-10 |
+| Prices | static price list sheet | products (service + goods) + dated prices ex-VAT with VAT rate on the price level; history append-only, no back-dating (triggers); per-line discount before tax; VAT rounded half-up PER RATE GROUP; BigInt; KCT lines supported; contract lines + live total preview | SPEC-08 |
+| Roles | 3 fixed roles, read-only matrix | editable role × permission matrix (add/clone/delete, immutable name + label); assigning or granting needs ⊇ perms (FR-12); `audit_events` append-only by trigger; permission cache purged on role change, TTL 60s | SPEC-06 |
+| RBAC controls | n/a | static SoD on PERMISSION pairs (a role may not hold both codes of a pair); permission changes go through a request approved by a second `roles:write` holder (the "cơ chế duyệt 2 lớp" — Tony's term, not "four-eyes"); JIT admin with reason and ≤ 8 h expiry (cron); quarterly access review | SPEC-07 |
+| Who owns what | admin = top | Giám đốc = owner, admin = IT: only a `giam_doc` holder assigns/invites any role carrying `roles:write`; admin's role changes are approved by a `giam_doc` holder; first Giám đốc is bootstrapped by `users:write` when none exists | FIX-05 |
+| Root | n/a | system role `root` (seeder only) owns ONE switch, the 2-layer approval on/off (Bảo mật screen, reason + audit). Off = admin and Giám đốc change permissions directly, but SoD pairs, `grant_not_held`, JIT, `owner_only`, `root_role` still hold | C-11-001 |
+| UI locks | web computes which cells are disabled | every disabled/hidden control and its reason is computed by the API with the SAME function the write guard uses (`can`, `locked_reason`, `role_options`, `grantable`); web only renders the reason code as a Vietnamese sentence. The server also refuses locking yourself (403 `self_disable`) | FIX-06 |
+
+### New invariants (add to §7 proof; each has a named test in the app repo)
+
+- **I10** nobody changes their OWN role (403 `self_role`) or locks themselves (403 `self_disable`) — FIX-03/06.
+- **I11** a role carrying `roles:write` is assigned, invited AND RE-INVITED only by a `giam_doc` holder (403 `owner_only`) — every path to the same effect applies the same rule: invite, assign, change role, re-invite (FIX-05/07).
+- **I12** an export archive carries no credential column (`password_hash`, tokens, secrets); the test scans every exportable table's columns by name (FIX-08).
+- **I13** a document type has its own series; the same year can hold HD-2026-001 and BG-2026-001 without a collision (SPEC-09).
+- **I14** a child document's money equals its parent's frozen money (SPEC-09 FR-5).
+
+### New traps found after the live (add to §9)
+
+- **Guard on one path, not its siblings:** FIX-03/05 closed "assign role" but the re-invite route reached the same account takeover (a pending Giám đốc invitation could be activated by an admin with their own password). Rule: for every security effect list ALL paths that produce it and put the same domain function behind each. The SPEC/CARD templates now carry `INV-n` + "every path to the effect".
+- **`SELECT *` into an export:** the privacy export dumped `users.password_hash`. Table-level allow-lists hide column-level leaks; exclude columns by name and test by scanning the schema.
+- **UI rules re-implemented in the web app:** the admin saw tickable cells the API refused (403 `grant_not_held`). Compute locks and reasons server-side and ship them in the DTO.
+- **Own-role rule deadlocks:** forbidding approving a change to the role you hold left admin's request with no eligible approver (409 `no-eligible-approver`) and the error was off-screen in a scrolled drawer. Decide who the owner is, and show errors in a sticky footer.
+- **Print CSS vs template classes:** the seeded template used `.center`, `.b`, `.sig` that the print stylesheet did not define; the signature block and header looked plain (FIX-02). Test the stylesheet against the classes the migration's template body uses.
+- **A global CSP breaks `/docs`:** one `default-src 'self'` blanked the Swagger page; give the one HTML docs route its own CSP (FIX-01).
+- **Test cost:** a slow password hash (scrypt) in every test took the API suite from ~600 s to ~73 s; use a fast hash under the test env only, and keep a dummy hash with the same parameters so timing does not leak.
+- **Public repo, demo data:** never default a demo password in a seeder (`demo:seed-remote` refuses without `DEMO_PASSWORD` ≥ 12 chars).
+
+### Not built (still Parked in ROADMAP)
+
+Email on issue · payments (mark DNTT paid) · CRM / customer import · inventory behind PXK · template editor in place of import.
+
+## DONE
+
+Built twice: rehearsed 2026-09-28 (196 API tests, 8 probes) and live 2026-09-29 (rows 01–02 on stage), then rows 03–5 + hardening on 2026-09-29→10-02 with the M5 method (INTENT → SPEC → PLAN → cards → PROOF). Mode NEW on RUNWAY, rung B. Final: api 446 · web 365 · e2e 8/8. Human decisions that shaped it: Giám đốc = owner / admin = IT, Root + 2-layer approval switch, rules computed by the backend, PDF time-box. Next workbook: read §10 first — the guard-per-path trap (I11) and the UI-locks-from-API rule cost the most rework.

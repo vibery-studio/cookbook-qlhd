@@ -25,3 +25,16 @@ Status: Approved — extracted 2026-09-29 from the approved mockup (`docs/cookbo
 - Loading: skeleton rows, no spinner wall. Error: plain Vietnamese message + Thử lại; never a raw error code.
 - Refused (403): the 🔒 explanation in place of the action; the refusal is also visible in Nhật ký.
 - Mobile 390px: sidebar collapses to a top bar, tables become stacked cards, drawer becomes full-screen.
+
+## Screens added after the live (v1.2; same tokens, same states)
+| Screen | What it shows | Who |
+|---|---|---|
+| **Tài liệu** (replaces the single "Hợp đồng" list) | type tabs (HD · BG · DNTT · PXK) + pill Loại, "+ Tạo" menu shows only the types the user may create (server-computed), drawer shows parent/child links and "lập tài liệu con" with the 🔒 reason | per type permission |
+| **Sản phẩm & giá** | products (dịch vụ · hàng hóa) with dated price levels ex-VAT + VAT rate; a price level is never edited, only superseded; confirm before ending a level | Quản lý · Giám đốc |
+| **Nhập mẫu từ Word** | 3 steps: upload `.docx` → sandboxed preview + field table (label, type, required) → save as new template or new version; docx errors in plain Vietnamese | Giám đốc (`template:write`) |
+| **Phân quyền** (now editable) | matrix + 560 px role drawer (save diff, clone, delete), add-role modal; a cell the editor cannot grant is disabled with one tooltip line, no per-row 🔒; requests tab + conflicting-pairs tab, nav badge for pending | roles:write holders |
+| **Rà soát quyền** (`/ra-soat-quyen`) | quarterly access review, overdue banner | Giám đốc |
+| **Bảo mật** | Root only: the 2-layer approval switch, reason required, audit row | Root |
+| **Người dùng** (extended) | JIT grant/revoke chips with the countdown, banner "Kết thúc sớm"; role options and locks come from the API | admin · Giám đốc |
+
+Rule for every new screen: the disabled/hidden state and its reason come from the API (`can`, `locked_reason`), never from a copy of the rule in the web app.
